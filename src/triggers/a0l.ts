@@ -1,12 +1,13 @@
-import { TriggerResult, Trigger } from "./";
+import { TriggerResult, Trigger, Modifications } from "../core";
 
-const trigger: Trigger = {
+const a0l: Trigger = {
+   id: "a0l",
    name: "a0l",
-   description: "Quotes from AOL",
+   description: "Quotes from A0L",
    usage: "a0l",
    command: /^a0l$/ui,
    action: () => {
-      const output: TriggerResult = { results: [], caseSensitive: true, processSwaps: false };
+      const output: TriggerResult = { results: [], modifications: Modifications.AsIs };
       output.results = [phrases[Math.floor(Math.random() * phrases.length)]];      
       return output;
    }
@@ -233,5 +234,5 @@ const phrases = [
    'EYEARSEE IS DA SHYTT D00DZNUT!',
    'KEWLI0, EYEV BIN WAITNIG FER J00, WHERE ARE DOZE KIDDIESEXGIFOGRAFZ DAT J00 SAID J00D GIB MEE???/?',
 ];
-
-export { trigger as a0l };
+const triggers = [ a0l ];
+export { triggers };

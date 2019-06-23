@@ -1,25 +1,24 @@
-import { Message } from "discord.js";
-import { TriggerResult, Trigger } from "./";
-import { getUser } from "../lib/user";
-import { Brain } from "../lib/brain";
+import { Message, Modifications, TriggerResult, Trigger, getDisplayName, Brain } from "../core";
 
 const story: Trigger = {
+   id: "story",
    name: "Story mode",
-   description: "Tells a story about a topic",
-   usage: "tell [me/<person>/yourself] a[nother] [long] story [about <topic>]",
+   description: "Tells a story about a topic. Text in < > are optional, text in [] can be changed.",
+   usage: "tell <me/[person]/yourself> a<nother> <long> story <about [topic]>",
    command: /tell (?<person>.+)? ?(?:a(?:nother)?) (?<long>long)? ?story(?: about (?<topic>.+))?/ui,
    action: (context: Message, matches: RegExpMatchArray = []) => {
-      const output: TriggerResult = { results: [], caseSensitive: false, processSwaps: true, directedTo: undefined };
+      const output: TriggerResult = { results: [], modifications: Modifications.ProcessSwaps, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
-      const storyLength = 3 + Math.floor(Math.random() * 3) * (matches.groups.long ? 3 : 1);
+      const storyLength = (3 + Math.floor(Math.random() * 5)) * (matches.groups.long !== undefined ? 3 : 1);
       const directedTo = (matches.groups.person || "").trim();
-      const seed = (matches.groups.topic || "").trim();
+      let seed = (matches.groups.topic || "").trim();
       const story: Set<string> = new Set<string>();
       let topic = seed;
 
-      for (let lineCounter = 0; lineCounter <= storyLength; lineCounter++) {
+      while (story.size < storyLength) {
          topic = Brain.getSeed(topic);
          let line = Brain.getResponse(topic).trim();         
+         if (story.has(line)) seed = Brain.getSeed();
          story.add(line);
          topic = seed !== "" ? seed : line;
       }
@@ -28,7 +27,7 @@ const story: Trigger = {
          if (/yourself/iu.test(directedTo)) {
             line = `*${line}*`;
          } else if (/me/iu.test(directedTo)) {
-            output.directedTo = getUser(context.member);
+            output.directedTo = getDisplayName(context.member);
          } else if (directedTo !== "") {
             output.directedTo = directedTo;
          }
@@ -38,4 +37,5 @@ const story: Trigger = {
    }
 }
 
-export { story }
+const triggers = [ story ];
+export { triggers }

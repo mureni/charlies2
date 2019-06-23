@@ -6,6 +6,7 @@ src/tools/
 
 # Brain data
 data/brain.json
+data/brain-backup-*.json
 data/swaps.json
 
 # Logs

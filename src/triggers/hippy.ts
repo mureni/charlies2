@@ -1,17 +1,18 @@
-import { TriggerResult, Trigger } from "./";
-import { Bullshit } from "../lib/bullshit";
+import { Modifications, TriggerResult, Trigger } from "../core";
+import { Bullshit } from "../controllers";
 
-const trigger: Trigger = {
+const hippy: Trigger = {
+   id: "hippy",
    name: "New age bullshit",
    description: "Generates a paragraph of new age bullshit",
-   usage: "!hippy",
-   command: /^!hippy$/ui,
+   usage: "hippy",
+   command: /^hippy$/ui,
    action: () => {
-      const output: TriggerResult = { results: [], caseSensitive: false, processSwaps: true, directedTo: undefined };            
+      const output: TriggerResult = { results: [], modifications: Modifications.ProcessSwaps, directedTo: undefined };            
       const size = 6 + Math.floor(Math.random() * 3);
       output.results = [Bullshit.generate(size)];
       return output;
    }
 }
-
-export { trigger as hippy };
+const triggers = [ hippy ];
+export { triggers };

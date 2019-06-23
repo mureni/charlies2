@@ -1,38 +1,71 @@
-import Discord from "discord.js";
-import log from "./lib/log";
-import { Brain } from "./lib/brain";
-import { ProcessResults, processMessage } from "./lib/messageProcessor";
-import { getUser } from "./lib/user";
-import { Swap } from "./lib/swap";
+import { Message, TextChannel, Client } from "discord.js";
+import { log, Brain, ProcessResults, processMessage, getDisplayName } from "./core";
+import { Swap, Blacklist, Madlibs } from "./controllers";
 
 /* Initialize client */
-const client = new Discord.Client();
+const client = new Client();
+const dirty = {
+   brain: false,
+   swaps: false,
+   blacklist: false,
+   madlibs: false
+}
+
+
+const saveData = (): void => {
+   let saveResults: boolean | Error;
+
+   saveResults = dirty.brain ? Brain.save() : false;   
+   if (saveResults instanceof Error) {
+      log(`Error saving brain data: ${saveResults.message}`, "error");
+   } else if (saveResults) { 
+      log(`Brain data saved.`);
+      dirty.brain = false;
+   }
+   
+   saveResults = dirty.swaps ? Swap.save() : false;
+   if (saveResults instanceof Error) {
+      log(`Error saving swap data: ${saveResults.message}`, "error");
+   } else if (saveResults) {
+      log(`Swap data saved.`);
+      dirty.swaps = false;
+   } 
+
+   saveResults = dirty.madlibs ? Madlibs.save() : false;
+   if (saveResults instanceof Error) {
+      log(`Error saving madlibs data: ${saveResults.message}`, "error");
+   } else if (saveResults) {
+      log(`Madlibs data saved.`);
+      dirty.madlibs = false;
+   } 
+
+   saveResults = dirty.blacklist ? Blacklist.save() : false;
+   if (saveResults instanceof Error) {
+      log(`Error saving blacklist data: ${saveResults.message}`, "error");
+   } else if (saveResults) {
+      log(`Blacklist data saved.`);
+      dirty.blacklist = false;
+   } 
+}
 
 /* Define exit handler and exit events */
 const exitHandler = (): void => {   
    log(`Exiting cleanly.`);
-   const brainSaveResults: boolean | Error = Brain.save();
-   log(`Saving brain... ${(brainSaveResults instanceof Error) ? `Error saving brain data: ${brainSaveResults.message}` : `Brain data saved`}`);
-   const swapSaveResults: boolean | Error = Swap.save();
-   log(`Saving swap data... ${(swapSaveResults instanceof Error) ? `Error saving swap data: ${swapSaveResults.message}` : `Swap data saved`}`);
+
    client.destroy();
-   process.exit();
+   process.exitCode = 130;
 }
-process.stdin.resume(); 
+if (process.env.NODE_ENV === "production") {
+   process.stdin.resume(); 
+   process.on('uncaughtException', exitHandler);
+}
 process
    .on('exit', exitHandler)
+   .on('SIGINT', exitHandler)      
    .on('SIGTERM', exitHandler)
    .on('SIGUSR1', exitHandler)
-   .on('SIGUSR2', exitHandler)
-   .on('SIGINT', exitHandler);  
-   if (process.env.NODE_ENV === "production") {
-      process.on('uncaughtException', exitHandler);
-   } else {
-      process.on('uncaughtException', (error: Error) => {
-         exitHandler();
-         throw error;
-      })
-   }
+   .on('SIGUSR2', exitHandler);
+
 
 /* Attempt login */
 const login = (): Promise<any> => client.login(process.env.DISCORD_AUTH)
@@ -46,10 +79,13 @@ client
       log(`Error occurred: ${error.message}`, "error");      
    })
    .on("ready", () => {
-      log(`Connected to Discord server.`); 
+      log(`Connected to Discord server.`);       
+      setInterval(saveData, 72000000); // Save data every 2 hours if it is dirty
    })
    .on("disconnect", event => {
-      log(`Disconnected from Discord server. Reason: ${event.reason}. Attempting to reconnect in 1 minute.`);      
+      log(`Disconnected from Discord server. Reason: ${event.reason ? event.reason : 'None provided'}.`);
+      if (process.exitCode) process.exit(process.exitCode);
+      log(`Attempting to reconnect in 1 minute.`);
       setTimeout(login, 60000);
    })   
    .on("reconnecting", () => {
@@ -113,21 +149,35 @@ client
    .on("messageReactionAdd", (_reaction, _user) => {})
    .on("messageReactionRemove", (_reaction, _user) => {})
    .on("messageReactionRemoveAll", _message => {})
-   .on("message", (message: Discord.Message): void => {
-      if (!(message.channel instanceof Discord.TextChannel) || message.type !== "DEFAULT") return;
-      const messageSource: string = `${message.guild.name}:#${message.channel.name}:${getUser(message.member)}`;
+   .on("message", (message: Message): void => {      
+      if (!(message.channel instanceof TextChannel) || message.type !== "DEFAULT" || message.author.bot) return;
+      const messageSource: string = `${message.guild.name}:#${message.channel.name}:${getDisplayName(message.member)}`;
       log(`<${messageSource}> ${message.content}`);      
       const results: ProcessResults = processMessage(client.user, message);
-      if (results.learned) log(`Learned: ${results.processedText}`, "debug");
-      if (results.triggeredBy) log(`Processing trigger: ${results.triggeredBy}`, "debug");
+      if (results.learned) {
+         log(`Learned: ${results.processedText}`, "debug");
+         dirty.brain = true;
+      }      
+      if (results.triggeredBy) {
+         dirty.blacklist = true;
+         dirty.swaps = true;
+         dirty.madlibs = true;
+         log(`Processing trigger: ${results.triggeredBy}`, "debug");
+      }
       if (results.response) log(`Responded with: ${results.response}.`, "debug");
    })
 
 
 
 /* ACTIVATE */
-const brainLoadResults: boolean | Error = Brain.load();
-if (brainLoadResults instanceof Error) log(`Error loading brain data: ${brainLoadResults.message}. Starting with empty brain.`, "warn");
-const swapLoadResults: boolean | Error = Swap.load();
-if (swapLoadResults instanceof Error) log(`Error loading swap data: ${swapLoadResults.message}. Starting with empty swap data.`, "warn");
+let loadResults: boolean | Error;
+
+loadResults = Brain.load();
+if (loadResults instanceof Error) log(`Error loading brain data: ${loadResults.message}. Starting with empty brain.`, "warn");
+loadResults = Swap.load();
+if (loadResults instanceof Error) log(`Error loading swap data: ${loadResults.message}. Starting with empty swap data.`, "warn");
+loadResults = Blacklist.load();
+if (loadResults instanceof Error) log(`Error loading blacklist data: ${loadResults.message}. Starting with empty blacklist data.`, "warn");
+loadResults = Madlibs.load();
+if (loadResults instanceof Error) log(`Error loading madlibs data: ${loadResults.message}. Starting with empty madlibs data.`, "warn");
 login();
