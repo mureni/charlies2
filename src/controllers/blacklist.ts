@@ -1,7 +1,7 @@
-import { rootPath } from "../config";
+import { checkFilePath } from "../config";
 import { writeFileSync, readFileSync, existsSync } from "fs";
 
-const BLACKLIST_FILE = rootPath("data", "blacklist.json");
+const BLACKLIST_FILE = checkFilePath("data", "blacklist.json");
 
 interface BlacklistJSON {
    [serverID: string]: {

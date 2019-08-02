@@ -3,6 +3,7 @@ import { log, Brain, ProcessResults, processMessage, getDisplayName } from "./co
 import { Swap, Blacklist, Madlibs } from "./controllers";
 
 /* Initialize client */
+let reconnectAttempts: number = 0;
 const client = new Client();
 const dirty = {
    brain: false,
@@ -51,14 +52,21 @@ const saveData = (): void => {
 /* Define exit handler and exit events */
 const exitHandler = (): void => {   
    log(`Exiting cleanly.`);
-
+   saveData();
    client.destroy();
    process.exitCode = 130;
 }
+/* BAD IDEA: 
+
 if (process.env.NODE_ENV === "production") {
    process.stdin.resume(); 
-   process.on('uncaughtException', exitHandler);
+   process.on('uncaughtException', (error: Error, origin: string) => {
+      log(`Uncaught exception.\nError: ${error}\n\nOrigin: ${origin}`);
+      exitHandler();
+   });
 }
+
+*/
 process
    .on('exit', exitHandler)
    .on('SIGINT', exitHandler)      
@@ -70,7 +78,7 @@ process
 /* Attempt login */
 const login = (): Promise<any> => client.login(process.env.DISCORD_AUTH)
    .then(_token => log(`Logged in to Discord server.`))
-   .catch(_token => log(`Error logging in to Discord server.`, "error"));
+   .catch(_token => log(`Problem logging in to Discord server.`));
 
 /* Define client events (as of Discord.js version 11.4.2) */
 client
@@ -83,9 +91,14 @@ client
       setInterval(saveData, 72000000); // Save data every 2 hours if it is dirty
    })
    .on("disconnect", event => {
-      log(`Disconnected from Discord server. Reason: ${event.reason ? event.reason : 'None provided'}.`);
+      if (event.reason && /Authentication/gui.test(event.reason)) process.exitCode = 1;
+      log(`Disconnected from Discord server. Reason: ${event.reason ? event.reason : 'None provided'}. Code: ${event.code ? event.code : 'None provided'}.`, process.exitCode ? "error" : "general");
+      if (reconnectAttempts++ >= 10) {
+         log(`Exceeded maximum of 10 reconnection attempts. Exiting to prevent bot disabling.`, "error");
+         process.exitCode = 2;
+      }
       if (process.exitCode) process.exit(process.exitCode);
-      log(`Attempting to reconnect in 1 minute.`);
+      log(`Attempting to reconnect in 1 minute. Reconnection attempt #${reconnectAttempts}`);
       setTimeout(login, 60000);
    })   
    .on("reconnecting", () => {
@@ -164,7 +177,7 @@ client
          dirty.madlibs = true;
          log(`Processing trigger: ${results.triggeredBy}`, "debug");
       }
-      if (results.response) log(`Responded with: ${results.response}.`, "debug");
+      if (results.response) log(`Responded with: ${results.response}`, "debug");
    })
 
 

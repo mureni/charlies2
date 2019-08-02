@@ -3,10 +3,11 @@
 *.txt
 .vscode/
 src/tools/
+test-data/
 
 # Brain data
-data/brain.json
-data/brain-backup-*.json
+data/brain*.json
+data/backups/
 data/swaps.json
 
 # Logs

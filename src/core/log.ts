@@ -1,6 +1,6 @@
 import { createLogger, format, transports } from "winston";
 import DailyRotateFile from "winston-daily-rotate-file";
-import { rootPath } from "../config";
+import { checkFilePath } from "../config";
 const { combine, colorize, timestamp, printf } = format;
 
 const DEBUG = process.env.NODE_ENV === "development";
@@ -15,13 +15,23 @@ class Logger {
       format: outputFormat,
       transports: [
          new (DailyRotateFile)({
-            dirname: rootPath("logs"),
-            filename: "recharlies-%DATE%.log",
+            dirname: checkFilePath("logs"),
+            filename: "general-%DATE%.log",
+            datePattern: "YYYY-MM-DD-HH",
+            zippedArchive: true,
+            maxSize: '5m',
+            maxFiles: '30d'
+         }),
+         new (DailyRotateFile)({
+            level: 'error',
+            dirname: checkFilePath("logs"),
+            filename: "error-%DATE%.log",
             datePattern: "YYYY-MM-DD-HH",
             zippedArchive: true,
             maxSize: '5m',
             maxFiles: '30d'
          })
+
       ]
    });
    public static log(message: string = '', type: LogType = (DEBUG ? 'debug' : 'general')) {

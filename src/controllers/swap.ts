@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { rootPath } from "../config";
-const SWAP_FILE = rootPath("data", "swaps.json");
+import { checkFilePath } from "../config";
+const SWAP_FILE = checkFilePath("data", "swaps.json");
 class Swap {
    private static list: Map<string, Map<string, string>> = new Map();
    

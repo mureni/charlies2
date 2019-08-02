@@ -3,7 +3,7 @@ import { readdirSync } from "fs";
 import { Modifications } from "./messageProcessor";
 import { log } from "./log";
 import { Blacklist } from "../controllers";
-import { rootPath, CONFIG } from "../config";
+import { checkFilePath, CONFIG } from "../config";
 
 interface TriggerResult {
    results: string[];   
@@ -28,9 +28,9 @@ class Triggers {
 
    private static import(): Trigger[] {
       const triggers: Trigger[] = [];
-      const triggerFiles = readdirSync(rootPath("code", "triggers/"));
+      const triggerFiles = readdirSync(checkFilePath("code", "triggers/"));
       for (const file of triggerFiles) {
-         const fullPath = rootPath("code", `triggers/${file}`);
+         const fullPath = checkFilePath("code", `triggers/${file}`);
          log(`Loading trigger file ${fullPath}...`);
          import(fullPath).then((importedTriggers: { triggers: Trigger[] }) => {            
             for (const trigger of importedTriggers.triggers) {

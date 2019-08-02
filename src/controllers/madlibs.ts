@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { rootPath } from "../config";
+import { checkFilePath } from "../config";
 
-const DATA_FILE = rootPath("data", "madlibs.json");
+const DATA_FILE = checkFilePath("data", "madlibs.json");
 
 class Madlibs {
    public static patterns: Set<string> = new Set<string>();

@@ -1,6 +1,6 @@
 import { writeFileSync, readFileSync, existsSync } from "fs";
 import { resolve } from "path";
-import { CONFIG, rootPath } from "../config"; 
+import { CONFIG, checkFilePath } from "../config"; 
 
 const SENTENCE_REGEX = /\n/;
 const WORD_REGEX = /\s+/;
@@ -23,16 +23,19 @@ interface nGram {
    tokens: string[];
    canStart: boolean;
    canEnd: boolean;
-   nextTokens: Set<string>;
-   previousTokens: Set<string>;
+   nextTokens: Map<string, number>;
+   previousTokens: Map<string, number>;
+}
+interface FrequencyJSON {
+   [word: string]: number;
 }
 interface nGramJSON {
    [hash: string]: {
       t: string[],
       s: boolean,
       e: boolean,
-      n: string[],
-      p: string[]
+      n: FrequencyJSON | string[],
+      p: FrequencyJSON | string[]
    }
 }
 
@@ -62,7 +65,7 @@ class Brain {
          conversationMemoryLength: CONFIG.initialSettings.conversationMemoryLength
    }
 
-   public static save(filename: string = rootPath("data", "brain.json")): boolean | Error {
+   public static save(filename: string = checkFilePath("data", "brain.json")): boolean | Error {
       try {
          const realFile = resolve(filename);
          writeFileSync(realFile, JSON.stringify(Brain.toJSON(), null, 2), "utf8");
@@ -71,7 +74,7 @@ class Brain {
          return error;
       }
    }
-   public static load(filename: string = rootPath("data", "brain.json")): boolean | Error {
+   public static load(filename: string = checkFilePath("data", "brain.json")): boolean | Error {
       try {
          const realFile = resolve(filename);
          if (!existsSync(realFile)) return new Error(`Unable to load brain data file '${realFile}': file does not exist.`);
@@ -94,12 +97,16 @@ class Brain {
       }
       for (const hash of Brain.nGrams.keys()) {
          const ngram = Brain.nGrams.get(hash) as nGram;
-         ngrams[hash] = { t: ngram.tokens, s: ngram.canStart, e: ngram.canEnd, n: [], p: [] }
-         for (const word of ngram.nextTokens.values()) {
-            ngrams[hash].n.push(word);
+         ngrams[hash] = { t: ngram.tokens, s: ngram.canStart, e: ngram.canEnd, n: {}, p: {} }
+         for (const word of ngram.nextTokens.keys()) {
+            const frequency: number = ngram.nextTokens.get(word) as number;
+            Reflect.set(ngrams[hash].n, word, frequency);
+            //ngrams[hash].n[word] = frequency;
          }
-         for (const word of ngram.previousTokens.values()) {
-            ngrams[hash].p.push(word);
+         for (const word of ngram.previousTokens.keys()) {
+            const frequency: number = ngram.previousTokens.get(word) as number;
+            Reflect.set(ngrams[hash].p, word, frequency);
+            //ngrams[hash].p[word] = frequency;            
          }
 
       }
@@ -120,11 +127,35 @@ class Brain {
          || !Reflect.has(ngrams[hash], "t")
          || !Reflect.has(ngrams[hash], "s")) return false;
 
+         const next = new Map<string, number>();
+         const prev = new Map<string, number>();
+                     
+         if (Reflect.getPrototypeOf(ngrams[hash].n) === Array.prototype) {
+            // Parse old brain format (no frequency for previous/next words)      
+            for (const word in Reflect.get(ngrams[hash], "n")) {
+               next.set(word, 1);
+            }
+         } else {
+            for (const word of Object.keys(ngrams[hash].n)) {
+               next.set(word, Reflect.get(ngrams[hash].n, word));
+            }
+         }
+
+         if (Reflect.getPrototypeOf(ngrams[hash].p) === Array.prototype) {
+            // Parse old brain format (no frequency for previous/next words)      
+            for (const word in Reflect.get(ngrams[hash], "p")) {
+               prev.set(word, 1);
+            }
+         } else {
+            for (const word of Object.keys(ngrams[hash].p)) {
+               prev.set(word, Reflect.get(ngrams[hash], word));
+            }
+         }
          Brain.nGrams.set(hash, {
             canEnd: ngrams[hash].e,
             canStart: ngrams[hash].s,
-            nextTokens: new Set<string>(ngrams[hash].n),
-            previousTokens: new Set<string>(ngrams[hash].p),
+            nextTokens: next,
+            previousTokens: prev,
             tokens: ngrams[hash].t
          });
       }
@@ -155,11 +186,21 @@ class Brain {
                canStart: c === 0,
                canEnd: c === words.length - Brain.chainLength,
                tokens: slice,
-               nextTokens: new Set<string>(),
-               previousTokens: new Set<string>()
-            }            
-            if (c > 0) nGram.previousTokens.add(words[c - 1]);            
-            if (c < words.length - Brain.chainLength) nGram.nextTokens.add(words[c + Brain.chainLength]);
+               nextTokens: new Map<string, number>(),
+               previousTokens: new Map<string, number>()
+            }
+            if (c > 0) {
+               /* Get and increase frequency of previous token */
+               const word = words[c - 1];
+               const frequency = nGram.previousTokens.get(word) || 0;
+               nGram.previousTokens.set(word, frequency + 1);
+            }
+            if (c < words.length - Brain.chainLength) {
+               /* Get and increase frequency of next token */
+               const word = words[c + Brain.chainLength];
+               const frequency = nGram.nextTokens.get(word) || 0;               
+               nGram.nextTokens.set(word, frequency + 1);
+            }
 
             Brain.nGrams.set(hash, nGram);
 
@@ -190,8 +231,11 @@ class Brain {
          let ngram: nGram = initialNGram;
 
          while (!ngram.canEnd && (stack++ <= STACK_MAX)) {
-            const nextWords = Array.from(ngram.nextTokens.values());
+
+            /* TODO: Replace random selection with weighted frequency choice */
+            const nextWords = Array.from(ngram.nextTokens.keys());            
             const nextWord = nextWords[Math.floor(Math.random() * nextWords.length)];
+
             reply.push(nextWord);
             const nextSet = ngram.tokens.slice(1, Brain.chainLength);
             nextSet.push(nextWord);
@@ -203,8 +247,11 @@ class Brain {
          stack = 0;
          ngram = initialNGram;
          while (!ngram.canStart && (stack++ <= STACK_MAX)) {
-            const prevWords = Array.from(ngram.previousTokens.values());
+
+            /* TODO: Replace random selection with weighted frequency choice */
+            const prevWords = Array.from(ngram.previousTokens.keys());            
             const prevWord = prevWords[Math.floor(Math.random() * prevWords.length)];
+
             reply.unshift(prevWord);
             const prevSet = ngram.tokens.slice(0, Brain.chainLength - 1);
             prevSet.unshift(prevWord);

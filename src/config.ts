@@ -1,12 +1,37 @@
 import { resolve } from "path";
-import { existsSync } from "fs";
+import { constants, existsSync, accessSync } from "fs";
 
-const rootPath = (type: "code" | "data" | "logs" = "code", path: string = "./") => {
+const checkFilePath = (path: "code" | "data" | "logs" = "code", file: string = "", isNewFile: boolean = true) => {
+   const typePath: string = path === "code" ? "dist" : path;   
+   /* In case code is being called from a 'tools' or other directory, move up until either root, error, or found the file */
+   let cwd = process.cwd();
+   while (cwd !== "/") {   
+      if (existsSync(`./${typePath}`)) break;
+      try {
+         process.chdir("..");
+      } catch (error) {
+         throw new Error(`Unable to navigate to parent of path ${cwd}: ${error}`);         
+      }
+      cwd = process.cwd();
+   }
    
-   let typePath: string = type === "code" ? "dist" : type;   
-   const fullPath = resolve(process.cwd(), typePath, path);
+   const fullPath = resolve(cwd, typePath);
    if (!existsSync(fullPath)) throw new Error(`Unable to locate path ${fullPath}`);
-   return fullPath;
+
+   /* Determine appropriate access for the selected path */
+   const accessFlags = (typePath === "dist") ? constants.R_OK : constants.R_OK | constants.W_OK;
+   try {
+      accessSync(fullPath, accessFlags);
+   } catch (error) {
+      throw new Error(`Unable to access path ${fullPath}: ${error}`);
+   }
+   
+   if (file === "") return fullPath;
+
+   const filePath = resolve(fullPath, file);
+   if (!isNewFile && !existsSync(filePath)) throw new Error(`Unable to locate file ${filePath}`);
+   
+   return filePath;
 }
 
 
@@ -24,4 +49,4 @@ const CONFIG = {
       conversationMemoryLength: 600, /* number of seconds before forgetting a topic */
    }
 }
-export { CONFIG, rootPath };
+export { CONFIG, checkFilePath };

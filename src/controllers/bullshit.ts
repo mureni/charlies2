@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "fs";
-import { rootPath } from "../config";
+import { checkFilePath } from "../config";
 
-const DATA_FILE = rootPath("data", "hippy.json");
+const DATA_FILE = checkFilePath("data", "hippy.json");
 
 class Bullshit {
    public static patterns: Set<string> = new Set<string>();

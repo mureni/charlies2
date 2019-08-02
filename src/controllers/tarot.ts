@@ -1,7 +1,7 @@
 import { default as sharp, Sharp } from 'sharp';
 import { readdirSync } from 'fs';
 import { join, extname } from 'path';
-import { rootPath } from "../config";
+import { checkFilePath } from "../config";
 interface Card {
    dimensions: {
       width: number;
@@ -11,7 +11,7 @@ interface Card {
    imageData: Sharp;
 }
 
-const TAROT_DIR = rootPath("data", "rider-waite/");
+const TAROT_DIR = checkFilePath("data", "rider-waite/");
 
 const getCards = async (directory: string = TAROT_DIR): Promise<Card[]> => {
    let files: string[] = [];   

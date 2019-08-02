@@ -56,7 +56,7 @@ const processMessage = (client: ClientUser, message: Message): ProcessResults =>
       }
       results.response = processed.results.join('\n');
    }
-   results.processedText = cleanText;
+   results.processedText = cleanText.trim();
    return results;
 }
 
@@ -85,15 +85,10 @@ const cleanMessage = (message: Message | string, modifications: number = Modific
    text = text.replace(/[\u0000-\u001f\u200f\u061c\u00ad]/uig, '');
 
    /* Capture URLs as case-sensitive */
-   const urlRX = /((((?:http|https|ftp|sftp):(?:\/\/)?)(?:[-;:&=\+\$,\w]+@)?[A-Za-z0-9\.-]+|(?:www\.|[-;:&=\+\$,\w]+@)[A-Za-z0-9\.-]+)((?:\/[-\+~%\/\.\w_]*)?\??(?:[-\+=&;%@\.\w_]*)#?(?:[\.!\/\\\w]*))?)/ug; 
-   const urlMatches = text.match(urlRX);   
-   const urls: string[] = [];
-   if (urlMatches) {
-      for (let i = 0; i < urlMatches.length; i++) {
-         urls.push(urlMatches[i]);
-         text = text.replace(urlMatches[i], `<🔗-${i}>`);
-      }
-   }
+   const urlRX = /((((?:http|https|ftp|sftp):(?:\/\/)?)(?:[-;:&=\+\$,\w]+@)?[A-Za-z0-9\.-]+|(?:www\.|[-;:&=\+\$,\w]+@)[A-Za-z0-9\.-]+)((?:\/[-\+~%\/\.\w_]*)?\??(?:[-\+=&;%@\.\w_]*)#?(?:[\.!\/\\\w]*))?)/ug;    
+   const extracted = extractBlocks(text, '🔗', urlRX);
+   const urls: string[] = extracted.blocks;
+   text = extracted.text;
 
    /* Replace bot name with 'my friend' (and strip initial) */
    text = text.replace(new RegExp(`^${Brain.settings.name}:?\s*`, "ui"), "");
@@ -111,21 +106,37 @@ const cleanMessage = (message: Message | string, modifications: number = Modific
    }
 
    /* Restore URLs */
-   if (urlMatches) {
-      for (let i = 0; i < urls.length; i++) {
-         text = text.replace(`<🔗-${i}>`, urls[i]);
+   if (urls.length > 0) {
+      text = restoreBlocks(text, '🔗', urls);
+   }
+   
+   return balanceText(text);
+}
+
+const extractBlocks = (text: string = "", symbol: string = "", regEx: RegExp | null = null): { text: string, blocks: string[] } => {
+   if (!text || !symbol || !regEx) return { text: text, blocks: [] };   
+   const blocks: string[] = [];
+   const matches = text.match(regEx);
+   if (matches) {
+      for (let i = 0; i < matches.length; i++) {
+         blocks.push(matches[i]);
+         text = text.replace(matches[i], `<${symbol}-${i}>`);
       }
    }
-
-   text = balanceText(text).normalize();
+   return { text: text, blocks: blocks }
+}
+const restoreBlocks = (text: string = "", symbol: string = "", blocks: string[] = []): string => {
+   if (!text || !symbol || blocks.length === 0) return text;   
+   for (let i = 0; i < blocks.length; i++) {
+      text = text.replace(`<${symbol}-${i}>`, blocks[i]);
+   }
    return text;
 }
 
-
 const balanceText = (text: string): string => {
-   
+      
    const codeBlock: boolean = (text.match(/```/iug) || []).length > 0;
-   text = text.replace(/[`"*_]{2,10}/iug, '');   
+   text = text.replace(/[`"*_|]{2,10}/iug, '');   
    
    const codeSegment: boolean = (text.match(/`/ug) || []).length % 2 !== 0;
    const parenthesisStart: number = (text.match(/\(/ug) || []).length;
@@ -138,6 +149,8 @@ const balanceText = (text: string): string => {
    if (codeSegment) text = text.endsWith('`') ? '`'.concat(text) : text.concat('`');   
    if (codeBlock) text = '```'.concat(text, '```');
    return text; 
+
+
 }
 
 
