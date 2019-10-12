@@ -1,7 +1,7 @@
 import { resolve } from "path";
 import { constants, existsSync, accessSync } from "fs";
 
-const checkFilePath = (path: "code" | "data" | "logs" = "code", file: string = "", isNewFile: boolean = true) => {
+const checkFilePath = (path: "code" | "data" | "logs" = "code", file: string = "", createFile: boolean = true) => {
    const typePath: string = path === "code" ? "dist" : path;   
    /* In case code is being called from a 'tools' or other directory, move up until either root, error, or found the file */
    let cwd = process.cwd();
@@ -16,7 +16,7 @@ const checkFilePath = (path: "code" | "data" | "logs" = "code", file: string = "
    }
    
    const fullPath = resolve(cwd, typePath);
-   if (!existsSync(fullPath)) throw new Error(`Unable to locate path ${fullPath}`);
+   if (!createFile && !existsSync(fullPath)) throw new Error(`Unable to locate path ${fullPath}`);  
 
    /* Determine appropriate access for the selected path */
    const accessFlags = (typePath === "dist") ? constants.R_OK : constants.R_OK | constants.W_OK;
@@ -29,7 +29,7 @@ const checkFilePath = (path: "code" | "data" | "logs" = "code", file: string = "
    if (file === "") return fullPath;
 
    const filePath = resolve(fullPath, file);
-   if (!isNewFile && !existsSync(filePath)) throw new Error(`Unable to locate file ${filePath}`);
+   if (!createFile && !existsSync(filePath)) throw new Error(`Unable to locate file ${filePath}`);
    
    return filePath;
 }
