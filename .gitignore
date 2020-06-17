@@ -9,6 +9,7 @@ test-data/
 
 # PM2
 ecosystem.*
+deploy.sh
 
 # Brain data
 data/brain*.json
