@@ -3,6 +3,10 @@ import { getEndearment, getDisplayName, interpolateUsers } from "./user";
 import { Brain } from "./brain";
 import { Swap } from "../controllers/swap";
 import { TriggerResult, Triggers } from "./triggerProcessor";
+
+// Maximum length of discord message
+const MAX_LENGTH = 1950;
+
 interface ProcessResults {
    learned: boolean;
    triggeredBy?: string;
@@ -91,7 +95,11 @@ const sendMessage = (client: ClientUser, channel: TextChannel, text: string, dir
       text = `${name}: ${text}`;
    }
 
-   channel.send(text, { tts: !!(modifications & Modifications.TTS), split: true });
+   
+   while (text !== "") {      
+      channel.send(text.substring(0, MAX_LENGTH), { tts: !!(modifications & Modifications.TTS), split: true });
+      text = text.substring(MAX_LENGTH);
+   }
    return true;
 }
 
