@@ -10,14 +10,16 @@ const checkFilePath = (path: "code" | "data" | "logs" = "code", file: string = "
    /* In case code is being called from a 'tools' or other directory, move up until either root, error, or found the file */
 
    let cwd = process.cwd();
-   while (cwd !== "/") {
-      if (existsSync(`./${typePath}`)) break;
-      try {
-         process.chdir("..");
-      } catch (error) {
-         throw new Error(`Unable to navigate to parent of path ${cwd}: ${error} (Original path: ${ORIGINAL_PATH})`);         
+   if (process.env.NODE_ENV === "development") {
+      while (cwd !== "/") {
+         if (existsSync(`./${typePath}`)) break;
+         try {
+            process.chdir("..");
+         } catch (error) {
+            throw new Error(`Unable to navigate to parent of path ${cwd}: ${error} (Original path: ${ORIGINAL_PATH})`);         
+         }
+         cwd = process.cwd();
       }
-      cwd = process.cwd();
    }
    const fullPath = resolve(cwd, typePath);
    if (!existsSync(fullPath)) throw new Error(`Unable to locate path ${fullPath} (CWD: ${cwd} | Original path: ${ORIGINAL_PATH})`);
