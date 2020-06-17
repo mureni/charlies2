@@ -21,7 +21,8 @@
       "sqlite3": "^4.2.0",
       "striptags": "^3.1.1",
       "winston": "^3.2.1",
-      "winston-daily-rotate-file": "^4.5.0"
+      "winston-daily-rotate-file": "^4.5.0",
+      "pm2": "^4.4.0"
    },
    "devDependencies": {
       "@types/better-sqlite3": "^5.4.0",
@@ -39,7 +40,7 @@
       "build": "tsc",
       "build:watch": "tsc --watch",
       "dev": "npm run build && npm run start",
-      "start": "pm2 startOrRestart ecosystem.config.js --env development",      
+      "start": "pm2 startOrRestart ecosystem.config.js --env development",
       "stop": "pm2 stop all",
       "restart": "pm2 restart all",
       "predeploy": "npm run build",
