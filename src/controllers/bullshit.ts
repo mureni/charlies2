@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from "fs";
 import { checkFilePath } from "../config";
-
 const DATA_FILE = checkFilePath("data", "hippy.json");
 
 class Bullshit {

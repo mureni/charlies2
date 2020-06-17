@@ -1,12 +1,18 @@
 # individual stuff
 *.bak
 *.txt
+*.json
+!package.json
 .vscode/
 src/tools/
 test-data/
 
+# PM2
+ecosystem.*
+
 # Brain data
 data/brain*.json
+data/brains/
 data/backups/
 data/swaps.json
 
@@ -26,8 +32,8 @@ package-lock.json
 
 # Dependency directories
 node_modules/
-dist/
-sourcemaps/
+# dist/
+# sourcemaps/
 
 # Optional npm cache directory
 .npm

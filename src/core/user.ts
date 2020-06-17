@@ -1,7 +1,7 @@
 import { User, GuildMember, Collection, Snowflake } from "discord.js";
 
 const getEndearment = (plural: boolean = false): string => {
-   const synonyms = ["pal", plural ? "buddie" : "buddy", "chum", "compadre", "comrade", "friend", "my friend", "mate", "amigo", "fella"];
+   const synonyms = ["pal", plural ? "buddie" : "buddy", "chum", "compadre", "comrade", "friend", "my friend", "mate", "amigo", "fella", "bro", "broseph", "darling", "sweetheart", "sweetpea", "honey", "sweetie"];
    const endearment = synonyms[Math.floor(Math.random() * synonyms.length)];
    return `${endearment}${plural ? "s" : ""}`;
 }

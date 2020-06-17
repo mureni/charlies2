@@ -1,11 +1,16 @@
 import { resolve } from "path";
 import { constants, existsSync, accessSync } from "fs";
+const ORIGINAL_PATH = process.cwd();
 
 const checkFilePath = (path: "code" | "data" | "logs" = "code", file: string = "", createFile: boolean = true) => {
    const typePath: string = path === "code" ? "dist" : path;   
+  
+   /* Reset path to original path determined at start */
+   process.chdir(ORIGINAL_PATH);
    /* In case code is being called from a 'tools' or other directory, move up until either root, error, or found the file */
-   let cwd = process.cwd();
-   while (cwd !== "/") {   
+
+   let cwd = process.cwd();   
+   while (cwd !== "/") {
       if (existsSync(`./${typePath}`)) break;
       try {
          process.chdir("..");
@@ -14,9 +19,8 @@ const checkFilePath = (path: "code" | "data" | "logs" = "code", file: string = "
       }
       cwd = process.cwd();
    }
-   
    const fullPath = resolve(cwd, typePath);
-   if (!createFile && !existsSync(fullPath)) throw new Error(`Unable to locate path ${fullPath}`);  
+   if (!existsSync(fullPath)) throw new Error(`Unable to locate path ${fullPath}`);  
 
    /* Determine appropriate access for the selected path */
    const accessFlags = (typePath === "dist") ? constants.R_OK : constants.R_OK | constants.W_OK;
@@ -47,6 +51,7 @@ const CONFIG = {
       recursion: 1,                  /* # of times to think about a line before responding */
       conversationTimeLimit: 3,      /* number of seconds to wait for a response */
       conversationMemoryLength: 600, /* number of seconds before forgetting a topic */
+      learnFromBots: false           /* Whether to learn from other bots */
    }
 }
 export { CONFIG, checkFilePath };

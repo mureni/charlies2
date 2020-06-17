@@ -1,11 +1,12 @@
-import { writeFileSync, readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { saveBigJSON } from "./saveBigJSON";
 import { resolve } from "path";
 import { CONFIG, checkFilePath } from "../config"; 
 
 const SENTENCE_REGEX = /\n/;
 const WORD_REGEX = /\s+/;
 const WORD_SEPARATOR = "│";
-const STACK_MAX = 128;
+const STACK_MAX = 192;
 const EMPTY_BRAIN = "huh";
 interface BrainSettings {   
    name: string,                       /* Username of the bot */
@@ -17,6 +18,7 @@ interface BrainSettings {
    recursion: number,                  /* # of times to think about a line before responding */
    conversationTimeLimit: number,      /* number of seconds to wait for a response */
    conversationMemoryLength: number,   /* number of seconds before forgetting a topic */
+   learnFromBots: boolean
 }
 
 interface nGram {
@@ -51,8 +53,8 @@ interface BrainJSON {
 
 class Brain {
    public static lexicon: Map<string, Set<string>> = new Map<string, Set<string>>();
-   public static chainLength: number = 3;
    public static nGrams: Map<string, nGram> = new Map<string, nGram>();
+   public static chainLength: number = 3;
    public static settings: BrainSettings = {
          name: CONFIG.name,   
          outburstThreshold: CONFIG.initialSettings.outburstThreshold,      
@@ -62,14 +64,17 @@ class Brain {
          angerDecrease: CONFIG.initialSettings.angerDecrease,
          recursion: CONFIG.initialSettings.recursion,
          conversationTimeLimit: CONFIG.initialSettings.conversationTimeLimit,
-         conversationMemoryLength: CONFIG.initialSettings.conversationMemoryLength
+         conversationMemoryLength: CONFIG.initialSettings.conversationMemoryLength,
+         learnFromBots: CONFIG.initialSettings.learnFromBots
    }
 
    public static save(filename: string = checkFilePath("data", "brain.json")): boolean | Error {
       try {
          const realFile = resolve(filename);
-         writeFileSync(realFile, JSON.stringify(Brain.toJSON(), null, 2), "utf8");
+
+         saveBigJSON(realFile, Brain.toJSON());
          return true;
+
       } catch (error) {
          return error;
       }
@@ -79,7 +84,7 @@ class Brain {
          const realFile = resolve(filename);
          if (!existsSync(realFile)) return new Error(`Unable to load brain data file '${realFile}': file does not exist.`);
          const json = readFileSync(realFile, "utf8");
-         return Brain.fromJSON(JSON.parse(json));
+         return Brain.fromJSON(JSON.parse(json));                  
       } catch (error) {
          return error;
       }
@@ -100,13 +105,11 @@ class Brain {
          ngrams[hash] = { t: ngram.tokens, s: ngram.canStart, e: ngram.canEnd, n: {}, p: {} }
          for (const word of ngram.nextTokens.keys()) {
             const frequency: number = ngram.nextTokens.get(word) as number;
-            Reflect.set(ngrams[hash].n, word, frequency);
-            //ngrams[hash].n[word] = frequency;
+            (ngrams[hash].n as FrequencyJSON)[word] = frequency;                     
          }
          for (const word of ngram.previousTokens.keys()) {
-            const frequency: number = ngram.previousTokens.get(word) as number;
-            Reflect.set(ngrams[hash].p, word, frequency);
-            //ngrams[hash].p[word] = frequency;            
+            const frequency: number = ngram.previousTokens.get(word) as number;            
+            (ngrams[hash].p as FrequencyJSON)[word] = frequency;            
          }
 
       }
@@ -148,7 +151,7 @@ class Brain {
             }
          } else {
             for (const word of Object.keys(ngrams[hash].p)) {
-               prev.set(word, Reflect.get(ngrams[hash], word));
+               prev.set(word, Reflect.get(ngrams[hash].p, word));
             }
          }
          Brain.nGrams.set(hash, {
@@ -237,6 +240,10 @@ class Brain {
             const nextWord = nextWords[Math.floor(Math.random() * nextWords.length)];
 
             reply.push(nextWord);
+            // TODO: here is where it doesn't use the 'next' word properly
+            // it adds the next word to a new hash instead, which
+            // increases the likelihood of never adjusting based on 
+            // other uses of the word. 
             const nextSet = ngram.tokens.slice(1, Brain.chainLength);
             nextSet.push(nextWord);
             const nextHash = nextSet.join(WORD_SEPARATOR);

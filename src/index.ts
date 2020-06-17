@@ -97,9 +97,10 @@ client
          log(`Exceeded maximum of 10 reconnection attempts. Exiting to prevent bot disabling.`, "error");
          process.exitCode = 2;
       }
-      if (process.exitCode) process.exit(process.exitCode);
-      log(`Attempting to reconnect in 1 minute. Reconnection attempt #${reconnectAttempts}`);
-      setTimeout(login, 60000);
+      if (!process.exitCode) {
+         log(`Attempting to reconnect in 1 minute. Reconnection attempt #${reconnectAttempts}`);
+         setTimeout(login, 60000);
+      }
    })   
    .on("reconnecting", () => {
       log(`Reconnecting to Discord server.`);
@@ -163,7 +164,7 @@ client
    .on("messageReactionRemove", (_reaction, _user) => {})
    .on("messageReactionRemoveAll", _message => {})
    .on("message", (message: Message): void => {      
-      if (!(message.channel instanceof TextChannel) || message.type !== "DEFAULT" || message.author.bot) return;
+      if (!(message.channel instanceof TextChannel) || message.type !== "DEFAULT" || (message.author.bot && !Brain.settings.learnFromBots)) return;
       const messageSource: string = `${message.guild.name}:#${message.channel.name}:${getDisplayName(message.member)}`;
       log(`<${messageSource}> ${message.content}`);      
       const results: ProcessResults = processMessage(client.user, message);
@@ -183,6 +184,7 @@ client
 
 
 /* ACTIVATE */
+log(`Initializing...`);
 let loadResults: boolean | Error;
 
 loadResults = Brain.load();

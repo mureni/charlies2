@@ -7,15 +7,22 @@ const tarot: Trigger = {
    name: "Tarot",
    description: "Draws a tarot hand",
    usage: "tarot",
-   command: /^tarot$/ui,
-   action: (context: Message) => {
+   command: /^tarot ?(?<spread>.+)?$/ui,
+   action: (context: Message, matches: RegExpMatchArray = []) => {
       const output: TriggerResult = { results: [], modifications: Modifications.AsIs, directedTo: undefined };
-      
-      getTarotHand().then(image => {
-         const tarot = new Attachment(image);
-         context.channel.send(tarot);
-      });
-      output.results = [];      
+      const spread = matches.groups?.spread ?? "standard";
+      try {
+         getTarotHand(spread).then(image => {
+            const tarot = new Attachment(image);
+            context.channel.send(tarot);
+            output.results = [];
+         }).catch(reason => {
+            output.results = [reason];
+         });
+      } catch {
+         output.results = ["can't do that right now"];
+      }
+            
       return output;
    }
 }

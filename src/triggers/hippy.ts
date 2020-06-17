@@ -6,7 +6,7 @@ const hippy: Trigger = {
    name: "New age bullshit",
    description: "Generates a paragraph of new age bullshit",
    usage: "hippy",
-   command: /^hippy$/ui,
+   command: /hippy|hippies/ui,
    action: () => {
       const output: TriggerResult = { results: [], modifications: Modifications.ProcessSwaps, directedTo: undefined };            
       const size = 6 + Math.floor(Math.random() * 3);
