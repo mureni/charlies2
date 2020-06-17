@@ -1,5 +1,5 @@
 import { resolve } from "path";
-import { constants, existsSync, accessSync } from "fs";
+import { constants, existsSync, accessSync, mkdirSync } from "fs";
 const ORIGINAL_PATH = process.cwd();
 
 const checkFilePath = (path: "code" | "data" | "logs" = "code", file: string = "", createFile: boolean = true) => {
@@ -22,20 +22,23 @@ const checkFilePath = (path: "code" | "data" | "logs" = "code", file: string = "
       }
    }
    const fullPath = resolve(cwd, typePath);
-   if (!existsSync(fullPath)) throw new Error(`Unable to locate path ${fullPath} (CWD: ${cwd} | Original path: ${ORIGINAL_PATH})`);
+   if (!existsSync(fullPath)) {
+      if (!createFile) throw new Error(`Unable to locate path ${fullPath} (CWD: ${cwd} | Original path: ${ORIGINAL_PATH})`);
+      mkdirSync(fullPath, { recursive: true });
+   }
 
    /* Determine appropriate access for the selected path */
    const accessFlags = (typePath === "dist") ? constants.R_OK : constants.R_OK | constants.W_OK;
    try {
       accessSync(fullPath, accessFlags);
    } catch (error) {
-      throw new Error(`Unable to access path ${fullPath}: ${error} (Original path: ${ORIGINAL_PATH})`);
+      throw new Error(`Unable to access path ${fullPath}: ${error} (CWD: ${cwd} | Original path: ${ORIGINAL_PATH})`);
    }
    
    if (file === "") return fullPath;
 
    const filePath = resolve(fullPath, file);
-   if (!createFile && !existsSync(filePath)) throw new Error(`Unable to locate file ${filePath} (Original path: ${ORIGINAL_PATH})`);
+   if (!createFile && !existsSync(filePath)) throw new Error(`Unable to locate file ${filePath} (CWD: ${cwd} | Original path: ${ORIGINAL_PATH})`);
    
    return filePath;
 }
