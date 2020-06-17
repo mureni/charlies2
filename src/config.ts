@@ -20,7 +20,7 @@ const checkFilePath = (path: "code" | "data" | "logs" = "code", file: string = "
       cwd = process.cwd();
    }
    const fullPath = resolve(cwd, typePath);
-   if (!existsSync(fullPath)) throw new Error(`Unable to locate path ${fullPath} (Original path: ${ORIGINAL_PATH})`);
+   if (!existsSync(fullPath)) throw new Error(`Unable to locate path ${fullPath} (CWD: ${cwd} | Original path: ${ORIGINAL_PATH})`);
 
    /* Determine appropriate access for the selected path */
    const accessFlags = (typePath === "dist") ? constants.R_OK : constants.R_OK | constants.W_OK;
