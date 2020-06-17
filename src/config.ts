@@ -9,31 +9,31 @@ const checkFilePath = (path: "code" | "data" | "logs" = "code", file: string = "
    process.chdir(ORIGINAL_PATH);
    /* In case code is being called from a 'tools' or other directory, move up until either root, error, or found the file */
 
-   let cwd = process.cwd();   
+   let cwd = process.cwd();
    while (cwd !== "/") {
       if (existsSync(`./${typePath}`)) break;
       try {
          process.chdir("..");
       } catch (error) {
-         throw new Error(`Unable to navigate to parent of path ${cwd}: ${error}`);         
+         throw new Error(`Unable to navigate to parent of path ${cwd}: ${error} (Original path: ${ORIGINAL_PATH})`);         
       }
       cwd = process.cwd();
    }
    const fullPath = resolve(cwd, typePath);
-   if (!existsSync(fullPath)) throw new Error(`Unable to locate path ${fullPath}`);  
+   if (!existsSync(fullPath)) throw new Error(`Unable to locate path ${fullPath} (Original path: ${ORIGINAL_PATH})`);
 
    /* Determine appropriate access for the selected path */
    const accessFlags = (typePath === "dist") ? constants.R_OK : constants.R_OK | constants.W_OK;
    try {
       accessSync(fullPath, accessFlags);
    } catch (error) {
-      throw new Error(`Unable to access path ${fullPath}: ${error}`);
+      throw new Error(`Unable to access path ${fullPath}: ${error} (Original path: ${ORIGINAL_PATH})`);
    }
    
    if (file === "") return fullPath;
 
    const filePath = resolve(fullPath, file);
-   if (!createFile && !existsSync(filePath)) throw new Error(`Unable to locate file ${filePath}`);
+   if (!createFile && !existsSync(filePath)) throw new Error(`Unable to locate file ${filePath} (Original path: ${ORIGINAL_PATH})`);
    
    return filePath;
 }
