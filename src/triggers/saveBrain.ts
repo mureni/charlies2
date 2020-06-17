@@ -15,6 +15,21 @@ const saveBrain: Trigger = {
    }
 }
 
+const reloadBrain: Trigger = {
+   id: "reload-brain",
+   name: "Reload brain",
+   description: "Reloads chatbot brain without saving first",
+   usage: "reload-brain",
+   command: /^reload-brain$/ui,
+   ownerOnly: true,
+   action: () => {
+      const output: TriggerResult = { results: [], modifications: Modifications.AsIs };
+      const loadResults: boolean | Error = Brain.load();
+      output.results = (loadResults instanceof Error) ? [`error reloading brain data, check error log for details`] : ["brain reloaded"];
+      return output;
+   }
+}
+
 const enableBotLearning: Trigger = { 
    id: "enable-bot-learning",
    name: "Enable bot learning",
@@ -47,5 +62,5 @@ const disableBotLearning: Trigger = {
    }
 }
 
-const triggers = [ saveBrain, disableBotLearning, enableBotLearning ];
+const triggers = [ saveBrain, reloadBrain, disableBotLearning, enableBotLearning ];
 export { triggers }
