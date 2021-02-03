@@ -1,10 +1,69 @@
-import { Message, TextChannel, Client } from "discord.js";
-import { log, Brain, ProcessResults, processMessage, getDisplayName } from "./core";
+import { Intents, Message, TextChannel, Client } from "discord.js";
+import { log, Brain, ProcessResults, processMessage, getDisplayName, KnownUsers, Conversation } from "./core";
 import { Swap, Blacklist, Madlibs } from "./controllers";
+import { env } from "./config";
 
-/* Initialize client */
+// TODO: Refactor everything for cleaner code 
+
+/* ACTIVATE */
+const initialize = async () => {
+   log(`Initializing...`);
+   let loadResults: boolean | Error;
+
+   log(`Loading environment variables...`);
+   const mandatoryEnvVars = ["DISCORD_AUTH", "BOT_OWNER_DISCORD_ID", "BOT_NAME", "NODE_ENV"];
+
+   for (const envVar in mandatoryEnvVars) {
+      if (env(envVar) === "") throw new Error(`Environment variable ${envVar} not found in environment. This value must be set to continue. Exiting...`);
+      process.exit();
+   }
+
+   const botName = env("BOT_NAME") ?? "default";
+
+   log (`Loading brain settings...`);
+   loadResults = Brain.loadSettings(botName);
+   if (loadResults instanceof Error) log(`Error loading brain settings: ${loadResults.message}. Starting with default settings.`, "warn");
+
+   if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) {
+      log(`Brain is apparently empty. Loading from default trainer file '../resources/${botName}-trainer.json'. This will take a very long time, be patient.`);
+      loadResults = await Brain.trainFromFile(botName);      
+      if (loadResults instanceof Error) log(`Error loading trainer file: ${loadResults.message}. Going to have a broken brain.`, "error");
+   }
+
+   log (`Loading swap settings...`);
+   loadResults = Swap.load();
+   if (loadResults instanceof Error) log(`Error loading swap data: ${loadResults.message}. Starting with empty swap data.`, "warn");
+   log (`Loading blacklist settings...`);
+   loadResults = Blacklist.load();
+   if (loadResults instanceof Error) log(`Error loading blacklist data: ${loadResults.message}. Starting with empty blacklist data.`, "warn");
+   log (`Loading madlib settings...`);
+   loadResults = Madlibs.load();
+   if (loadResults instanceof Error) log(`Error loading madlibs data: ${loadResults.message}. Starting with empty madlibs data.`, "warn");
+
+   if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) {
+      log(`Error initializing brain: no data was retrieved.`);
+   }
+}
+
+initialize();
+
+/* Initialize discord client */
 let reconnectAttempts: number = 0;
-const client = new Client();
+const intents = new Intents();
+intents.add("GUILD_MEMBERS")
+       .add("GUILD_MESSAGES")
+       .add("GUILD_MESSAGE_REACTIONS")
+       .add("GUILD_EMOJIS");       
+const client = new Client({
+   fetchAllMembers: false,
+   shards: "auto",   
+   /* ws: {
+      intents: intents
+   }, 
+   http: {
+      version: 8
+   } */
+});
 const dirty = {
    brain: false,
    swaps: false,
@@ -16,11 +75,11 @@ const dirty = {
 const saveData = (): void => {
    let saveResults: boolean | Error;
 
-   saveResults = dirty.brain ? Brain.save() : false;   
+   saveResults = dirty.brain ? Brain.saveSettings(Brain.botName) : false;   
    if (saveResults instanceof Error) {
-      log(`Error saving brain data: ${saveResults.message}`, "error");
+      log(`Error saving brain settings: ${saveResults.message}`, "error");
    } else if (saveResults) { 
-      log(`Brain data saved.`);
+      log(`Brain settings saved.`);
       dirty.brain = false;
    }
    
@@ -50,12 +109,12 @@ const saveData = (): void => {
 }
 
 /* Define exit handler and exit events */
-const exitHandler = (): void => {   
-   log(`Exiting cleanly.`);
+const exitHandler = async () => {      
+   log(`Saving data, shutting down client, exiting with code: ${process.exitCode}.`);
    saveData();
-   client.destroy();
-   process.exitCode = 130;
+   client.destroy(); 
 }
+
 /* BAD IDEA: 
 
 if (process.env.NODE_ENV === "production") {
@@ -65,14 +124,14 @@ if (process.env.NODE_ENV === "production") {
       exitHandler();
    });
 }
-
 */
 process
    .on('exit', exitHandler)
-   .on('SIGINT', exitHandler)      
+   .on('SIGINT', exitHandler)
    .on('SIGTERM', exitHandler)
    .on('SIGUSR1', exitHandler)
    .on('SIGUSR2', exitHandler);
+
 
 
 /* Attempt login */
@@ -80,19 +139,19 @@ const login = (): Promise<any> => client.login(process.env.DISCORD_AUTH)
    .then(_token => log(`Logged in to Discord server.`))
    .catch(_token => log(`Problem logging in to Discord server.`));
 
-/* Define client events (as of Discord.js version 11.4.2) */
+/* Define client events (as of Discord.js version 12.3.1) */
 client
    /* General client events */
    .on("error", error => {
       log(`Error occurred: ${error.message}`, "error");      
    })
    .on("ready", () => {
-      log(`Connected to Discord server.`);       
-      setInterval(saveData, 72000000); // Save data every 2 hours if it is dirty
+      log(`Connected to Discord server.`);      
+      //setInterval(saveData, 7200000); // Save data every 2 hours if it is dirty
    })
    .on("disconnect", event => {
       if (event.reason && /Authentication/gui.test(event.reason)) process.exitCode = 1;
-      log(`Disconnected from Discord server. Reason: ${event.reason ? event.reason : 'None provided'}. Code: ${event.code ? event.code : 'None provided'}.`, process.exitCode ? "error" : "general");
+      log(`Disconnected from Discord server. Reason: ${event.reason ? event.reason : 'None provided'}. Code: ${event.code ? event.code : 'None provided'}.`);
       if (reconnectAttempts++ >= 10) {
          log(`Exceeded maximum of 10 reconnection attempts. Exiting to prevent bot disabling.`, "error");
          process.exitCode = 2;
@@ -108,7 +167,9 @@ client
    .on("resume", replayed => {
       log(`Connection resumed. Number of replayed events: ${replayed}`);
    })
-   .on("debug", _info => {})
+   .on("debug", _info => {
+      //log(`Debug info received: ${info}`, "debug");
+   })
    .on("warn", info => {
       log(`Warning information received: ${info}`, "warn");
    })
@@ -117,7 +178,21 @@ client
    .on("clientUserGuildSettingsUpdate", _userGuildSettings => {})
    .on("clientUserSettingsUpdate", _userSettings => {})
    .on("userNoteUpdate", (_user, _oldNote, _newNote) => {})
-   .on("userUpdate", (_oldUser, _newUser) => {})
+   .on("userUpdate", (oldUser, newUser) => {
+      if (oldUser.username !== newUser.username) {
+         if (KnownUsers.has(oldUser.id)) {
+            const user = KnownUsers.get(oldUser.id)!;
+            user.aliases.add(newUser.username);
+            user.name = newUser.username
+         } else {
+            KnownUsers.set(newUser.id, {
+               name: newUser.username,
+               aliases: new Set<string>([newUser.username]),
+               conversations: new Map<string, Conversation>()
+            })
+         }
+      }
+   })
    .on("rateLimit", _rateLimit => {})
 
    /* Emoji handling */
@@ -127,17 +202,50 @@ client
 
    /* Guild handling */
    .on("guildUnavailable", _guild => {})
-   .on("guildCreate", _guild => {})
+   .on("guildCreate", guild => {
+      log(`Guild ${guild.name} has been created or connected to.`);
+   })
    .on("guildDelete", _guild => {})
    .on("guildUpdate", (_oldGuild, _newGuild) => {})
    .on("guildBanAdd", (_guild, _user) => {})
    .on("guildBanRemove", (_guild, _user) => {})
 
    /* Guild member handling */
-   .on("guildMemberAdd", _member => {})
+   .on("guildMemberAdd", member => {      
+      KnownUsers.set(member.id, {         
+         name: member.user.username,
+         aliases: new Set<string>([member.user.username, member.displayName]),
+         conversations: new Map<string, Conversation>()
+      });
+   })
    .on("guildMemberRemove", _member => {})
-   .on("guildMemberUpdate", (_oldMember, _newMember) => {})
-   .on("guildMembersChunk", (_members, _guild) => {})
+   .on("guildMemberUpdate", (oldMember, newMember) => {
+      if (oldMember.nickname !== newMember.nickname) {
+         if (KnownUsers.has(oldMember.id)) {
+            KnownUsers.get(oldMember.id)?.aliases.add(newMember.displayName);            
+         } else {
+            KnownUsers.set(newMember.id, { 
+               name: newMember.user.username,
+               aliases: new Set<string>([newMember.user.username, newMember.displayName]),
+               conversations: new Map<string, Conversation>()
+            });
+         }
+      }
+   })
+   .on("guildMembersChunk", (members, _guild) => {
+      members.forEach(member => {
+         if (KnownUsers.has(member.id)) {
+            const user = KnownUsers.get(member.id)!;
+            user.aliases.add(member.user.username);
+            user.aliases.add(member.displayName);            
+         }
+         KnownUsers.set(member.id, {               
+            name: member.user.username,
+            aliases: new Set<string>([member.user.username, member.displayName]),
+            conversations: new Map<string, Conversation>()
+         });            
+      });
+   })
    .on("guildMemberAvailable", _member => {})
    .on("guildMemberSpeaking", (_member, _speaking) => {})
    .on("presenceUpdate", (_oldMember, _newMember) => {})
@@ -163,11 +271,32 @@ client
    .on("messageReactionAdd", (_reaction, _user) => {})
    .on("messageReactionRemove", (_reaction, _user) => {})
    .on("messageReactionRemoveAll", _message => {})
-   .on("message", (message: Message): void => {      
-      if (!(message.channel instanceof TextChannel) || message.type !== "DEFAULT" || (message.author.bot && !Brain.settings.learnFromBots)) return;
-      const messageSource: string = `${message.guild.name}:#${message.channel.name}:${getDisplayName(message.member)}`;
-      log(`<${messageSource}> ${message.content}`);      
-      const results: ProcessResults = processMessage(client.user, message);
+   .on("message", async (message: Message): Promise<void> => {
+      
+      if (!client.user) {
+         log(`No client user found, cannot process incoming message`);
+         return;
+      }
+      if (!(message.channel instanceof TextChannel)
+         || message.type !== "DEFAULT"
+         || (message.author.bot && !Brain.settings.learnFromBots)
+         || (message.author.id === client.user.id)
+      ) {
+         // log(`Invalid message: type=${message.type}, author=${message.author.id}, self=${client.user.id}, bot=${message.author.bot}, channel=${message.channel}, guild=${message.guild ?? 'DM'}`);
+         return;
+      }
+
+      if (!KnownUsers.has(message.author.id)) {
+         KnownUsers.set(message.author.id, {
+            name: message.author.username,
+            aliases: new Set<string>([message.author.username, message.member?.displayName ?? message.author.username]),
+            conversations: new Map<string, Conversation>()
+         });
+      }
+
+      const messageSource: string = `${message.guild?.name ?? 'Private'}:#${message.channel.name}:${getDisplayName(message.author)}`;
+      log(`<${messageSource}> ${message.content}`);
+      const results: ProcessResults = await processMessage(client.user, message);
       if (results.learned) {
          log(`Learned: ${results.processedText}`, "debug");
          dirty.brain = true;
@@ -183,16 +312,4 @@ client
 
 
 
-/* ACTIVATE */
-log(`Initializing...`);
-let loadResults: boolean | Error;
-
-loadResults = Brain.load();
-if (loadResults instanceof Error) log(`Error loading brain data: ${loadResults.message}. Starting with empty brain.`, "warn");
-loadResults = Swap.load();
-if (loadResults instanceof Error) log(`Error loading swap data: ${loadResults.message}. Starting with empty swap data.`, "warn");
-loadResults = Blacklist.load();
-if (loadResults instanceof Error) log(`Error loading blacklist data: ${loadResults.message}. Starting with empty blacklist data.`, "warn");
-loadResults = Madlibs.load();
-if (loadResults instanceof Error) log(`Error loading madlibs data: ${loadResults.message}. Starting with empty madlibs data.`, "warn");
 login();

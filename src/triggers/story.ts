@@ -1,4 +1,4 @@
-import { Message, Modifications, TriggerResult, Trigger, getDisplayName, Brain } from "../core";
+import { Message, TriggerResult, Trigger, getDisplayName, Brain } from "../core";
 
 const story: Trigger = {
    id: "story",
@@ -6,8 +6,8 @@ const story: Trigger = {
    description: "Tells a story about a topic. Text in < > are optional, text in [] can be changed.",
    usage: "tell <me/[person]/yourself> a<nother> <long> story <about [topic]>",
    command: /tell (?<person>.+)? ?(?:a(?:nother)?) (?<long>long)? ?story(?: about (?<topic>.+))?/ui,
-   action: (context: Message, matches: RegExpMatchArray = []) => {
-      const output: TriggerResult = { results: [], modifications: Modifications.ProcessSwaps, directedTo: undefined };
+   action: async (context: Message, matches: RegExpMatchArray = []) => {
+      const output: TriggerResult = { results: [], modifications: { ProcessSwaps: true }, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
       const storyLength = (3 + Math.floor(Math.random() * 5)) * (matches.groups.long !== undefined ? 3 : 1);
       const directedTo = (matches.groups.person || "").trim();
@@ -16,9 +16,9 @@ const story: Trigger = {
       let topic = seed;
 
       while (story.size < storyLength) {
-         topic = Brain.getSeed(topic);
-         let line = Brain.getResponse(topic).trim();         
-         if (story.has(line)) seed = Brain.getSeed();
+         topic = await Brain.getSeed(topic);
+         const line = await Brain.getResponse(topic);
+         if (story.has(line)) seed = await Brain.getSeed();
          story.add(line);
          topic = seed !== "" ? seed : line;
       }
@@ -27,7 +27,7 @@ const story: Trigger = {
          if (/yourself/iu.test(directedTo)) {
             line = `*${line}*`;
          } else if (/me/iu.test(directedTo)) {
-            output.directedTo = getDisplayName(context.member);
+            output.directedTo = getDisplayName(context.author);
          } else if (directedTo !== "") {
             output.directedTo = directedTo;
          }

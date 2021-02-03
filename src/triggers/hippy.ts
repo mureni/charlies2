@@ -1,16 +1,16 @@
-import { Modifications, TriggerResult, Trigger } from "../core";
-import { Bullshit } from "../controllers";
+import { TriggerResult, Trigger } from "../core";
+import { Hippy } from "../controllers";
 
 const hippy: Trigger = {
    id: "hippy",
-   name: "New age bullshit",
-   description: "Generates a paragraph of new age bullshit",
+   name: "New age nonsense",
+   description: "Generates a paragraph of new age nonsense",
    usage: "hippy",
    command: /hippy|hippies/ui,
    action: () => {
-      const output: TriggerResult = { results: [], modifications: Modifications.ProcessSwaps, directedTo: undefined };            
+      const output: TriggerResult = { results: [], modifications: { ProcessSwaps: true }, directedTo: undefined };            
       const size = 6 + Math.floor(Math.random() * 3);
-      output.results = [Bullshit.generate(size)];
+      output.results = [Hippy.generate(size)];
       return output;
    }
 }

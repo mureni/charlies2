@@ -16,8 +16,8 @@
    */
    
 import Canvas from "canvas";
-import { readdirSync, writeFileSync } from "fs";
-import { join, extname } from "path";
+import { readdirSync, writeFileSync, readFileSync } from "fs";
+import { join, parse } from "path";
 import { checkFilePath } from "../config";
 
 
@@ -30,12 +30,14 @@ interface Card {
       x: number;
       y: number;
    }
-   orientation: "normal" | "reversed";   
+   orientation: "upright" | "reversed";   
    filename: string;
    image: Canvas.Image;
    name?: string;
-   description?: string;
-   meaning?: string;
+   meaning?: {
+      upright: string,
+      reversed: string
+   };
 }
 export type SpreadLayoutDetails = {
    [cardNumber: number]: {
@@ -54,8 +56,32 @@ interface Hand {
    spread: Spread;   
    cards: Card[];
 }
-const TAROT_DIR = checkFilePath("data", "rider-waite/");
 
+interface Meanings {
+   [cardName: string]: {
+      upright: string,
+      reversed: string
+   }
+}
+
+interface Explanations {
+   [card: number]: {
+      name: string,
+      description: string,
+      meaning: string
+   }
+}
+
+const TAROT_DIR = checkFilePath("resources", "tarot-decks/rider-waite/");
+const toTitleCase = (text: string) => {
+   let first = true;
+   return text.split(' ').map(word => {      
+      let nw: string = word.toLowerCase();
+      if (word.length > 2 || first) nw = word.charAt(0).toUpperCase() + word.slice(1);
+      if (first) first = false;
+      return nw;
+   }).join(' ');
+}
 class SpreadLayout implements SpreadLayout {         
    constructor(data: number[][], details?: SpreadLayoutDetails) {
       
@@ -127,23 +153,32 @@ class Deck {
    async loadCards(imageFolder: string = TAROT_DIR): Promise<Card[]> {
       let files: string[] = [];
       const results: Card[] = [];
+      const meaningFile: string = join(imageFolder, "meanings.json");
 
+      const meaningContents = readFileSync(meaningFile, { encoding: "utf-8" });
+      
+      const meanings: Meanings = JSON.parse(meaningContents) as Meanings;
+      
       files = readdirSync(imageFolder).filter((file) =>
-         extname(file).match(/png|jpe?g|webp|gif|tiff?|svg/i)
+         parse(file).ext.match(/png|jpe?g|webp|gif|tiff?|svg/i)
       );
       if (!files || files.length === 0) return Promise.reject(`No image files were found in folder '${imageFolder}'`);
 
       for (let file of files) {
          const image: Canvas.Image = await Canvas.loadImage(join(imageFolder, file));
+         const name = parse(file).name;
+         const meaning = meanings[name];
 
          const card: Card = {
             dimensions: {
                width: image.naturalWidth ?? 0,
                height: image.naturalHeight ?? 0,
             },
-            orientation: "normal",
+            orientation: "upright",
             filename: file,
             image: image,
+            name: toTitleCase(name.replace(/_/g, " ")),
+            meaning: meaning
          };
          results.push(card);
          //console.log(`Loaded card ${file}`);
@@ -243,11 +278,12 @@ class Spread {
       //console.log(`Adjustment: ${xAdjustment}px * ${yAdjustment}px`);
       return { x: xAdjustment, y: yAdjustment };      
    }
-   async getReading (deck: Deck = new Deck(TAROT_DIR)): Promise<Buffer> {      
+   async getReading (deck: Deck = new Deck(TAROT_DIR)): Promise<{ image: Buffer, explanation: Explanations }> {
             
       const hand = new Hand(deck, this);      
       const dims = this.getDimensions(hand.deck);
-            
+      const explanations: Explanations = {};
+
       // Create canvas and context
       const canvas = Canvas.createCanvas(dims.pixelWidth, dims.pixelHeight);
       const context = canvas.getContext("2d");
@@ -306,6 +342,14 @@ class Spread {
          let { x, y } = this.getXYPositionOfCard(hand, card + 1);
          if (x + deck.cardWidth > actualWidth) actualWidth = x + deck.cardWidth;
          if (y + deck.cardHeight > actualHeight) actualHeight = y + deck.cardHeight;         
+         let cardNumber = this.layout.details ? this.layout.details[card + 1].name : `Card #${card + 1}`;
+         let cardDescription = this.layout.details ? this.layout.details[card + 1].description : ``;
+         explanations[card] = {
+            name: `${cardNumber}: ${hand.cards[card].name}${(hand.cards[card].orientation === "reversed") ? ' (Reversed)' : ''}`,
+            description: cardDescription,
+            meaning: ((hand.cards[card].orientation === "reversed") ? hand.cards[card].meaning?.reversed : hand.cards[card].meaning?.upright) ?? ""
+         }
+         
          if (hand.cards[card].orientation === "reversed") {
             //console.log(`Drawing reversed card #${card + 1} at: ${x}, ${y}`);
             paintCard(context, hand.cards[card], x, y, deck.cardWidth, deck.cardHeight, 180, card + 1);
@@ -333,7 +377,7 @@ class Spread {
       const finalContext = finalCanvas.getContext("2d");
       finalContext.drawImage(canvas, 0, 0, actualWidth, actualHeight, 0, 0, finalWidth, finalHeight);
          
-      return Promise.resolve(finalCanvas.toBuffer());
+      return Promise.resolve({ image: finalCanvas.toBuffer(), explanation: explanations });
    };
 
 }
@@ -423,7 +467,7 @@ const Decks = {
 };
 
 
-const getTarotHand = (spread: string = "standard", deck: Deck = Decks.default): Promise<Buffer> => {
+const getTarotHand = (spread: string = "standard", deck: Deck = Decks.default): Promise<{ image: Buffer, explanation: Explanations }> => {
    let chosenSpread: Spread | undefined = Spreads.find(item => item.name === spread);
    if (!chosenSpread) return Promise.reject("Spread not found");
    return Promise.resolve(chosenSpread.getReading(deck));
@@ -432,10 +476,11 @@ const saveHandImage = async (
    filename: string = join(TAROT_DIR, "saved-image.png")
 ) => {
    try {
-      const image: Buffer = await getTarotHand();
-      writeFileSync(filename, image);   
-   } catch {
-      
+      const hand: { image: Buffer, explanation: Explanations } = await getTarotHand();
+      writeFileSync(filename, hand.image);
+   } catch (e) {
+      // TODO: cleaner error handling
+      throw e;
    }
 };
 

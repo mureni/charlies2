@@ -8,7 +8,7 @@ class Madlibs {
    public static vocab: Map<string, Set<string>> = new Map<string, Set<string>>();
 
    public static load(filename: string = DATA_FILE): boolean | Error {      
-      if (!existsSync(filename)) return new Error(`Unable to load bullshit data file '${filename}': file does not exist.`);
+      if (!existsSync(filename)) return new Error(`Unable to load madlibs data file '${filename}': file does not exist.`);
       const data = JSON.parse(readFileSync(filename, "utf8"));
       
       if (!Reflect.has(data, "vocab") || !Reflect.has(data, "patterns")) return false;

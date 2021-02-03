@@ -1,5 +1,5 @@
-import { Message, TriggerResult, Trigger, Modifications } from "../core";
-import { CONFIG } from "../config";
+import { Message, TriggerResult, Trigger } from "../core";
+import { env } from "../config";
 
 const lotto: Trigger = {
    id: "lotto",
@@ -8,7 +8,7 @@ const lotto: Trigger = {
    usage: "give me <number> [unique] [lotto/lottery] numbers [between <low> and <high>]",
    command: /give me (?<number>\d+) ?(?<unique>unique)? ?(?:lotto|lottery)? numbers? ?(?:between (?<low>\d+) and (?<high>\d+))?/ui,
    action: (_context: Message, matches: RegExpMatchArray = []) => {
-      const output: TriggerResult = { results: [], modifications: Modifications.AsIs };      
+      const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' } };      
       if (matches.length === 0 || !matches.groups || matches.groups.number === undefined) return output;
       const clamp = (n: number, low: number, high: number): number => Math.max(Math.min(high, n), low);
       const howMany: number = clamp(parseInt(matches.groups.number), 0, 200);
@@ -53,7 +53,7 @@ const checkem: Trigger = {
    usage: "checkem",
    command: /checkem|dubs|trips|quads/ui,
    action: (context: Message) => {
-      const output: TriggerResult = { results: [], modifications: Modifications.AsIs };            
+      const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' } };            
       const isDubs = (str: string) => /(.)\1{1}$/.test(str);
       const isTrips = (str: string) => /(.)\1{2}$/.test(str);
       const isQuads = (str: string) => /(.)\1{3}$/.test(str);
@@ -61,7 +61,7 @@ const checkem: Trigger = {
       const getNumber = (): string => Math.round(Math.random() * 9999).toString();
       
       let result = getNumber();
-      if (context.member.id === CONFIG.ownerID) {
+      if (context.author.id === env("BOT_OWNER_DISCORD_ID")) {
          const quads = !!(Math.random() > .9);
          const trips = !!(Math.random() > .8);
          const dubs = !!(Math.random() > .7);

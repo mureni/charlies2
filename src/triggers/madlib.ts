@@ -1,4 +1,4 @@
-import { Message, Modifications, cleanMessage, TriggerResult, Trigger } from "../core";
+import { Message, cleanMessage, TriggerResult, Trigger } from "../core";
 import { Madlibs } from "../controllers";
 
 const madlib: Trigger = {
@@ -8,7 +8,7 @@ const madlib: Trigger = {
    usage: "madlib",
    command: /^madlib$/ui,
    action: () => {
-      const output: TriggerResult = { results: [], modifications: Modifications.ProcessSwaps, directedTo: undefined };            
+      const output: TriggerResult = { results: [], modifications: { ProcessSwaps: true }, directedTo: undefined };            
       const size = 2 + Math.floor(Math.random() * 3);
       output.results = [Madlibs.generate(size)];
       return output;
@@ -22,11 +22,11 @@ const madlibAddWord: Trigger = {
    usage: "madlib-add-word <type> <word>",
    command: /^madlib-add-word (?<type>.+?) (?<word>.+)$/ui,
    action: (_context: Message, matches: RegExpMatchArray = []) => {
-      const output: TriggerResult = { results: [], modifications: Modifications.AsIs, directedTo: undefined };
+      const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' }, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
       
-      const vocabType = `[${cleanMessage((matches.groups.type || "").trim(), Modifications.ForceLowercase & Modifications.FriendlyNames)}]`;
-      const word = cleanMessage((matches.groups.word || "").trim(), Modifications.ForceLowercase & Modifications.FriendlyNames);
+      const vocabType = `[${cleanMessage((matches.groups.type || "").trim(), { Case: "lower", FriendlyNames: true })}]`;
+      const word = cleanMessage((matches.groups.word || "").trim(), { Case: "lower", FriendlyNames: true });
       
       const success = Madlibs.addVocab(vocabType, word);
       output.results = [success ? `added \`${word}\` to vocabulary list for \`${vocabType}\`` : `can't do that, try again`];
@@ -41,11 +41,11 @@ const madlibRemoveWord: Trigger = {
    usage: "madlib-remove-word <type> <word>",
    command: /^madlib-remove-word (?<type>.+?) (?<word>.+)$/ui,
    action: (_context: Message, matches: RegExpMatchArray = []) => {
-      const output: TriggerResult = { results: [], modifications: Modifications.AsIs, directedTo: undefined };
+      const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
       
-      const vocabType = `[${cleanMessage((matches.groups.type || "").trim(), Modifications.ForceLowercase & Modifications.FriendlyNames)}]`;
-      const word = cleanMessage((matches.groups.word || "").trim(), Modifications.ForceLowercase & Modifications.FriendlyNames);
+      const vocabType = `[${cleanMessage((matches.groups.type || "").trim(), { Case: "lower", FriendlyNames: true })}]`;
+      const word = cleanMessage((matches.groups.word || "").trim(), { Case: "lower", FriendlyNames: true });
       
       const success = Madlibs.removeVocab(vocabType, word);
       output.results = [success ? `removed \`${word}\` from vocabulary list for \`${vocabType}\`` : `can't do that, try again`];
@@ -61,10 +61,10 @@ const madlibAddPattern: Trigger = {
    usage: "madlib-add-pattern <pattern> (Example: madlib-add-pattern the [adverb] [noun] [verb]ed [preposition] the [noun].)",
    command: /^madlib-add-pattern (?<pattern>.+)$/ui,
    action: (_context: Message, matches: RegExpMatchArray = []) => {
-      const output: TriggerResult = { results: [], modifications: Modifications.AsIs, directedTo: undefined };
+      const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
       
-      const pattern = cleanMessage((matches.groups.pattern || "").trim(), Modifications.ForceLowercase & Modifications.FriendlyNames);
+      const pattern = cleanMessage((matches.groups.pattern || "").trim(), { Case: "lower", FriendlyNames: true });
 
       const success = Madlibs.addPattern(pattern);
       output.results = [success ? `added \`${pattern}\` to pattern list` : `can't do that, try again`];
@@ -80,10 +80,10 @@ const madlibRemovePattern: Trigger = {
    usage: "madlib-remove-pattern <pattern>",
    command: /^madlib-remove-pattern (?<pattern>.+)$/ui,
    action: (_context: Message, matches: RegExpMatchArray = []) => {
-      const output: TriggerResult = { results: [], modifications: Modifications.AsIs, directedTo: undefined };
+      const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
       
-      const pattern = cleanMessage((matches.groups.pattern || "").trim(), Modifications.ForceLowercase & Modifications.FriendlyNames);
+      const pattern = cleanMessage((matches.groups.pattern || "").trim(), { Case: "lower", FriendlyNames: true });
       
       const success = Madlibs.removePattern(pattern);
       output.results = [success ? `removed \`${pattern}\` from pattern list` : `can't do that, try again`];

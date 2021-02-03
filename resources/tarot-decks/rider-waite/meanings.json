@@ -1,0 +1,316 @@
+{
+   "the_world": {
+      "upright": "fulfillment, harmony, completion",
+      "reversed": "incompletion, no closure"
+   }, 
+   "judgement": {
+      "upright": "reflection, reckoning, awakening",
+      "reversed": "lack of self awareness, doubt, self loathing"
+   },
+   "the_sun": {
+      "upright": "joy, success, celebration, positivity",
+      "reversed": "negativity, depression, sadness"
+   },
+   "the_moon": {
+      "upright": "unconscious, illusions, intuition",
+      "reversed": "confusion, fear, misrepresentation"
+   },
+   "the_star": {
+      "upright": "hope, faith, rejuvination",
+      "reversed": "faithlessness, discouragement, insecurity"
+   },
+   "the_tower": {
+      "upright": "sudden upheaval, broken pride, disaster",
+      "reversed": "disaster avoided, delayed disaster, fear of suffering"
+   },
+   "the_devil": {
+      "upright": "addiction, materialism, playfulness",
+      "reversed": "freedom, release, restoring control"
+   },
+   "temperance": {
+      "upright": "middle path, patience, finding meaning",
+      "reversed": "extremes, excess, lack of balance"
+   },
+   "death": {
+      "upright": "end of cycle, beginnings, change, metamorphosis",
+      "reversed": "fear of change, holding on, stagnation, decay"
+   },
+   "the_hanged_man": {
+      "upright": "sacrifice, release, martyrdom",
+      "reversed": "stalling, needless sacrifice, fear of sacrifice"
+   },
+   "justice": {
+      "upright": "cause and effect, clarity, truth",
+      "reversed": "dishonesty, unaccountability, unfairness"
+   },
+   "the_wheel_of_fortune": {
+      "upright": "change, cycles, inevitable fate",
+      "reversed": "no control, clinging to control, bad luck"
+   },
+   "the_hermit": {
+      "upright": "contemplation, search for truth, inner guidance",
+      "reversed": "loneliness, isolation, lost your way"
+   },
+   "strength": {
+      "upright": "inner strength, bravery, compassion, focus",
+      "reversed": "self doubt, weakness, insecurity"
+   },
+   "the_chariot": {
+      "upright": "direction, control, willpower",
+      "reversed": "lack of control, lack of direction, aggression"
+   },
+   "the_lovers": {
+      "upright": "partnerships, duality, union",
+      "reversed": "loss of balance, one-sidedness, disharmony"
+   },
+   "the_hierophant": {
+      "upright": "tradition, conformity, morality, ethics",
+      "reversed": "rebellion, subversiveness, new approaches"
+   },
+   "the_emperor": {
+      "upright": "authority, structure, control, fatherhood",
+      "reversed": "tyranny, rigidity, coldness"
+   },
+   "the_empress": {
+      "upright": "motherhood, fertility, nature",
+      "reversed": "dependence, smothering, emptiness, nosiness"
+   },
+   "the_high_priestess": {
+      "upright": "intuitive, unconscious, inner voice",
+      "reversed": "lack of center, lost inner voice, repressed feelings"
+   },
+   "the_magician": {
+      "upright": "willpower, desire, creation, manifestation",
+      "reversed": "trickery, illusions, out of touch"
+   },
+   "the_fool": {
+      "upright": "innocence, new beginnings, free spirit",
+      "reversed": "recklessness, taken advantage of, inconsideration"
+   },
+   "king_of_cups": {
+      "upright": "compassion, control, balance",
+      "reversed": "coldness, moodiness, bad advice"
+   },
+   "queen_of_cups": {
+      "upright": "compassion, calm, comfort",
+      "reversed": "martyrdom, insecurity, dependence"
+   },
+   "knight_of_cups": {
+      "upright": "following the heart, idealist, romantic",
+      "reversed": "moodiness, disappointment"
+   },
+   "page_of_cups": {
+      "upright": "happy surprise, dreamer, sensitivity",
+      "reversed": "emotional immaturity, insecurity, disappointment"
+   },
+   "10_of_cups": {
+      "upright": "inner happiness, fulfillment, dreams coming true",
+      "reversed": "shattered dreams, broken family, domestic disharmony"
+   },
+   "9_of_cups": {
+      "upright": "satisfaction, emotional stability, luxury",
+      "reversed": "lack of inner joy, smugness, dissatisfaction"
+   },
+   "8_of_cups": {
+      "upright": "walking away, disillusionment, leaving behind",
+      "reversed": "avoidance, fear of change, fear of loss"
+   },
+   "7_of_cups": {
+      "upright": "searching for purpose, choices, daydreaming",
+      "reversed": "lack of purpose, diversion, confusion"
+   },
+   "6_of_cups": {
+      "upright": "familiarity, happy memories, healing",
+      "reversed": "moving forward, leaving home, independence"
+   },
+   "5_of_cups": {
+      "upright": "loss, grief, self-pity",
+      "reversed": "acceptance, moving on, finding peace"
+   },
+   "4_of_cups": {
+      "upright": "apathy, contemplation, disconnectedness",
+      "reversed": "sudden awareness, choosing happiness, acceptance"
+   },
+   "3_of_cups": {
+      "upright": "friendship, community, happiness",
+      "reversed": "overindulgence, gossip, isolation"
+   },
+   "2_of_cups": {
+      "upright": "unity, partnership, connection",
+      "reversed": "imbalance, broken communication, tension"
+   },
+   "ace_of_cups": {
+      "upright": "new feelings, spirituality, intuition",
+      "reversed": "emotional loss, blocked creativity, emptiness"
+   },
+   "king_of_wands": {
+      "upright": "big picture, leader, overcoming challenges",
+      "reversed": "impulsive, overbearing, unachievable expectations"
+   },
+   "queen_of_wands": {
+      "upright": "courage, determination, joy",
+      "reversed": "selfishness, jealousy, insecurities"
+   },
+   "knight_of_wands": {
+      "upright": "action, adventure, fearlessness",
+      "reversed": "anger, impulsiveness, recklessness"
+   },
+   "page_of_wands": {
+      "upright": "exploration, excitement, freedom",
+      "reversed": "lack of direction, procrastination, creating conflict"
+   },
+   "10_of_wands": {
+      "upright": "accomplishment, responsibility, burden",
+      "reversed": "inability to delegate, overstressed, burnt out"
+   },
+   "9_of_wands": {
+      "upright": "resilience, grit, last stand",
+      "reversed": "exhaustion, fatigue, questioning motivations"
+   },
+   "8_of_wands": {
+      "upright": "rapid action, movement, quick decisions",
+      "reversed": "panic, waiting, slowdown"
+   },
+   "7_of_wands": {
+      "upright": "perseverance, defensive, maintaining control",
+      "reversed": "give up, destroyed confidence, overwhelmed"
+   },
+   "6_of_wands": {
+      "upright": "victory, success, public reward",
+      "reversed": "excess pride, lack of recognition, punishment"
+   },
+   "5_of_wands": {
+      "upright": "competition, rivalry, conflict",
+      "reversed": "avoiding conflict, respecting differences"
+   },
+   "4_of_wands": {
+      "upright": "community, home, celebration",
+      "reversed": "lack of support, transience, home conflicts"
+   },
+   "3_of_wands": {
+      "upright": "looking ahead, expansion, rapid growth",
+      "reversed": "obstacles, delays, frustration"
+   },
+   "2_of_wands": {
+      "upright": "planning, making decisions, leaving home",
+      "reversed": "fear of change, playing safe, bad planning"
+   },
+   "ace_of_wands": {
+      "upright": "creation, willpower, inspiration, desire",
+      "reversed": "lack of energy, lack of passion, boredom"
+   },  
+
+   "king_of_swords": {
+      "upright": "head over heart, discipline, truth",
+      "reversed": "manipulative, cruel, weakness"
+   },
+   "queen_of_swords": {
+      "upright": "complexity, perceptiveness, clear mindedness",
+      "reversed": "cold hearted, cruel, bitterness"
+   },
+   "knight_of_swords": {
+      "upright": "action, impulsiveness, defending beliefs",
+      "reversed": "no direction, disregard for consequences, unpredictability"
+   },
+   "page_of_swords": {
+      "upright": "curiosity, restlessness, mental energy",
+      "reversed": "deception, manipulation, all talk"
+   },
+   "10_of_swords": {
+      "upright": "failure, collapse, defeat",
+      "reversed": "can't get worse, only upwards, inevitable end"
+   },
+   "9_of_swords": {
+      "upright": "anxiety, hopelessness, trauma",
+      "reversed": "hope, reaching out, despair"
+   },
+   "8_of_swords": {
+      "upright": "imprisonment, entrapment, self-victimization",
+      "reversed": "self acceptance, new perspective, freedom"
+   },
+   "7_of_swords": {
+      "upright": "deception, trickery, tactics and strategy",
+      "reversed": "coming clean, rethinking approach, deception"
+   },
+   "6_of_swords": {
+      "upright": "transition, leaving behind, moving on",
+      "reversed": "emotional baggage, unresolved issues, resisting transition"
+   },
+   "5_of_swords": {
+      "upright": "unbridled ambition, win at all costs, sneakiness",
+      "reversed": "lingering resentment, desire to reconcile, forgiveness"
+   },
+   "4_of_swords": {
+      "upright": "rest, restoration, contemplation",
+      "reversed": "restlessness, burnout, stress"
+   },
+   "3_of_swords": {
+      "upright": "heartbreak, suffering, grief",
+      "reversed": "recovery, forgiveness, moving on"
+   },
+   "2_of_swords": {
+      "upright": "difficult choices, indecision, stalemate",
+      "reversed": "lesser of two evils, no right choice, confusion"
+   },
+   "ace_of_swords": {
+      "upright": "breakthrough, clarity, sharp mind",
+      "reversed": "confusion, brutality, chaos"
+   },
+   
+   "king_of_pentacles": {
+      "upright": "abundance, prosperity, security",
+      "reversed": "greed, indulgence, sensuality"
+   },
+   "queen_of_pentacles": {
+      "upright": "practicality, creature comforts, financial security",
+      "reversed": "self-centeredness, jealousy, smothering"
+   },
+   "knight_of_pentacles": {
+      "upright": "efficiency, hard work, responsibility",
+      "reversed": "laziness, obsessiveness, work without reward"
+   },
+   "page_of_pentacles": {
+      "upright": "ambition, desire, diligence",
+      "reversed": "lack of commitment, greediness, laziness"
+   },
+   "10_of_pentacles": {
+      "upright": "legacy, culmination, inheritance",
+      "reversed": "fleeting success, lack of stability, lack of resources"
+   },
+   "9_of_pentacles": {
+      "upright": "fruits of labor, rewards, luxury",
+      "reversed": "reckless spending, living beyond means, false success"
+   },
+   "8_of_pentacles": {
+      "upright": "apprenticeship, passion, high standards",
+      "reversed": "lack of passion, uninspired, no motivation"
+   },
+   "7_of_pentacles": {
+      "upright": "hard work, perseverance, diligence",
+      "reversed": "work without results, distractions, lack of rewards"
+   },
+   "6_of_pentacles": {
+      "upright": "charity, generosity, sharing",
+      "reversed": "strings attached, stinginess, power and domination"
+   },
+   "5_of_pentacles": {
+      "upright": "need, poverty, insecurity",
+      "reversed": "recovery, charity, improvement"
+   },
+   "4_of_pentacles": {
+      "upright": "conservation, frugality, security",
+      "reversed": "greediness, stinginess, possessiveness"
+   },
+   "3_of_pentacles": {
+      "upright": "teamwork, collaboration, building",
+      "reversed": "lack of teamwork, disorganized, group conflict"
+   },
+   "2_of_pentacles": {
+      "upright": "balancing decisions, priorities, adapting to change",
+      "reversed": "loss of balance, disorganized, overwhelmed"
+   },
+   "ace_of_pentacles": {
+      "upright": "opportunity, prosperity, new venture",
+      "reversed": "lost opportunity, missed chance, bad investment"
+   }
+}

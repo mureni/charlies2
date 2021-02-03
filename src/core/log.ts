@@ -39,8 +39,7 @@ class Logger {
       message = message.normalize();
       switch (type) {      
          case 'error': 
-            Logger.output.error(message);
-            if (DEBUG) throw new Error(message);
+            Logger.output.error(message);            
             break;
          case 'warn': 
             Logger.output.warn(message);

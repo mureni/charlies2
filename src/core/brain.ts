@@ -1,15 +1,22 @@
-import { readFileSync, existsSync } from "fs";
-import { saveBigJSON } from "./saveBigJSON";
+import { Presets, SingleBar } from "cli-progress";
+import { DBMap } from "../core/DBMap";
+import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { resolve } from "path";
-import { CONFIG, checkFilePath } from "../config"; 
+import { env, checkFilePath } from "../config"; 
+
+const escapeRegExp = (rxString: string) => rxString.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
+function randFrom<T>(array: T[]): T { return array[Math.floor(Math.random() * array.length)] };
+
 
 const SENTENCE_REGEX = /\n/;
 const WORD_REGEX = /\s+/;
 const WORD_SEPARATOR = "│";
 const STACK_MAX = 192;
 const EMPTY_BRAIN = "huh";
-interface BrainSettings {   
-   name: string,                       /* Username of the bot */
+const MAX_RECURSION = 5;
+
+interface BrainSettings {      
    outburstThreshold: number,          /* 0..1 chance of speaking without being spoken to */
    numberOfLines: number,              /* # of lines to speak at once */
    angerLevel: number,                 /* 0..1 chance of yelling */
@@ -17,7 +24,6 @@ interface BrainSettings {
    angerDecrease: number,              /* multiplier to decrease anger if not yelled at */
    recursion: number,                  /* # of times to think about a line before responding */
    conversationTimeLimit: number,      /* number of seconds to wait for a response */
-   conversationMemoryLength: number,   /* number of seconds before forgetting a topic */
    learnFromBots: boolean
 }
 
@@ -52,125 +58,195 @@ interface BrainJSON {
 }
 
 class Brain {
-   public static lexicon: Map<string, Set<string>> = new Map<string, Set<string>>();
-   public static nGrams: Map<string, nGram> = new Map<string, nGram>();
+   /*
+   lexicon: {
+      "word": ["word|something|something", "word|something|somethings"];      
+   }
+   nGrams: {
+      "word|something|something": {
+         tokens: ["word", "something", "something"],
+         start: true,
+         end: false,
+         next: {
+            "something": 2,
+            "nothing": 0
+         },
+         previous: {
+            "<EOL>": 1
+         }
+      }
+   }
+   */
+   public static lexicon: DBMap<string, Set<string>> = new DBMap<string, Set<string>>(checkFilePath("data", env("BOT_NAME") + ".sql"), "lexicon", false);
+   public static nGrams: DBMap<string, nGram> = new DBMap<string, nGram>(checkFilePath("data", env("BOT_NAME") + ".sql"), "ngrams", false);
    public static chainLength: number = 3;
-   public static settings: BrainSettings = {
-         name: CONFIG.name,   
-         outburstThreshold: CONFIG.initialSettings.outburstThreshold,      
-         numberOfLines: CONFIG.initialSettings.numberOfLines,
-         angerLevel: CONFIG.initialSettings.angerLevel,
-         angerIncrease: CONFIG.initialSettings.angerIncrease,
-         angerDecrease: CONFIG.initialSettings.angerDecrease,
-         recursion: CONFIG.initialSettings.recursion,
-         conversationTimeLimit: CONFIG.initialSettings.conversationTimeLimit,
-         conversationMemoryLength: CONFIG.initialSettings.conversationMemoryLength,
-         learnFromBots: CONFIG.initialSettings.learnFromBots
-   }
+   public static botName: string = env("BOT_NAME") ?? "chatbot";
+   public static settings: BrainSettings;
 
-   public static save(filename: string = checkFilePath("data", "brain.json")): boolean | Error {
+   public static saveSettings(brainName: string = "default"): boolean | Error {
       try {
-         const realFile = resolve(filename);
-
-         saveBigJSON(realFile, Brain.toJSON());
+         const brainFile = resolve(checkFilePath("data", `${brainName}-settings.json`));
+         const json = JSON.stringify(Brain.settings);
+         writeFileSync(brainFile, json, "utf8");         
          return true;
-
-      } catch (error) {
-         return error;
+      } catch (error: unknown) {
+         if (error instanceof Error) return error;
+         return false;
       }
    }
-   public static load(filename: string = checkFilePath("data", "brain.json")): boolean | Error {
+   public static async trainFromFile(trainerName: string = "default"): Promise<boolean | Error> {
       try {
-         const realFile = resolve(filename);
-         if (!existsSync(realFile)) return new Error(`Unable to load brain data file '${realFile}': file does not exist.`);
-         const json = readFileSync(realFile, "utf8");
-         return Brain.fromJSON(JSON.parse(json));                  
-      } catch (error) {
-         return error;
+         const trainerFile = resolve(checkFilePath("resources", `${trainerName}-trainer.json`));                  
+         if (!existsSync(trainerFile)) throw new Error(`Unable to load brain data from file '${trainerFile}': file does not exist.`);
+         const json = readFileSync(trainerFile, "utf8");
+         return await Brain.fromJSON(JSON.parse(json));
+      } catch (error: unknown) {
+         if (error instanceof Error) return error;
+         return false;
       }
    }
-   public static toJSON(): BrainJSON {
-      const lexicon: LexiconJSON = {};
-      const ngrams: nGramJSON = {};
-      
-      for (const word of Brain.lexicon.keys()) {      
-         lexicon[word] = [];
-         const ngrams = Brain.lexicon.get(word) as Set<string>;
-         for (const ngram of ngrams.keys()) {
-            lexicon[word].push(ngram);
-         }
-      }
-      for (const hash of Brain.nGrams.keys()) {
-         const ngram = Brain.nGrams.get(hash) as nGram;
-         ngrams[hash] = { t: ngram.tokens, s: ngram.canStart, e: ngram.canEnd, n: {}, p: {} }
-         for (const word of ngram.nextTokens.keys()) {
-            const frequency: number = ngram.nextTokens.get(word) as number;
-            (ngrams[hash].n as FrequencyJSON)[word] = frequency;                     
-         }
-         for (const word of ngram.previousTokens.keys()) {
-            const frequency: number = ngram.previousTokens.get(word) as number;            
-            (ngrams[hash].p as FrequencyJSON)[word] = frequency;            
-         }
 
+   public static loadSettings(brainName: string = "default"): boolean | Error {
+      try {
+         const settingsFile = resolve(checkFilePath("resources", `${brainName}-settings.json`));
+         if (!existsSync(settingsFile)) throw new Error(`Unable to load settings from file ${settingsFile}: file does not exist.`);
+
+         const json = readFileSync(settingsFile, "utf8");
+         Brain.settings = JSON.parse(json) as BrainSettings;
+         Brain.botName = brainName;
+
+         // TODO: Change this to internal logger, not console
+         console.log(`Loaded brain settings:`);
+         console.dir(Brain.settings);
+
+         return true;
+      } catch (error: unknown) {
+         if (error instanceof Error) return error;
+         return false;
       }
-      
-      return { Lexicon: lexicon, nGrams: ngrams, Settings: Brain.settings };
    }
-   public static fromJSON(json: BrainJSON): boolean {
-      if (!Reflect.has(json, "Lexicon") || !Reflect.has(json, "nGrams") || !Reflect.has(json, "Settings")) return false;
-      const lexicon = Reflect.get(json, "Lexicon") as { [word: string]: string[] };
-      for (const word of Object.keys(lexicon)) {
-         Brain.lexicon.set(word, new Set<string>(lexicon[word]));
-      }
-      const ngrams = Reflect.get(json, "nGrams") as nGramJSON;
-      for (const hash of Object.keys(ngrams)) {
-         if (!Reflect.has(ngrams[hash], "e")
-         || !Reflect.has(ngrams[hash], "n")
-         || !Reflect.has(ngrams[hash], "p")
-         || !Reflect.has(ngrams[hash], "t")
-         || !Reflect.has(ngrams[hash], "s")) return false;
 
-         const next = new Map<string, number>();
-         const prev = new Map<string, number>();
-                     
-         if (Reflect.getPrototypeOf(ngrams[hash].n) === Array.prototype) {
-            // Parse old brain format (no frequency for previous/next words)      
-            for (const word in Reflect.get(ngrams[hash], "n")) {
-               next.set(word, 1);
-            }
-         } else {
-            for (const word of Object.keys(ngrams[hash].n)) {
-               next.set(word, Reflect.get(ngrams[hash].n, word));
-            }
-         }
+   public static async fromJSON(json: BrainJSON, verbose: boolean = !!(process.env.NODE_ENV === "development")): Promise<boolean> {
+      const hasLexicon = Reflect.has(json, "Lexicon");
+      const hasNGrams = Reflect.has(json, "nGrams");
+      
+      // Wrong JSON format
+      // TODO: Better error handling
+      if (!hasLexicon && !hasNGrams) return false;
+      
+      // Parse lexicon if it exists
+      if (hasLexicon) {         
 
-         if (Reflect.getPrototypeOf(ngrams[hash].p) === Array.prototype) {
-            // Parse old brain format (no frequency for previous/next words)      
-            for (const word in Reflect.get(ngrams[hash], "p")) {
-               prev.set(word, 1);
-            }
-         } else {
-            for (const word of Object.keys(ngrams[hash].p)) {
-               prev.set(word, Reflect.get(ngrams[hash].p, word));
-            }
+         const lexiconData = Reflect.get(json, "Lexicon") as { [word: string]: string[] };
+         const size = Object.keys(lexiconData).length;
+         const percentMark = Math.floor(size / 100);
+         const progress = new SingleBar({
+            format: 'Learning Lexicon: {bar} {percentage}% || {value}/{total} Words Learned || ETA: {eta_formatted}',
+         }, Presets.shades_classic);
+         if (verbose) progress.start(size, 0);
+         let counter = 0;
+         for (const word of Object.keys(lexiconData)) {
+            const hashes: Set<string> = Brain.lexicon.get(word) ?? new Set<string>();
+            const newHashes: string[] = Reflect.get(lexiconData, word) ?? [];
+            newHashes.forEach(hash => hashes.add(hash));                           
+            Brain.lexicon.set(word, hashes);
+            counter++;
+            if (verbose && ((counter % percentMark) === 0 || counter < percentMark)) progress.update(counter);            
          }
-         Brain.nGrams.set(hash, {
-            canEnd: ngrams[hash].e,
-            canStart: ngrams[hash].s,
-            nextTokens: next,
-            previousTokens: prev,
-            tokens: ngrams[hash].t
-         });
+         if (verbose) progress.stop();
       }
-      const settings = Reflect.get(json, "Settings") as BrainSettings;
-      Brain.settings = {
-         ...CONFIG.initialSettings,
-         name: CONFIG.name,
-         angerLevel: settings.angerLevel
+
+      // Parse ngram data if it exists
+      if (hasNGrams) {
+         const ngramData = Reflect.get(json, "nGrams") as nGramJSON;
+
+         const size = Object.keys(ngramData).length;
+         const percentMark = Math.floor(size / 100);
+         const progress = new SingleBar({
+            format: 'Learning Trigrams: {bar} {percentage}% || {value}/{total} Trigrams Learned || ETA: {eta_formatted}',
+         }, Presets.shades_classic);
+
+         if (verbose) progress.start(size, 0);
+         let counter = 0;
+
+         for (const hash of Object.keys(ngramData)) {
+            
+            // Ensure ngram matches the expected format, or skip if it doesn't
+            if (!Reflect.has(ngramData[hash], "e")
+             || !Reflect.has(ngramData[hash], "n")
+             || !Reflect.has(ngramData[hash], "p")
+             || !Reflect.has(ngramData[hash], "t")
+             || !Reflect.has(ngramData[hash], "s")) continue;
+            
+            const curNGram = Brain.nGrams.get(hash) ?? {
+               canEnd: false,
+               canStart: false,
+               nextTokens: new Map<string, number>(),
+               previousTokens: new Map<string, number>(),
+               tokens: []
+            };
+            
+            // Sanity check to see if incoming tokens matches existing tokens for the same hash
+            if (curNGram.tokens.length > 0 && (JSON.stringify(curNGram.tokens) !== JSON.stringify(ngramData[hash].t))) {               
+               // This is an existing ngram with mismatched tokens, which means that the incoming ngram may be malformed (hash doesn't match tokens)
+               // In this case, do not add the incoming token.
+               continue;
+            }
+
+            const next = curNGram.nextTokens;
+            const prev = curNGram.previousTokens;
+            
+            // Older brain formats used string[], rather than a map of { [word: string]: number }            
+            if (Reflect.getPrototypeOf(ngramData[hash].n) === Array.prototype) {
+               // Parse old brain format (no frequency for previous/next words)      
+               for (const word in Reflect.get(ngramData[hash], "n")) {
+                  const curFreq = next.get(word) ?? 0;
+                  next.set(word, curFreq + 1);
+               }
+            } else {
+               // Add frequency of word to existing database
+               for (const word of Object.keys(ngramData[hash].n)) {
+                  const curFreq = next.get(word) ?? 0;
+                  const newFreq = Reflect.get(ngramData[hash].n, word) ?? 1;
+                  next.set(word, curFreq + newFreq);
+               }
+            }
+
+            if (Reflect.getPrototypeOf(ngramData[hash].p) === Array.prototype) {
+               // Parse old brain format (no frequency for previous/next words)      
+               for (const word in Reflect.get(ngramData[hash], "p")) {
+                  const curFreq = prev.get(word) ?? 0;
+                  prev.set(word, curFreq + 1);
+               }
+            } else {
+               // Add frequency of word to existing database
+               for (const word of Object.keys(ngramData[hash].p)) {
+                  const curFreq = prev.get(word) ?? 0;
+                  const newFreq = Reflect.get(ngramData[hash].p, word) ?? 1;
+                  prev.set(word, curFreq + newFreq);
+               }
+            }
+
+            // Combine existing ngram data (or empty ngram) with new ngram data
+            Brain.nGrams.set(hash, {
+               canEnd: ngramData[hash].e || curNGram.canEnd,
+               canStart: ngramData[hash].s || curNGram.canStart,
+               nextTokens: next,
+               previousTokens: prev,
+               tokens: ngramData[hash].t
+            });
+
+            counter++;
+            
+            if (verbose && ((counter % percentMark) === 0 || counter < percentMark)) progress.update(counter);          
+         }
+         if (verbose) progress.stop();
       }
+
       return true;
    }
-   public static learn(text: string = ""): boolean {
+
+   public static async learn(text: string = ""): Promise<boolean> {
       /* Learn a line */
       let learned: boolean = false;
       if (!text) return learned;
@@ -185,7 +261,7 @@ class Brain {
          for (let c = 0; c < words.length - (Brain.chainLength - 1); c++) {
             const slice = words.slice(c, c + Brain.chainLength);
             const hash = slice.join(WORD_SEPARATOR);
-            let nGram: nGram = Brain.nGrams.get(hash) || {
+            let nGram: nGram = Brain.nGrams.get(hash) ?? {
                canStart: c === 0,
                canEnd: c === words.length - Brain.chainLength,
                tokens: slice,
@@ -195,21 +271,20 @@ class Brain {
             if (c > 0) {
                /* Get and increase frequency of previous token */
                const word = words[c - 1];
-               const frequency = nGram.previousTokens.get(word) || 0;
+               const frequency = nGram.previousTokens.get(word) ?? 0;
                nGram.previousTokens.set(word, frequency + 1);
             }
             if (c < words.length - Brain.chainLength) {
                /* Get and increase frequency of next token */
                const word = words[c + Brain.chainLength];
-               const frequency = nGram.nextTokens.get(word) || 0;               
+               const frequency = nGram.nextTokens.get(word) ?? 0;               
                nGram.nextTokens.set(word, frequency + 1);
             }
 
             Brain.nGrams.set(hash, nGram);
 
-            for (const word of slice) {
-               if (!Brain.lexicon.has(word)) Brain.lexicon.set(word, new Set<string>());
-               const ngrams = Brain.lexicon.get(word) as Set<string>;
+            for (const word of slice) {               
+               const ngrams = (Brain.lexicon.get(word) as Set<string>) ?? new Set<string>();
                ngrams.add(hash);
                Brain.lexicon.set(word, ngrams);               
             }
@@ -219,16 +294,26 @@ class Brain {
       return learned;
    }
 
-   public static getResponse(seed: string): string {
+   public static async getResponse(seed: string): Promise<string> {
       let response = EMPTY_BRAIN;
-      if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) return response;
-      for (let recursiveThought = 0; recursiveThought < Math.max(Brain.settings.recursion, 1); recursiveThought++) {
-         if (!Brain.lexicon.has(seed)) seed = Brain.getRandomSeed();
-         const hashes = Array.from(Brain.lexicon.get(seed) as Set<string>);
-         if (hashes.length === 0) return response;
-         const seedHash = hashes[Math.floor(Math.random() * hashes.length)];
-         const initialNGram = Brain.nGrams.get(seedHash) as nGram;
-         if (!initialNGram || !initialNGram.tokens) return response;
+      if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) return "my brain is empty";
+      for (let recursiveThought = 0; recursiveThought < clamp(Brain.settings.recursion, 1, MAX_RECURSION); recursiveThought++) {
+         
+         let hashes: string[] = [];
+         for (let seedAttempt = 0; seedAttempt < 3; seedAttempt++) {
+            if (!Brain.lexicon.has(seed)) seed = await Brain.getRandomSeed();
+            let hashset = Brain.lexicon.get(seed);
+                        
+            hashes = Array.from(hashset ?? new Set<string>());
+            if (hashes.length === 0) seed = await Brain.getRandomSeed();
+         }
+         
+         if (hashes.length === 0) return "couldn't find a seed";
+
+         const seedHash = randFrom<string>(hashes);
+         const initialNGram = Brain.nGrams.get(seedHash);
+         if (!initialNGram || !initialNGram.tokens) return "I do not know enough information";
+
          const reply: string[] = initialNGram.tokens.slice(0);
          let stack = 0;
          let ngram: nGram = initialNGram;
@@ -237,7 +322,7 @@ class Brain {
 
             /* TODO: Replace random selection with weighted frequency choice */
             const nextWords = Array.from(ngram.nextTokens.keys());            
-            const nextWord = nextWords[Math.floor(Math.random() * nextWords.length)];
+            const nextWord = randFrom<string>(nextWords);
 
             reply.push(nextWord);
             // TODO: here is where it doesn't use the 'next' word properly
@@ -249,7 +334,7 @@ class Brain {
             const nextHash = nextSet.join(WORD_SEPARATOR);
             if (!Brain.nGrams.has(nextHash)) break;
             ngram = Brain.nGrams.get(nextHash) as nGram;
-            if (!ngram.tokens) break;
+            if (!ngram || !ngram.tokens) break;
          }
          stack = 0;
          ngram = initialNGram;
@@ -257,7 +342,7 @@ class Brain {
 
             /* TODO: Replace random selection with weighted frequency choice */
             const prevWords = Array.from(ngram.previousTokens.keys());            
-            const prevWord = prevWords[Math.floor(Math.random() * prevWords.length)];
+            const prevWord = randFrom<string>(prevWords);
 
             reply.unshift(prevWord);
             const prevSet = ngram.tokens.slice(0, Brain.chainLength - 1);
@@ -265,40 +350,58 @@ class Brain {
             const prevHash = prevSet.join(WORD_SEPARATOR);
             if (!Brain.nGrams.has(prevHash)) break;
             ngram = Brain.nGrams.get(prevHash) as nGram;
-            if (!ngram.tokens) break;
+            if (!ngram || !ngram.tokens) break;
          }
          response = reply.join(' ').trim();
-         seed = Brain.getSeed(response);
+         seed = await Brain.getSeed(response);
       }
       return response;
    }
 
-   public static getRandomSeed(): string {      
+   public static async getRandomSeed(): Promise<string> {      
       const lexiconWords: string[] = Array.from(Brain.lexicon.keys());      
-      if (lexiconWords.length === 0) return EMPTY_BRAIN;
-      return lexiconWords[Math.floor(Math.random() * lexiconWords.length)];
+      if (lexiconWords.length === 0) return "I know no words";
+      return randFrom<string>(lexiconWords);
    }
 
-   public static getSeed(text: string = ""): string {
-      if (text === "") return Brain.getRandomSeed();
+   public static async getSeed(text: string = ""): Promise<string> {
+      // Returns a random seed from the provided text, or a random seed from entire lexicon if no text was provided
+      if (text === "") return await Brain.getRandomSeed();
       const words: string[] = text.split(WORD_REGEX);
-      if (words.length === 0) return Brain.getRandomSeed();
-      return words[Math.floor(Math.random() * words.length)];   
+      if (words.length === 0) return await Brain.getRandomSeed();
+      return randFrom<string>(words);
    }
 
+   // TODO: Decouple this from the brain -- the settings should be at the bot level (higher than brain)
    public static shouldYell(text: string): boolean {
-      let yelledAt: boolean = false;
-      if (text === text.toUpperCase()) yelledAt = true;
       
-      Brain.settings.angerLevel = Math.max(0.01, Math.min(10, Brain.settings.angerLevel * (yelledAt ? Brain.settings.angerIncrease : Brain.settings.angerDecrease)));
-      return (Math.random() < Brain.settings.angerLevel);   
+      let newAngerLevel: number = Brain.settings.angerLevel;
+      
+      // If incoming text is caps, increase anger level; otherwise, decrease it
+      newAngerLevel *= (text === text.toUpperCase()) ? Brain.settings.angerIncrease : Brain.settings.angerDecrease;
+      Brain.settings.angerLevel = clamp(newAngerLevel, 0.01, 10);
+      
+      // If random number between 0 and 1 is less than anger level, then should yell is true
+      return (Math.random() < Brain.settings.angerLevel);
    }
 
-   public static shouldRespond(text: string): boolean {
-      let respond = false;
-      if (text.match(new RegExp(Brain.settings.name, "giu"))) respond = true;
-      if (Math.random() < Brain.settings.outburstThreshold) respond = true;
-      return respond;   
+   // TODO: Decouple this from the brain -- the settings should be at the bot level (higher than brain) and might need to be chat protocol specific
+   public static shouldRespond(respondsTo: string | RegExp, text: string): boolean {            
+
+      // Respond if random outburst is true
+      if (Math.random() < Brain.settings.outburstThreshold) return true;
+
+      // Respond if mentioned
+      if (respondsTo instanceof RegExp) {
+         if (text.match(respondsTo)) return true;
+      } else {
+         if (!respondsTo) return false;
+         // TODO: Memoize this regexp
+         if (text.match(new RegExp(escapeRegExp(respondsTo), "giu"))) return true;
+      }
+
+      // Otherwise, do not respond
+      return false;      
    }
 }
 

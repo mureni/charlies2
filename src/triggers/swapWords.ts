@@ -1,4 +1,4 @@
-import { Message, Modifications, TriggerResult, Trigger } from "../core";
+import { Message, TriggerResult, Trigger } from "../core";
 import { Swap } from "../controllers";
 
 const addSwap: Trigger = {
@@ -8,14 +8,14 @@ const addSwap: Trigger = {
    usage: "swap [this] with [that]",
    command: /^swap\s+(?:(?<this>.+)\s+with\s+(?<that>.+))?/ui,
    action: (context: Message, matches: RegExpMatchArray = []) => {
-      const output: TriggerResult = { results: [], modifications: Modifications.AsIs };
+      const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
       if (matches.length === 0 || !matches.groups) return output;
       const these = (matches.groups.this || "").toLowerCase().trim();
       const those = (matches.groups.that || "").toLowerCase().trim();
       if (!these || !those) return output;
       
-      Swap.add(context.guild.id, these, those);
-      output.results = [`swapping \`${these}\` with \`${those}\` for ${context.guild.name}`];
+      Swap.add(context.guild?.id ?? context.author.id, these, those);
+      output.results = [`swapping \`${these}\` with \`${those}\` for ${context.guild?.name ?? 'DMs with you'}`];
       return output;
    }
 }
@@ -26,16 +26,16 @@ const removeSwap: Trigger = {
    usage: "unswap [this]/<all>",
    command: /^unswap\s+(?<this>.+)/ui,
    action: (context: Message, matches: RegExpMatchArray = []) => {
-      const output: TriggerResult = { results: [], modifications: Modifications.AsIs };
+      const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
       if (matches.length === 0 || !matches.groups) return output;
       const these = matches.groups.this || "";
       if (!these) return output;
       if (these.match(/<all>/ui)) {
-         Swap.clear(context.guild.id);
-         output.results = [`removed all words from the swap list for ${context.guild.name}`];
+         Swap.clear(context.guild?.id ?? context.author.id);
+         output.results = [`removed all words from the swap list for ${context.guild?.name ?? 'DMs with you'}`];
       } else {
-         Swap.remove(context.guild.id, these);
-         output.results = [`removed \`${these}\` from the swap list for ${context.guild.name}`];
+         Swap.remove(context.guild?.id ?? context.author.id, these);
+         output.results = [`removed \`${these}\` from the swap list for ${context.guild?.name ?? 'DMs with you'}`];
       }
       return output;
    }
@@ -47,8 +47,8 @@ const swapList: Trigger = {
    usage: "swap-list",
    command: /^swap-list$/ui,
    action: (context: Message) => {
-      const output: TriggerResult = { results: [], modifications: Modifications.AsIs };
-      const swaps: string[] = Swap.getList(context.guild.id);
+      const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
+      const swaps: string[] = Swap.getList(context.guild?.id ?? context.author.id);
       if (swaps.length === 0) {
          output.results = ["no swaps defined for this server yet"];
       } else {
@@ -66,7 +66,7 @@ const swapSave: Trigger = {
    command: /^save-swap$/ui,
    ownerOnly: true,
    action: () => {
-      const output: TriggerResult = { results: [], modifications: Modifications.AsIs };
+      const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
       const saveResults: boolean | Error = Swap.save();
       output.results = (saveResults instanceof Error) ? ["can't save swap data, check error log for details"] : ["swap data saved"];
       return output;

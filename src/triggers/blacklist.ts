@@ -1,4 +1,4 @@
-import { Message, Modifications, TriggerResult, Trigger, Triggers, interpolateUsers } from "../core";
+import { Message, TriggerResult, Trigger, Triggers, interpolateUsers } from "../core";
 import { Blacklist } from "../controllers";
 
 const blacklistAdd: Trigger = {
@@ -10,9 +10,9 @@ const blacklistAdd: Trigger = {
    ownerOnly: false,
    adminOnly: true,
    action: (context: Message, matches: RegExpMatchArray = []) => {
-      const output: TriggerResult = { results: [], modifications: Modifications.AsIs, directedTo: undefined };
+      const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' }, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
-      const username = interpolateUsers(matches.groups.user || "", context.guild.members, false);
+      const username = interpolateUsers(matches.groups.user || "", context.guild?.members, false);
       const command = matches.groups.command || "";
 
       if (!username || !command) {
@@ -20,22 +20,23 @@ const blacklistAdd: Trigger = {
          return output;
       }
 
-      const user = context.guild.members.find(member => member.displayName.toLowerCase() === username.toLowerCase());
-      if (!user) {
+      context.guild?.members.fetch(username).then(member => {
+         const trigger = Triggers.list.find(trigger => trigger.id.toLowerCase() === command.toLowerCase());
+         if (!trigger) { 
+            output.results = [`command '${command}' does not exist. see \`!help commands\` for a simple list of commands.`];
+            return output;
+         }
+         
+         Blacklist.add(context.guild?.id ?? "DM", member.user.id, trigger.id);            
+
+         output.results = [`user '${username}' added to blacklist for command \`${command}\``];
+         return output;
+      }).catch(() => {
          output.results = [`no user '${username}' found on this guild`];
          return output;
-      }
-      
-      const trigger = Triggers.list.find(trigger => trigger.id.toLowerCase() === command.toLowerCase());
-      if (!trigger) { 
-         output.results = [`command '${command}' does not exist. see \`!help commands\` for a simple list of commands.`];
-         return output;
-      }
-      
-      Blacklist.add(context.guild.id, user.id, trigger.id);            
+      });
 
-      output.results = [`user '${username}' added to blacklist for command \`${command}\``];
-      return output;
+      return output;      
    }
 }
 const blacklistRemove: Trigger = {
@@ -46,9 +47,9 @@ const blacklistRemove: Trigger = {
    command: /^blacklist-remove (?<user>.+) (?<command>.+)$/ui,
    ownerOnly: false,
    action: (context: Message, matches: RegExpMatchArray = []) => {
-      const output: TriggerResult = { results: [], modifications: Modifications.AsIs, directedTo: undefined };
+      const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' }, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
-      const username = interpolateUsers(matches.groups.user || "", context.guild.members, false);
+      const username = interpolateUsers(matches.groups.user || "", context.guild?.members, false);
       const command = matches.groups.command || "";
 
       if (!username || !command) {
@@ -56,21 +57,20 @@ const blacklistRemove: Trigger = {
          return output;
       }
 
-      const user = context.guild.members.find(member => member.displayName.toLowerCase() === username.toLowerCase());
-      if (!user) {
+      context.guild?.members.fetch(username).then(member => {
+         const trigger = Triggers.list.find(trigger => trigger.id.toLowerCase() === command.toLowerCase());
+         if (!trigger) { 
+            output.results = [`command '${command}' does not exist. see \`!help commands\` for a simple list of commands.`];
+            return output;
+         }      
+         Blacklist.remove(context.guild?.id ?? "DM", member.user.id, trigger.id);
+         output.results = [`user '${username}' removed from blacklist for command \`${command}\``];
+         return output;
+      }).catch(() => {
          output.results = [`no user '${username}' found on this guild`];
          return output;
-      }
+      })
       
-      const trigger = Triggers.list.find(trigger => trigger.id.toLowerCase() === command.toLowerCase());
-      if (!trigger) { 
-         output.results = [`command '${command}' does not exist. see \`!help commands\` for a simple list of commands.`];
-         return output;
-      }
-      
-      Blacklist.remove(context.guild.id, user.id, trigger.id);            
-
-      output.results = [`user '${username}' removed from blacklist for command \`${command}\``];
       return output;
    }
 }

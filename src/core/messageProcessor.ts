@@ -1,8 +1,20 @@
-import { ClientUser, Message, TextChannel } from "discord.js";
-import { getEndearment, getDisplayName, interpolateUsers } from "./user";
+import { GuildMember, User, MessageAttachment, MessageEmbed, ClientUser, Message, TextChannel } from "discord.js";
+import { getEndearment, getDisplayName, interpolateUsers, KnownUsers } from "./user";
 import { Brain } from "./brain";
 import { Swap } from "../controllers/swap";
 import { TriggerResult, Triggers } from "./triggerProcessor";
+
+const memoizedRX: Map<string, RegExp> = new Map<string, RegExp>();
+
+const newRX = (expr: string, flags?: string) => {
+   if (!memoizedRX.has(expr)) {
+      const rx = flags ? new RegExp(expr, flags) : new RegExp(expr);
+      memoizedRX.set(expr, rx);
+      return rx;
+   } else {
+      return memoizedRX.get(expr) as RegExp;
+   }   
+}
 
 // Maximum length of discord message
 const MAX_LENGTH = 1950;
@@ -14,15 +26,17 @@ interface ProcessResults {
    response?: string;
 }
 
-export enum Modifications {
-   ForceLowercase = 0,
-   AsIs = 1,
-   Yell = 2,
-   ProcessSwaps = 4,
-   FriendlyNames = 8,
-   TTS = 16,
-   Balance = 32
+type ModificationType = {
+   Case?: "upper" | "lower" | "unchanged",
+   KeepOriginal?: boolean,
+   ProcessSwaps?: boolean,
+   FriendlyNames?: boolean,
+   TTS?: boolean,
+   Balance?: boolean,
+   StripFormatting?: boolean
 }
+
+const escapeRegExp = (rxString: string) => rxString.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
 
 const emoticonRXs = [
    `:-)`, `:)`, `:-]`, `:]`, `:-3`, `:3`,	`:->`, `:>`, `8-)`, `8)`, `:-}`, `:}`, `:o)`, `:c)`, `:^)`, `=]`, `=)`,
@@ -34,11 +48,11 @@ const emoticonRXs = [
    `:|`, `:$`, `://)`, `://3`, `:-X`, `:X`, `:-#`, `:#`, `:-&`, `:&`, `O:-)`, `O:)`, `0:-3`, `0:3`, `0:-)`, `0:)`,
    `;^)`, `>:-)`, `>:)`, `}:-)`, `}:)`, `3:-)`, `3:)`, `>;)`, `>:3`, `>;3`, `|;-)`, `|-O`, `:-J`, `#-)`, `%-)`, `%)`,
    `:-###..`, `:###..`, `<:-|`, `',:-|`, `',:-l`, `</3`, `<\\3`, `<3` 
-].map(emoticon => emoticon.replace(/[.*+?^${}()|[\]\\]/ug, '\\$&')).join('|');
+].map(emoticon => escapeRegExp(emoticon)).join('|');
 
 //erx = [`:-)`, `:)`, `:-]`, `:]`, `:-3`, `:3`, `:->`, `:>`, `8-)`, `8)`, `:-}`, `:}`, `:o)`, `:c)`, `:^)`, `=]`, `=)`, `:-D`, `:D`, `8-D`, `8D`, `x-D`, `xD`, `X-D`, `XD`, `=D`, `=3`, `B^D`, `:-))`, `:-(`, `:(`, `:-c`, `:c`,`:-<`, `:<`, `:-[`, `:[`, `:-||`, `>:[`, `:{`, `:@`, `>:(`, `:'-(`, `:'(`, `:'-)`, `:')`, `D-':`, `D:<`, `D:`, `D8`, `D;`, `D=`, `DX`, `:-O`, `:O`, `:-o`, `:o`, `:-0`, `8-0`, `>:O`, `:-*`, `:*`, `:×`, `;-)`, `;)`, `*-)`, `*)`, `;-]`, `;]`, `;^)`, `:-,`, `;D`, `:-P`, `:P`, `X-P`, `XP`, `x-p`, `xp`, `:-p`, `:p`, `:-Þ`, `:Þ`, `:-þ`, `:þ`, `:-b`, `:b`, `d:`, `=p`, `>:P`, `:-/`, `:/`, `:-.`, `>:\\`, `>:/`, `:\\`, `=/`, `=\\`, `:L`, `=L`, `:S`,`:-|`, `:|`, `:$`, `://)`, `://3`, `:-X`, `:X`, `:-#`, `:#`, `:-&`, `:&`, `O:-)`, `O:)`, `0:-3`, `0:3`, `0:-)`, `0:)`, `;^)`, `>:-)`, `>:)`, `}:-)`, `}:)`, `3:-)`, `3:)`, `>;)`, `>:3`, `>;3`, `|;-)`, `|-O`, `:-J`, `#-)`, `%-)`, `%)`, `:-###..`, `:###..`, `<:-|`, `',:-|`, `',:-l`, `</3`, `<\\3`, `<3` ].map(emoticon => emoticon.replace(/[.*+?^${}()|[\]\\\-]/ug, '\\$&')).join('|');
 
-const processMessage = (client: ClientUser, message: Message): ProcessResults => {
+const processMessage = async (client: ClientUser, message: Message): Promise<ProcessResults> => {
    const results: ProcessResults = { learned: false, processedText: "" }
    if (!(message.channel instanceof TextChannel) || message.type !== "DEFAULT") return results;
    
@@ -47,64 +61,139 @@ const processMessage = (client: ClientUser, message: Message): ProcessResults =>
    /* Do not process own messages */
    if (message.author.id === client.id) return results;
    
-   const cleanText = cleanMessage(message, Modifications.ForceLowercase & Modifications.FriendlyNames);
-   const processed: TriggerResult = Triggers.process(message);
+   let cleanText = cleanMessage(message, { Case: "lower", FriendlyNames: true });
+
+   /* Remove initial references to self (e.g. "charlies learn this text" -> "learn this text", "charlies: hi" -> "hi") */
+   cleanText = cleanText.replace(newRX(`^\s*\b${escapeRegExp(client.username)}\b[:,]?\s*`, "uig"), "");
+   cleanText = cleanText.replace(newRX(`^\s*\b${escapeRegExp(Brain.botName)}\b[:,]?\s*`, "uig"), "");
+
+   const processed: TriggerResult = await Triggers.process(message);
 
    if (!processed.triggered) {      
-      results.learned = Brain.learn(cleanText);
-      if (message.isMentioned(client) || Brain.shouldRespond(message.content)) {
+      
+      /* Detect whether a conversation with the person is ongoing or if a response is appropriate */
+      let shouldRespond: boolean = message.mentions.has(client) || Brain.shouldRespond(Brain.botName, message.content);
+      let seed: string = "";
+
+      // TODO: Populate and maintain KnownUsers
+      const user = KnownUsers.get(message.author.id)!;         
+      if (user) {         
+         const conversation = user.conversations.get(message.channel.id);
+         if (conversation) {
+            // Optimal time is roughly 7 seconds delay for a conversation
+            if (Date.now() - conversation.lastSpokeAt < Brain.settings.conversationTimeLimit) {
+               shouldRespond = true;
+               seed = [cleanText, conversation.lastTopic].join(" ");
+            }
+         };
+      }
+
+      if (shouldRespond) {
+         if (message.channel instanceof TextChannel) await message.channel.startTyping();
+         if (user) {
+            user.conversations.set(message.channel.id, {
+               lastSpokeAt: Date.now(),
+               lastTopic: cleanText
+            });
+         }
+
          let response = "";
-         let seed = Brain.getSeed(cleanText);
+         if (!seed) seed = await Brain.getSeed(cleanText);
          /* Try up to 5 times to get a unique response */
          for (let attempt = 0; attempt < 5; attempt++) {    
-            response = Brain.getResponse(seed);
-            if (response.toLowerCase() === message.content.toLowerCase() || response.toLowerCase() === cleanText.toLowerCase()) seed = Brain.getSeed();
-         }
-         const modifications = processed.modifications
-                             | (message.tts ? Modifications.TTS : 0)
-                             | (Brain.shouldYell(message.content) ? Modifications.Yell : 0);
-         sendMessage(client, message.channel, response, getDisplayName(message.member), modifications);
+            response = await Brain.getResponse(seed);
+            if (response.toLowerCase() !== cleanText.toLowerCase()) break;
+            seed = await Brain.getSeed();
+         }         
+         // If it still repeats, get a random response with a random seed
+         if (response.toLowerCase() === cleanText.toLowerCase()) response = await Brain.getResponse(await Brain.getRandomSeed());
+         // If it STILL repeats, return a "confounded" emoji 
+         if (response.toLowerCase() === cleanText.toLowerCase()) response = '😖';
+
+         const mods: ModificationType = { ...processed.modifications };
+         
+         if (message.tts) mods.TTS = true;
+         if (Brain.shouldYell(message.content)) mods.Case = "upper";
+
+         await sendMessage(client, message.channel, response, getDisplayName(message.member?.user ?? message.author, message.guild?.members), mods);
          /* Learn what it just created, to create a feedback */
-         Brain.learn(cleanMessage(response, Modifications.ForceLowercase & Modifications.FriendlyNames));
+         const cleanResponse = cleanMessage(response, { Case: "lower", FriendlyNames: true });
+         Brain.learn(cleanResponse);
          results.response = response;
       }
+
+      results.learned = await Brain.learn(cleanText);
+      
+
    } else {
+      
+      if (message.channel instanceof TextChannel) message.channel.startTyping();
       results.triggeredBy = processed.triggeredBy;
-      let modifications = processed.modifications | Modifications.Balance;
-      if (!(modifications & Modifications.AsIs)) modifications |= (Brain.shouldYell(message.content) ? Modifications.Yell : 0);
+      const mods: ModificationType = { ... processed.modifications };
+      mods.Balance = true;
+      
+      if (Brain.shouldYell(message.content)) mods.Case = "upper";
+
       for (const line of processed.results) {
-         sendMessage(client, message.channel, line, processed.directedTo, processed.modifications);         
+         if (line instanceof MessageEmbed || line instanceof MessageAttachment) {
+            // Do not process anything on RichEmbeds -- this allows triggers to be somewhat insecure, be careful!            
+            message.channel.send(line);
+         } else {
+            sendMessage(client, message.channel, line, processed.directedTo, mods);
+         }
       }
       results.response = processed.results.join('\n');
    }
    results.processedText = cleanText.trim();
+   message.channel.stopTyping(true);
    return results;
 }
 
 /* Utility functions for bot interface */
-const sendMessage = (client: ClientUser, channel: TextChannel, text: string, directedTo: string | undefined = undefined, modifications: number = Modifications.AsIs): boolean => {
+const sendMessage = async (client: ClientUser, channel: TextChannel, text: string, directedTo: string | User | GuildMember | undefined = undefined, mods?: ModificationType): Promise<boolean> => {
    const permissions = channel.permissionsFor(client);
    if (!permissions || !permissions.has('SEND_MESSAGES')) return false;
-      
-   if (modifications & Modifications.ProcessSwaps) text = Swap.process(channel.guild.id, text);
-   text = interpolateUsers(text, channel.guild.members, !!(modifications & Modifications.FriendlyNames));
-   text = cleanMessage(text, modifications);
+   if (!channel.guild) return false;
+
+   text = interpolateUsers(text, channel.guild.members, !!(mods?.FriendlyNames));
+   text = cleanMessage(text, mods);
+
+   /* Processing swaps should always be done AFTER cleaning the message.
+      This prevents swap rules causing usernames or channels to accidentally leak 
+   */
+   if (mods?.ProcessSwaps) text = Swap.process(channel.guild.id, text);
    
    if (directedTo) {
-      const name = interpolateUsers(directedTo || "", channel.members, false);
-      text = `${name}: ${text}`;
+
+      //const name = interpolateUsers(directedTo, channel.members, false);
+      
+      if (typeof directedTo === "string") text = `${directedTo}: ${text}`;
+      if (directedTo instanceof GuildMember) text = `${directedTo.displayName}: ${text}`;
+      if (directedTo instanceof User) text = `${directedTo.username}: ${text}`;
+      
    }
 
-   
+   // TODO: Balance code blocks and such accounting for max length, if necessary
    while (text !== "") {      
-      channel.send(text.substring(0, MAX_LENGTH), { tts: !!(modifications & Modifications.TTS), split: true });
+      channel.send(text.substring(0, MAX_LENGTH), { tts: !!(mods?.TTS), split: true });
       text = text.substring(MAX_LENGTH);
    }
    return true;
 }
 
-const cleanMessage = (message: Message | string, modifications: number = Modifications.AsIs): string => {
-   let fullText: string = (message instanceof Message) ? interpolateUsers(message.content.trim(), message.guild?.members, !!(modifications & Modifications.FriendlyNames)): message.trim();
+const cleanMessage = (message: Message | string, mods?: ModificationType): string => {
+
+   // TODO: Memoize all regexps
+
+   let fullText: string;
+
+   if (message instanceof Message) {
+      fullText = message.content.trim();
+      fullText = interpolateUsers(fullText, message.guild?.members, !!(mods?.FriendlyNames));      
+   } else {
+      fullText = message.trim();
+      fullText = interpolateUsers(fullText, undefined, !!(mods?.FriendlyNames));
+   }
 
    /* Quick bug fix for broken brains that stored "greentext" (>words) in a single line by accident
       words words>more words>even more words ->
@@ -112,84 +201,121 @@ const cleanMessage = (message: Message | string, modifications: number = Modific
          >more words
          >even more words
    */
-   fullText = fullText.replace(/(\D+?)>(.+?)/muig, "$1\n>$2");
+   // fullText = fullText.replace(/(\D+?)>(.+?)/muig, "$1\n>$2");
    /* Fix any broken custom emojis */
    fullText = fullText.replace(/<:(\w+?):(\d+?)\s+>/muig, "<:$1:$2>");
 
-   const lines = fullText.split(/\n/ug);   
+   /* Remove ANSI control characters and RTL marks (skipping CR and LF) */      
+   fullText = fullText.replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u200f\u061c\u00ad]/muig, '');
+      
+   const formatCodes = {
+      underline: "_",
+      bold: "*",
+      italic: "**",
+      spoiler: "||",
+      strikethrough: "~~"
+   }
+
+   const blockCodes = {
+      URLs: '🔗',
+      emoticons: '☻',
+      codeBlocks: '⎁',                  
+      injections: '⚿'
+   }
+
+   /* Prevent injection of block escaping (someone maliciously putting '<[CODE]-[NUMBER]>' in the origin text */
+   const blocksRX = newRX(`<[${Object.values(blockCodes).join('')}]\-\d+>`, 'mug');
+   const injectionBlocks = extractBlocks(fullText, blockCodes.injections, blocksRX);
+   const injected: string[] = injectionBlocks.blocks;
+   fullText = injectionBlocks.text;
+
+   /* Capture code blocks (between pairs of ```) as case insensitive and as-is regarding line breaks */
+   const codeRX = /```.+?```/muigs;
+   const extractedCode = extractBlocks(fullText, blockCodes.codeBlocks, codeRX);
+   const codeBlocks: string[] = extractedCode.blocks;
+   fullText = extractedCode.text;
+
+   /* Capture URLs, case-sensitive */
+   const urlRX = /((((?:http|https|ftp|sftp):(?:\/\/)?)(?:[-;:&=\+\$,\w]+@)?[A-Za-z0-9\.-]+|(?:www\.|[-;:&=\+\$,\w]+@)[A-Za-z0-9\.-]+)((?:\/[-\+~%\/\.\w_]*)?\??(?:[-\+=&;%@\.\w_]*)#?(?:[\.!\/\\\w]*))?)/mug;
+   const extractedURLs = extractBlocks(fullText, blockCodes.URLs, urlRX);
+   const urls: string[] = extractedURLs.blocks;
+   fullText = extractedURLs.text;
+
+   /* Capture emoticons, case-sensitive, NO UNICODE (will cause 'invalid escape') */
+   const emoticonRX = newRX(emoticonRXs, 'mg');
+   const extractedEmoticons = extractBlocks(fullText, blockCodes.emoticons, emoticonRX);
+   const emoticons: string[] = extractedEmoticons.blocks;
+   fullText = extractedEmoticons.text;
+
+   /* Prepare regexp for stripping formatting if required */
+   const codes = `(?:${escapeRegExp(Object.values(formatCodes).join('|'))})`;
+   const formatRX = newRX(`${codes}(?<Text>)${codes}`, 'ug');
+
+   /* Split lines for further line-level processing */
+   const lines = fullText.split(/\r?\n/ug);
 
    let results: string[] = [];
    for (const line of lines) {
 
       let text = line;
 
-      /* Remove ANSI control characters and RTL marks */      
-      text = text.replace(/[\u0000-\u001f\u200f\u061c\u00ad]/uig, '');
-
-      const blockCodes = {
-         URLs: '🔗',
-         emoticons: '☻',
-         injections: '⚿'
-      }
-
-      /* Prevent injection of block escaping (someone maliciously putting '<CODE-NUMBER>' in the origin text */
-      const blocksRX = new RegExp(`<[${Object.values(blockCodes).join('')}]\-\d+>`, 'ug');
-      const injectionBlocks = extractBlocks(text, blockCodes.injections, blocksRX);
-      const injected: string[] = injectionBlocks.blocks;
-      text = injectionBlocks.text;
-
-      /* Capture URLs as case-sensitive */
-      const urlRX = /((((?:http|https|ftp|sftp):(?:\/\/)?)(?:[-;:&=\+\$,\w]+@)?[A-Za-z0-9\.-]+|(?:www\.|[-;:&=\+\$,\w]+@)[A-Za-z0-9\.-]+)((?:\/[-\+~%\/\.\w_]*)?\??(?:[-\+=&;%@\.\w_]*)#?(?:[\.!\/\\\w]*))?)/ug;    
-      const extracted = extractBlocks(text, blockCodes.URLs, urlRX);
-      const urls: string[] = extracted.blocks;
-      text = extracted.text;
-
-      /* Capture emoticons */
-      const emoticonRX = new RegExp(emoticonRXs, 'ug');
-      const extractedEmoticons = extractBlocks(text, blockCodes.emoticons, emoticonRX);
-      const emoticons: string[] = extractedEmoticons.blocks;
-      text = extractedEmoticons.text;
-
       /* Replace bot name with 'my friend' (and strip initial) */
-      text = text.replace(new RegExp(`^${Brain.settings.name}:?\s*`, "ui"), "");
-      text = text.replace(new RegExp(Brain.settings.name, "uig"), getEndearment());
+      text = text.replace(newRX(`^${Brain.botName}:?\s*`, "ui"), "");
+      text = text.replace(newRX(Brain.botName, "uig"), getEndearment());
 
       /* Replace all channel mentions with 'my secret place' */
+      // TODO: Change this to a rotating list of secret places
       text = text.replace(/<#\d+>/uig, "my secret place");
 
       /* Mild bug fix for broken brains: replace periods/other characters in the middle of full words (more than 1 characters) with a period then a space.
          This should avoid causing problems with regular abbreviations (Dr., N.A.S.A, Mrs., etc.), and doing it after URLs should avoid breaking those */
       text = text.replace(/([^\s\.)]{2,}?)([\.")\]?!,])([^\s\.")\]?!,])/uig, "$1$2 $3");
-      /* Fix edge cases where it is appropriate to have a character followed immediately by a quotation mark  */
+      /* TODO: fix edge cases where comma should not have a space (for numbers, i.e. 2,000,000) */
+      /* TODO: fix edge cases where period is between things that aren't detected as URL but should be (i.e. sub.example.com) - period should not have space after */
+      /* TODO: fix edge cases where it is appropriate to have a character followed immediately by a quotation mark  */      
+
+      // TODO: test if this is broken or necessary
       //text = text.replace(/"?(.+?)([\.)\]?!,])\s+"/uig, '"$1$2"');
-
-      /* If "As Is" flag is not set, modify output for upper/lowercase */   
-      if (!(modifications & Modifications.AsIs)) {
-         /* If "Yell" flag is set, use uppercase -- otherwise, lowercase */
-         text = !!(modifications & Modifications.Yell) ? text.toUpperCase() : text.toLowerCase();
-         /* If "ForceLowercase" flag is set, force lowercase regardless of yelling (for learning,  comparison, etc.) */ 
-         if (!!(modifications & Modifications.ForceLowercase)) text = text.toLowerCase();
-      }
-
-      /* Restore emoticons */
-      if (emoticons.length > 0) text = restoreBlocks(text, blockCodes.emoticons, emoticons);
-
-      /* Restore URLs */
-      if (urls.length > 0) text = restoreBlocks(text, blockCodes.URLs, urls);
-         
-      /* Restore injected block escape attempts */
-      if (injected.length > 0) text = restoreBlocks(text, blockCodes.injections, injected);
       
+      switch (mods?.Case) {
+         case "unchanged":
+            break;
+         case "upper":
+            text = text.toUpperCase();
+            break;
+         case "lower":
+         default: 
+            text = text.toLowerCase();
+            break;
+      }
+      
+      if (mods?.StripFormatting) text = text.replace(formatRX, '$<Text>');
+
       results.push(text);
    }
    let result = results.join("\n");
 
+   /* Restore emoticons */
+   if (emoticons.length > 0) result = restoreBlocks(result, blockCodes.emoticons, emoticons);
+
+   /* Restore URLs */
+   if (urls.length > 0) result = restoreBlocks(result, blockCodes.URLs, urls);
+
+   /* Restore code blocks */
+   if (codeBlocks.length > 0) result = restoreBlocks(result, blockCodes.codeBlocks, codeBlocks);
+      
+   /* Restore injected block escape attempts */
+   if (injected.length > 0) result = restoreBlocks(result, blockCodes.injections, injected);
+
    // Last step: balance brackets and quotation marks and such
-   if (!!(modifications & Modifications.Balance)) result = balanceText(result, modifications);
+   if (mods?.Balance) result = balanceText(result);
+   
    return result;
 }
 
 const extractBlocks = (text: string = "", symbol: string = "", regEx: RegExp | null = null): { text: string, blocks: string[] } => {
+   /* "Extracts" text matching the provided regular expression, saving it "as-is" and replacing
+       it with a <[symbol]-[index]> where index is each instance of the text matching the regular expression */
    if (!text || !symbol || !regEx) return { text: text, blocks: [] };   
    const blocks: string[] = [];
    const matches = text.match(regEx);
@@ -209,31 +335,28 @@ const restoreBlocks = (text: string = "", symbol: string = "", blocks: string[] 
    return text;
 }
 
-const balanceText = (text: string, modifications: number = (Modifications.AsIs | Modifications.Balance)): string => {
+const balanceText = (text: string): string => {
+         
+   const codeBlock: boolean = (text.match(/```/miug) || []).length > 0;
+   text = text.replace(/[`"]{2,10}/miug, '');
       
-   const codeBlock: boolean = (text.match(/```/iug) || []).length > 0;
-   text = text.replace(/[`"]{2,10}/iug, '');   
-
-   /* If "As Is" flag is not set, strip formatting */   
-   if (!(modifications & Modifications.AsIs)) text = text.replace(/[*_|]{2,10}/iug, '');   
-      
-   const codeSegment: boolean = (text.match(/`/ug) || []).length % 2 !== 0;
-   const parenthesisStart: number = (text.match(/\(/ug) || []).length;
-   const parenthesisEnd: number = (text.match(/\)/ug) || []).length - (text.match(/\s+\w\)/ug) || []).length;
-   const doubleQuote: boolean = (text.match(/"/ug) || []).length % 2 !== 0;
+   const codeSegment: boolean = (text.match(/`/mug) || []).length % 2 !== 0;
+   const parenthesisStart: number = (text.match(/\(/mug) || []).length;
+   const parenthesisEnd: number = (text.match(/\)/mug) || []).length - (text.match(/\s+\w\)/mug) || []).length;
+   const doubleQuote: boolean = (text.match(/"/mug) || []).length % 2 !== 0;
    
-   if (doubleQuote) text = text.endsWith('"') ? '"'.concat(text) : text.concat('"');   
-   if (parenthesisStart < parenthesisEnd) text = "(".repeat(parenthesisEnd - parenthesisStart).concat(text);
-   if (parenthesisStart > parenthesisEnd) text = text.concat(")".repeat(parenthesisStart - parenthesisEnd));   
-   if (codeSegment) text = text.endsWith('`') ? '`'.concat(text) : text.concat('`');   
-   if (codeBlock) text = '```'.concat(text, '```');
+   if (doubleQuote) text = text.endsWith('"') ? '"' + text : text + '"';   
+   if (parenthesisStart < parenthesisEnd) text = "(".repeat(parenthesisEnd - parenthesisStart) + text;
+   if (parenthesisStart > parenthesisEnd) text = text + ")".repeat(parenthesisStart - parenthesisEnd);
+   if (codeSegment) text = text.endsWith('`') ? '`' + text : text + '`';   
+   if (codeBlock) text = '```' + text + '```';
    return text; 
 
 
 }
 
 
-export { ProcessResults, processMessage, cleanMessage }
+export { ProcessResults, processMessage, cleanMessage, ModificationType }
 
 
 
