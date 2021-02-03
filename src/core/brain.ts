@@ -2,7 +2,7 @@ import { Presets, SingleBar } from "cli-progress";
 import { DBMap } from "../core/DBMap";
 import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { resolve } from "path";
-import { env, checkFilePath } from "../config"; 
+import { env, checkFilePath } from "../utils"; 
 
 const escapeRegExp = (rxString: string) => rxString.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
 const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
@@ -114,10 +114,6 @@ class Brain {
          const json = readFileSync(settingsFile, "utf8");
          Brain.settings = JSON.parse(json) as BrainSettings;
          Brain.botName = brainName;
-
-         // TODO: Change this to internal logger, not console
-         console.log(`Loaded brain settings:`);
-         console.dir(Brain.settings);
 
          return true;
       } catch (error: unknown) {

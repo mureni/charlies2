@@ -1,4 +1,4 @@
-import { checkFilePath } from "../config";
+import { checkFilePath } from "../utils";
 import { writeFileSync, readFileSync, existsSync } from "fs";
 
 const BLACKLIST_FILE = checkFilePath("data", "blacklist.json");

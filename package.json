@@ -6,31 +6,38 @@
    "license": "MIT",
    "files": [
       "./dist",
-      "./data",
-      "!./data/brain.json",
-      "!./data/swaps.json"
+      "./resources"            
    ],
    "dependencies": {
-      "better-sqlite3": "^5.4.3",
+      "@types/cli-progress": "^3.8.0",
+      "@types/ws": "^7.2.9",
+      "app-root-path": "^3.0.0",
+      "better-sqlite3": "^7.1.1",
       "big-json": "^3.1.0",
       "canvas": "^2.6.1",
-      "discord.js": "^11.5.1",
+      "cli-progress": "^3.8.2",
+      "discord.js": "^12.3.1",
       "he": "^1.2.0",
-      "nanoid": "^2.1.9",
-      "node-fetch": "^2.6.0",
+      "nanoid": "^2.1.11",
+      "node-fetch": "^2.6.1",
+      "rebuild": "^0.1.2",
       "sqlite3": "^4.2.0",
       "striptags": "^3.1.1",
-      "winston": "^3.2.1",
+      "ts-node": "^9.0.0",
+      "typescript": "^4.0.5",
+      "winston": "^3.3.3",
       "winston-daily-rotate-file": "^4.5.0"
    },
    "devDependencies": {
-      "@types/better-sqlite3": "^5.4.0",
+      "@types/app-root-path": "^1.2.4",
+      "@types/better-sqlite3": "^5.4.1",
       "@types/he": "^1.1.1",
       "@types/nanoid": "^2.1.0",
-      "@types/node": "^14.0.13",
+      "@types/node": "^14.14.6",
       "@types/node-fetch": "^2.5.7",
       "@types/sqlite3": "^3.1.6",
       "@types/striptags": "^3.1.1",
+      "@types/typescript": "^2.0.0",
       "dotenv": "^8.2.0"
    },
    "scripts": {
@@ -39,12 +46,7 @@
       "build": "tsc",
       "build:watch": "tsc --watch",
       "dev": "npm run build && npm run start",
-      "start": "pm2 startOrRestart ecosystem.config.js --env development",
-      "stop": "pm2 stop all",
-      "restart": "pm2 restart all",
-      "predeploy": "npm run build",
-      "deploy": "pm2 deploy production",
-      "deploy:setup": "pm2 deploy production setup"
+      "start": "node -r dotenv/config ./dist/index.js"
    },
    "repository": {
       "type": "git",

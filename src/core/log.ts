@@ -1,6 +1,6 @@
 import { createLogger, format, transports } from "winston";
 import DailyRotateFile from "winston-daily-rotate-file";
-import { checkFilePath } from "../config";
+import { checkFilePath } from "../utils";
 const { combine, colorize, timestamp, printf } = format;
 
 const DEBUG = process.env.NODE_ENV === "development";

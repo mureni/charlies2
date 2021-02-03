@@ -4,7 +4,7 @@ import { readdirSync } from "fs";
 import { ModificationType } from "./messageProcessor";
 import { log } from "./log";
 import { Blacklist } from "../controllers";
-import { checkFilePath, env } from "../config";
+import { checkFilePath, env } from "../utils";
 
 interface TriggerResult {
    results: (string | MessageEmbed | MessageAttachment)[];
@@ -33,7 +33,7 @@ interface Trigger {
 class Triggers {
    public static list: Trigger[] = [];
    
-   private static async initialize(): Promise<Trigger[]> {
+   public static async initialize(): Promise<Trigger[]> {
       const triggers: Trigger[] = [];
       const triggerFiles = readdirSync(checkFilePath("code", "triggers/"));
       for (const file of triggerFiles) {

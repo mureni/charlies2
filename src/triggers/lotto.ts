@@ -1,5 +1,5 @@
 import { Message, TriggerResult, Trigger } from "../core";
-import { env } from "../config";
+import { env } from "../utils";
 
 const lotto: Trigger = {
    id: "lotto",

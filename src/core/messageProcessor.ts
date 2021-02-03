@@ -89,7 +89,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
       }
 
       if (shouldRespond) {
-         if (message.channel instanceof TextChannel) await message.channel.startTyping();
+         if (message.channel instanceof TextChannel) message.channel.startTyping();
          if (user) {
             user.conversations.set(message.channel.id, {
                lastSpokeAt: Date.now(),
@@ -118,7 +118,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
          await sendMessage(client, message.channel, response, getDisplayName(message.member?.user ?? message.author, message.guild?.members), mods);
          /* Learn what it just created, to create a feedback */
          const cleanResponse = cleanMessage(response, { Case: "lower", FriendlyNames: true });
-         Brain.learn(cleanResponse);
+         await Brain.learn(cleanResponse);
          results.response = response;
       }
 
@@ -137,9 +137,9 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
       for (const line of processed.results) {
          if (line instanceof MessageEmbed || line instanceof MessageAttachment) {
             // Do not process anything on RichEmbeds -- this allows triggers to be somewhat insecure, be careful!            
-            message.channel.send(line);
+            await message.channel.send(line);
          } else {
-            sendMessage(client, message.channel, line, processed.directedTo, mods);
+            await sendMessage(client, message.channel, line, processed.directedTo, mods);
          }
       }
       results.response = processed.results.join('\n');
@@ -175,7 +175,7 @@ const sendMessage = async (client: ClientUser, channel: TextChannel, text: strin
 
    // TODO: Balance code blocks and such accounting for max length, if necessary
    while (text !== "") {      
-      channel.send(text.substring(0, MAX_LENGTH), { tts: !!(mods?.TTS), split: true });
+      await channel.send(text.substring(0, MAX_LENGTH), { tts: !!(mods?.TTS), split: true });
       text = text.substring(MAX_LENGTH);
    }
    return true;

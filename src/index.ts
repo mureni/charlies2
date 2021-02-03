@@ -1,11 +1,12 @@
 import { Intents, Message, TextChannel, Client } from "discord.js";
-import { log, Brain, ProcessResults, processMessage, getDisplayName, KnownUsers, Conversation } from "./core";
+import { log, Brain, ProcessResults, processMessage, getDisplayName, KnownUsers, Conversation, Triggers } from "./core";
 import { Swap, Blacklist, Madlibs } from "./controllers";
-import { env } from "./config";
+import { env } from "./utils";
 
 // TODO: Refactor everything for cleaner code 
 
 /* ACTIVATE */
+let initialized: boolean = false;
 const initialize = async () => {
    log(`Initializing...`);
    let loadResults: boolean | Error;
@@ -13,16 +14,24 @@ const initialize = async () => {
    log(`Loading environment variables...`);
    const mandatoryEnvVars = ["DISCORD_AUTH", "BOT_OWNER_DISCORD_ID", "BOT_NAME", "NODE_ENV"];
 
-   for (const envVar in mandatoryEnvVars) {
-      if (env(envVar) === "") throw new Error(`Environment variable ${envVar} not found in environment. This value must be set to continue. Exiting...`);
-      process.exit();
+   for (const envVar of mandatoryEnvVars) {
+      if (env(envVar) === "") throw new Error(`Environment variable ${envVar} not found in environment. This value must be set to continue. Exiting...`);      
    }
 
    const botName = env("BOT_NAME") ?? "default";
 
    log (`Loading brain settings...`);
    loadResults = Brain.loadSettings(botName);
-   if (loadResults instanceof Error) log(`Error loading brain settings: ${loadResults.message}. Starting with default settings.`, "warn");
+   if (loadResults instanceof Error) {
+      log(`Error loading brain settings: ${loadResults.message}. Trying with default settings.`, "warn");
+      loadResults = Brain.loadSettings();
+      if (loadResults instanceof Error) {
+         log(`Error loading default brain settings: ${loadResults.message}. Unable to continue.`, "error");
+         process.exit();
+      }
+   }
+
+   log(`Brain settings: ${JSON.stringify(Brain.settings, null, 2)}`, "debug");
 
    if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) {
       log(`Brain is apparently empty. Loading from default trainer file '../resources/${botName}-trainer.json'. This will take a very long time, be patient.`);
@@ -43,6 +52,10 @@ const initialize = async () => {
    if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) {
       log(`Error initializing brain: no data was retrieved.`);
    }
+
+   await Triggers.initialize();
+
+   initialized = true;
 }
 
 initialize();
@@ -272,7 +285,7 @@ client
    .on("messageReactionRemove", (_reaction, _user) => {})
    .on("messageReactionRemoveAll", _message => {})
    .on("message", async (message: Message): Promise<void> => {
-      
+      if (!initialized) return;
       if (!client.user) {
          log(`No client user found, cannot process incoming message`);
          return;

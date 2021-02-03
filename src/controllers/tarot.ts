@@ -18,7 +18,7 @@
 import Canvas from "canvas";
 import { readdirSync, writeFileSync, readFileSync } from "fs";
 import { join, parse } from "path";
-import { checkFilePath } from "../config";
+import { checkFilePath } from "../utils";
 
 
 interface Card {

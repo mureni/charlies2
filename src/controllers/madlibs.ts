@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { checkFilePath } from "../config";
+import { checkFilePath } from "../utils";
 
 const DATA_FILE = checkFilePath("data", "madlibs.json");
 

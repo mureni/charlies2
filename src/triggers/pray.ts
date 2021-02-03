@@ -1,5 +1,5 @@
 import { TriggerResult, Trigger } from "../core";
-import { checkFilePath } from "../config";
+import { checkFilePath } from "../utils";
 import { readFileSync } from "fs";
 
 type Bible = [ {
