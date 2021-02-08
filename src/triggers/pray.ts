@@ -32,6 +32,7 @@ const pray: Trigger = {
    description: "Sends your thoughts to God and retrieves a message in return (orig. by Terry Davis)",
    usage: "pray or !pray",
    command: /^!?pray/ui,   
+   icon: "pray.gif",
    action: () => {
       const output: TriggerResult = { results: [], modifications: { ProcessSwaps: true }, directedTo: undefined };            
       const numWords = 20 + Math.floor(Math.random() * 30);

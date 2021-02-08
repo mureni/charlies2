@@ -86,7 +86,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
                seed = [cleanText, conversation.lastTopic].join(" ");
             }
          };
-      }
+      }           
 
       if (shouldRespond) {
          if (message.channel instanceof TextChannel) message.channel.startTyping();
@@ -119,6 +119,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
          /* Learn what it just created, to create a feedback */
          const cleanResponse = cleanMessage(response, { Case: "lower", FriendlyNames: true });
          await Brain.learn(cleanResponse);
+         
          results.response = response;
       }
 

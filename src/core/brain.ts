@@ -112,8 +112,7 @@ class Brain {
          if (!existsSync(settingsFile)) throw new Error(`Unable to load settings from file ${settingsFile}: file does not exist.`);
 
          const json = readFileSync(settingsFile, "utf8");
-         Brain.settings = JSON.parse(json) as BrainSettings;
-         Brain.botName = brainName;
+         Brain.settings = JSON.parse(json) as BrainSettings;         
 
          return true;
       } catch (error: unknown) {

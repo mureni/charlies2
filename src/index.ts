@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import { Intents, Message, TextChannel, Client } from "discord.js";
 import { log, Brain, ProcessResults, processMessage, getDisplayName, KnownUsers, Conversation, Triggers } from "./core";
 import { Swap, Blacklist, Madlibs } from "./controllers";
@@ -17,11 +19,9 @@ const initialize = async () => {
    for (const envVar of mandatoryEnvVars) {
       if (env(envVar) === "") throw new Error(`Environment variable ${envVar} not found in environment. This value must be set to continue. Exiting...`);      
    }
-
-   const botName = env("BOT_NAME") ?? "default";
-
-   log (`Loading brain settings...`);
-   loadResults = Brain.loadSettings(botName);
+   
+   log (`Loading brain settings for "${Brain.botName}" ...`);
+   loadResults = Brain.loadSettings(Brain.botName);
    if (loadResults instanceof Error) {
       log(`Error loading brain settings: ${loadResults.message}. Trying with default settings.`, "warn");
       loadResults = Brain.loadSettings();
@@ -34,8 +34,8 @@ const initialize = async () => {
    log(`Brain settings: ${JSON.stringify(Brain.settings, null, 2)}`, "debug");
 
    if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) {
-      log(`Brain is apparently empty. Loading from default trainer file '../resources/${botName}-trainer.json'. This will take a very long time, be patient.`);
-      loadResults = await Brain.trainFromFile(botName);      
+      log(`Brain is apparently empty. Loading from default trainer file '../resources/${Brain.botName}-trainer.json'. This will take a very long time, be patient.`);
+      loadResults = await Brain.trainFromFile(Brain.botName);      
       if (loadResults instanceof Error) log(`Error loading trainer file: ${loadResults.message}. Going to have a broken brain.`, "error");
    }
 
@@ -56,6 +56,7 @@ const initialize = async () => {
    await Triggers.initialize();
 
    initialized = true;
+   if (initialized) log(`Completed initialization.`);
 }
 
 initialize();
