@@ -4,7 +4,7 @@ import { Madlibs } from "../controllers";
 const madlib: Trigger = {
    id: "madlib",
    name: "Madlib generator",
-   description: "Generates a paragraph of bullshit",
+   description: "Generates a random paragraph based on known madlib patterns",
    usage: "madlib",
    command: /^madlib$/ui,
    action: () => {
@@ -25,8 +25,8 @@ const madlibAddWord: Trigger = {
       const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' }, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
       
-      const vocabType = `[${cleanMessage((matches.groups.type || "").trim(), { Case: "lower", FriendlyNames: true })}]`;
-      const word = cleanMessage((matches.groups.word || "").trim(), { Case: "lower", FriendlyNames: true });
+      const vocabType = `[${cleanMessage((matches.groups.type || "").trim(), { Case: "lower", UseEndearments: true })}]`;
+      const word = cleanMessage((matches.groups.word || "").trim(), { Case: "lower", UseEndearments: true });
       
       const success = Madlibs.addVocab(vocabType, word);
       output.results = [success ? `added \`${word}\` to vocabulary list for \`${vocabType}\`` : `can't do that, try again`];
@@ -44,8 +44,8 @@ const madlibRemoveWord: Trigger = {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
       
-      const vocabType = `[${cleanMessage((matches.groups.type || "").trim(), { Case: "lower", FriendlyNames: true })}]`;
-      const word = cleanMessage((matches.groups.word || "").trim(), { Case: "lower", FriendlyNames: true });
+      const vocabType = `[${cleanMessage((matches.groups.type || "").trim(), { Case: "lower", UseEndearments: true })}]`;
+      const word = cleanMessage((matches.groups.word || "").trim(), { Case: "lower", UseEndearments: true });
       
       const success = Madlibs.removeVocab(vocabType, word);
       output.results = [success ? `removed \`${word}\` from vocabulary list for \`${vocabType}\`` : `can't do that, try again`];
@@ -58,13 +58,14 @@ const madlibAddPattern: Trigger = {
    id: "madlib-add-pattern",
    name: "Add madlib pattern",
    description: "Adds a pattern to the madlib generator -- Pattern consists of static words mixed with vocabulary types enclosed in square brackets (i.e. \`[noun]\` or other defined types); unknown vocabulary types will be ignored",
-   usage: "madlib-add-pattern <pattern> (Example: madlib-add-pattern the [adverb] [noun] [verb]ed [preposition] the [noun].)",
+   usage: "madlib-add-pattern <pattern>",
+   example: "madlib-add-pattern the [adverb] [noun] [verb]ed [preposition] the [noun].",
    command: /^madlib-add-pattern (?<pattern>.+)$/ui,
    action: (_context: Message, matches: RegExpMatchArray = []) => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
       
-      const pattern = cleanMessage((matches.groups.pattern || "").trim(), { Case: "lower", FriendlyNames: true });
+      const pattern = cleanMessage((matches.groups.pattern || "").trim(), { Case: "lower", UseEndearments: true });
 
       const success = Madlibs.addPattern(pattern);
       output.results = [success ? `added \`${pattern}\` to pattern list` : `can't do that, try again`];
@@ -83,7 +84,7 @@ const madlibRemovePattern: Trigger = {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
       
-      const pattern = cleanMessage((matches.groups.pattern || "").trim(), { Case: "lower", FriendlyNames: true });
+      const pattern = cleanMessage((matches.groups.pattern || "").trim(), { Case: "lower", UseEndearments: true });
       
       const success = Madlibs.removePattern(pattern);
       output.results = [success ? `removed \`${pattern}\` from pattern list` : `can't do that, try again`];

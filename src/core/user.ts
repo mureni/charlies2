@@ -47,12 +47,16 @@ const escapeRegExp = (rx: string) => {
 };
 // TODO: Change user interpolation from getting discord info to internal KnownUsers
 
-const interpolateUsers = (text: string, members: GuildMemberManager | undefined = undefined, overrideNames: boolean = false): string => {   
-   
-   /* Swap @roles, @everyone, @here references with plural endearment */
-   text = text.replace(/<@&\d+>/uig, getEndearment(true));
-   text = text.replace(/@everyone|@here|@room/uig, getEndearment(true));
-   
+const interpolateUsers = (text: string, members: GuildMemberManager | undefined = undefined, useEndearments: boolean = false): string => {   
+   // TODO: Find better way to prevent 'directed to' (where first part of text is 'person:') from being interpolated
+   /* Capture the 'directed to' part and save it until the end
+    - Possible issue with this is if there is no 'directed to' but there is a colon, then this 'captured' data 
+      will not be interpolated properly.
+   */
+   const [ directedTo ] = text.match(/^(.+?:)/gui) ?? [ "" ];
+   // Remove anything it found for directed to
+   if (directedTo !== "") text = text.replace(newRX(`^${escapeRegExp(directedTo)}`, "uig"), "");
+
    /* Replace raw @!UserID messages based on internal database of known users (whether they are still active or not) */
    // TODO: Save KnownUsers between program runs
    for (let id of KnownUsers.keys()) {
@@ -63,25 +67,27 @@ const interpolateUsers = (text: string, members: GuildMemberManager | undefined 
          text = text.replace(newRX(`\b${escapeRegExp(alias)}\b`, "uig"), displayName);
       }
       text = text.replace(newRX(`<@!?\s*${escapeRegExp(id)}>`, "uig"), displayName);
-      if (overrideNames) text = text.replace(newRX(`\b${escapeRegExp(displayName)}\b`, "uig"), getEndearment());      
+      if (useEndearments) text = text.replace(newRX(`\b${escapeRegExp(displayName)}\b`, "uig"), getEndearment());      
    }
    /* Replace any leftover user mentions with endearments */
    text = text.replace(/<@!?\s*\d+>/uig, getEndearment());
 
-
-   if (!members) return text;
+   /* Swap @roles, @everyone, @here references with plural endearment */
+   text = text.replace(/<@&\d+>/uig, getEndearment(true));
+   text = text.replace(/@everyone|@here|@room/uig, getEndearment(true));
    
-   /* Replace @User or raw @!UserID messages with display name or an endearment if overrideNames is true */
-   members.fetch().then(fetchedMembers => {
-      fetchedMembers.forEach(member => {
-         const displayName = getDisplayName(member.user, members);
-         text = text.replace(newRX(`<@!?\s*${escapeRegExp(member.id)}>`, "uig"), displayName);
-         if (overrideNames) text = text.replace(newRX(`\b${escapeRegExp(displayName)}\b`, "uig"), getEndearment());
-      });        
-   });
+   if (members) {
+      /* Replace @User or raw @!UserID messages with display name or an endearment if useEndearments is true */
+      members.fetch().then(fetchedMembers => {
+         fetchedMembers.forEach(member => {
+            const displayName = getDisplayName(member.user, members);
+            text = text.replace(newRX(`<@!?\s*${escapeRegExp(member.id)}>`, "uig"), displayName);
+            if (useEndearments) text = text.replace(newRX(`\b${escapeRegExp(displayName)}\b`, "uig"), getEndearment());
+         });        
+      });
+   }
 
-
-   return text;
+   return (directedTo !== "") ? `${directedTo}` + text : text;
 }
 
 export { getDisplayName, interpolateUsers, getEndearment, KnownUser, KnownUsers, Conversation }

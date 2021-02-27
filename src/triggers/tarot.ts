@@ -7,7 +7,7 @@ const tarot: Trigger = {
    name: "Tarot",
    description: "Draws a tarot hand. Options for tarot spreads are: star, horseshoe, and standard (default) 3-card",
    usage: "tarot [spread]",
-   example: "`tarot star`",
+   example: "tarot star",
    command: /^tarot ?(?<spread>.+)?$/ui,
    action: (context: Message, matches: RegExpMatchArray = []) => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };

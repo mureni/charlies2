@@ -27,3 +27,18 @@ The following are the required values for the bot settings:
 | recursion             | 0 - 100          | 1             | Number of times the output of the bot is sent back in as input (for self-reinforcement learning)      |
 | conversationTimeLimit | 0 - 100000       | 7000          | Number of milliseconds the bot will wait for a additional input without requiring its name to be said |
 | learnFromBots         | true / false     | false         | Whether the bot will learn from other bots, or ignore them                                            |
+
+# Steps to deploy initially (no pretrained brain) without git
+1. Copy the following files and directories:
+    - `./resources/*`
+    - `./src/*`
+    - `./Dockerfile`
+    - `./package.json`
+    - `./tsconfig.json`
+    - `./README.md`
+    - `./.gitattributes`
+2. Create the following files and directories:
+    - `./.env` (See [Required environment variables](#required-environmental-variables))
+    - `./data/`
+    - (Optional) `./resources/{bot-name}-settings.json` (See [Bot settings](#bot-settings))
+    - (Optional) `./data/{bot-name}-trainer.json` (See [Example trainer schema](https://github.com/mureni/charlies2/issues/1#issuecomment-774998882) - NB: Format expected to be deprecated in favor of raw text and/or other pre-processors)

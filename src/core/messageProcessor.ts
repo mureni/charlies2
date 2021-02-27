@@ -1,4 +1,4 @@
-import { GuildMember, User, MessageAttachment, MessageEmbed, ClientUser, Message, TextChannel } from "discord.js";
+import { MessageAttachment, MessageEmbed, ClientUser, Message, TextChannel } from "discord.js";
 import { getEndearment, getDisplayName, interpolateUsers, KnownUsers } from "./user";
 import { Brain } from "./brain";
 import { Swap } from "../controllers/swap";
@@ -30,7 +30,7 @@ type ModificationType = {
    Case?: "upper" | "lower" | "unchanged",
    KeepOriginal?: boolean,
    ProcessSwaps?: boolean,
-   FriendlyNames?: boolean,
+   UseEndearments?: boolean,
    TTS?: boolean,
    Balance?: boolean,
    StripFormatting?: boolean
@@ -61,7 +61,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
    /* Do not process own messages */
    if (message.author.id === client.id) return results;
    
-   let cleanText = cleanMessage(message, { Case: "lower", FriendlyNames: true });
+   let cleanText = cleanMessage(message, { Case: "lower", UseEndearments: true });
 
    /* Remove initial references to self (e.g. "charlies learn this text" -> "learn this text", "charlies: hi" -> "hi") */
    cleanText = cleanText.replace(newRX(`^\s*\b${escapeRegExp(client.username)}\b[:,]?\s*`, "uig"), "");
@@ -115,9 +115,11 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
          if (message.tts) mods.TTS = true;
          if (Brain.shouldYell(message.content)) mods.Case = "upper";
 
-         await sendMessage(client, message.channel, response, getDisplayName(message.member?.user ?? message.author, message.guild?.members), mods);
+         const directedTo = getDisplayName(message.member?.user ?? message.author, message.guild?.members);
+         await sendMessage(client, message.channel, `${directedTo}: ${response}`, mods);
+
          /* Learn what it just created, to create a feedback */
-         const cleanResponse = cleanMessage(response, { Case: "lower", FriendlyNames: true });
+         const cleanResponse = cleanMessage(response, { Case: "lower", UseEndearments: true });
          await Brain.learn(cleanResponse);
          
          results.response = response;
@@ -135,14 +137,33 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
       
       if (Brain.shouldYell(message.content)) mods.Case = "upper";
 
+      if (processed.directedTo) {
+         if (processed.results.length > 1) {
+            // Only say the "directed to" name once if there is more than one line of response
+            processed.results.unshift(`${processed.directedTo}:`);
+         } else {
+            processed.results[0] = `${processed.directedTo}: ${processed.results[0]}`
+         }
+      }
+      let linesToSend: string[] = [];
+      let outputLength: number = 0;
       for (const line of processed.results) {
          if (line instanceof MessageEmbed || line instanceof MessageAttachment) {
             // Do not process anything on RichEmbeds -- this allows triggers to be somewhat insecure, be careful!            
             await message.channel.send(line);
          } else {
-            await sendMessage(client, message.channel, line, processed.directedTo, mods);
+            // If the line will make the overall message too long, send what is in the queue and then clear it 
+            if (outputLength + line.length > MAX_LENGTH) {
+               await sendMessage(client, message.channel, linesToSend.join('\n'), mods);
+               linesToSend = [];
+            }
+            linesToSend.push(line);
+            outputLength += line.length;
          }
       }
+      if (linesToSend.length > 0) {         
+         await sendMessage(client, message.channel, linesToSend.join('\n'), mods);
+      }      
       results.response = processed.results.join('\n');
    }
    results.processedText = cleanText.trim();
@@ -151,12 +172,12 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
 }
 
 /* Utility functions for bot interface */
-const sendMessage = async (client: ClientUser, channel: TextChannel, text: string, directedTo: string | User | GuildMember | undefined = undefined, mods?: ModificationType): Promise<boolean> => {
+const sendMessage = async (client: ClientUser, channel: TextChannel, text: string, mods?: ModificationType): Promise<boolean> => {
    const permissions = channel.permissionsFor(client);
    if (!permissions || !permissions.has('SEND_MESSAGES')) return false;
    if (!channel.guild) return false;
 
-   text = interpolateUsers(text, channel.guild.members, !!(mods?.FriendlyNames));
+   text = interpolateUsers(text, channel.guild.members, !!(mods?.UseEndearments));
    text = cleanMessage(text, mods);
 
    /* Processing swaps should always be done AFTER cleaning the message.
@@ -164,16 +185,6 @@ const sendMessage = async (client: ClientUser, channel: TextChannel, text: strin
    */
    if (mods?.ProcessSwaps) text = Swap.process(channel.guild.id, text);
    
-   if (directedTo) {
-
-      //const name = interpolateUsers(directedTo, channel.members, false);
-      
-      if (typeof directedTo === "string") text = `${directedTo}: ${text}`;
-      if (directedTo instanceof GuildMember) text = `${directedTo.displayName}: ${text}`;
-      if (directedTo instanceof User) text = `${directedTo.username}: ${text}`;
-      
-   }
-
    // TODO: Balance code blocks and such accounting for max length, if necessary
    while (text !== "") {      
       await channel.send(text.substring(0, MAX_LENGTH), { tts: !!(mods?.TTS), split: true });
@@ -190,10 +201,10 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
 
    if (message instanceof Message) {
       fullText = message.content.trim();
-      fullText = interpolateUsers(fullText, message.guild?.members, !!(mods?.FriendlyNames));      
+      fullText = interpolateUsers(fullText, message.guild?.members, !!(mods?.UseEndearments));      
    } else {
       fullText = message.trim();
-      fullText = interpolateUsers(fullText, undefined, !!(mods?.FriendlyNames));
+      fullText = interpolateUsers(fullText, undefined, !!(mods?.UseEndearments));
    }
 
    /* Quick bug fix for broken brains that stored "greentext" (>words) in a single line by accident
@@ -205,6 +216,7 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
    // fullText = fullText.replace(/(\D+?)>(.+?)/muig, "$1\n>$2");
    /* Fix any broken custom emojis */
    fullText = fullText.replace(/<:(\w+?):(\d+?)\s+>/muig, "<:$1:$2>");
+  
 
    /* Remove ANSI control characters and RTL marks (skipping CR and LF) */      
    fullText = fullText.replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u200f\u061c\u00ad]/muig, '');
@@ -275,6 +287,9 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
       /* TODO: fix edge cases where period is between things that aren't detected as URL but should be (i.e. sub.example.com) - period should not have space after */
       /* TODO: fix edge cases where it is appropriate to have a character followed immediately by a quotation mark  */      
 
+      // Fix broken discord mentions caused by the above
+      text = text.replace(/<@!\s+(\d+)>/muig, "<@!$1>");
+
       // TODO: test if this is broken or necessary
       //text = text.replace(/"?(.+?)([\.)\]?!,])\s+"/uig, '"$1$2"');
       
@@ -337,22 +352,32 @@ const restoreBlocks = (text: string = "", symbol: string = "", blocks: string[] 
 }
 
 const balanceText = (text: string): string => {
-         
-   const codeBlock: boolean = (text.match(/```/miug) || []).length > 0;
-   text = text.replace(/[`"]{2,10}/miug, '');
-      
-   const codeSegment: boolean = (text.match(/`/mug) || []).length % 2 !== 0;
-   const parenthesisStart: number = (text.match(/\(/mug) || []).length;
-   const parenthesisEnd: number = (text.match(/\)/mug) || []).length - (text.match(/\s+\w\)/mug) || []).length;
-   const doubleQuote: boolean = (text.match(/"/mug) || []).length % 2 !== 0;
+               
+   const isCodeSegmentsUnbalanced: boolean = (text.match(/`/mug) ?? []).length % 2 !== 0;
+   const numParenthesisStarted: number = (text.match(/\(/mug) ?? []).length;
+   const numParenthesisEnded: number = (text.match(/\)/mug) ?? []).length;
+   const isDoubleQuoteUnbalanced: boolean = (text.match(/"/mug) ?? []).length % 2 !== 0;
    
-   if (doubleQuote) text = text.endsWith('"') ? '"' + text : text + '"';   
-   if (parenthesisStart < parenthesisEnd) text = "(".repeat(parenthesisEnd - parenthesisStart) + text;
-   if (parenthesisStart > parenthesisEnd) text = text + ")".repeat(parenthesisStart - parenthesisEnd);
-   if (codeSegment) text = text.endsWith('`') ? '`' + text : text + '`';   
-   if (codeBlock) text = '```' + text + '```';
+   if (isDoubleQuoteUnbalanced) {
+      if (text.endsWith('"')) {
+         text = '"' + text;
+      } else {
+         text = text + '"';
+      }
+   }
+   if (numParenthesisStarted < numParenthesisEnded) {
+      text = "(".repeat(numParenthesisEnded - numParenthesisStarted) + text;
+   } else if (numParenthesisStarted > numParenthesisEnded) {
+      text = text + ")".repeat(numParenthesisStarted - numParenthesisEnded);
+   }
+   if (isCodeSegmentsUnbalanced) {
+      if (text.endsWith('`')) {
+         text = '`' + text;
+      } else { 
+         text = text + '`';
+      }
+   }
    return text; 
-
 
 }
 

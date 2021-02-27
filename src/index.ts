@@ -23,7 +23,7 @@ const initialize = async () => {
    log (`Loading brain settings for "${Brain.botName}" ...`);
    loadResults = Brain.loadSettings(Brain.botName);
    if (loadResults instanceof Error) {
-      log(`Error loading brain settings: ${loadResults.message}. Trying with default settings.`, "warn");
+      log(`Unable to load brain settings: ${loadResults.message}. Trying with default settings.`, "warn");
       loadResults = Brain.loadSettings();
       if (loadResults instanceof Error) {
          log(`Error loading default brain settings: ${loadResults.message}. Unable to continue.`, "error");
@@ -34,23 +34,27 @@ const initialize = async () => {
    log(`Brain settings: ${JSON.stringify(Brain.settings, null, 2)}`, "debug");
 
    if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) {
-      log(`Brain is apparently empty. Loading from default trainer file '../resources/${Brain.botName}-trainer.json'. This will take a very long time, be patient.`);
-      loadResults = await Brain.trainFromFile(Brain.botName);      
-      if (loadResults instanceof Error) log(`Error loading trainer file: ${loadResults.message}. Going to have a broken brain.`, "error");
+      log(`Brain is apparently empty. Loading from trainer file '../resources/${Brain.botName}-trainer.txt'. This may take a very long time, be patient.`);
+      loadResults = await Brain.trainFromFile(Brain.botName, "txt");
+      if (loadResults instanceof Error) {
+         log(`Unable to load trainer file: ${loadResults.message}. Attempting to load default trainer file '../resources/default-trainer.txt'.`, "warn");
+         loadResults = await Brain.trainFromFile("default", "txt");
+         if (loadResults instanceof Error) log(`Error loading trainer file: ${loadResults.message}. Going to have a broken brain.`, "error");
+      }
    }
 
    log (`Loading swap settings...`);
    loadResults = Swap.load();
-   if (loadResults instanceof Error) log(`Error loading swap data: ${loadResults.message}. Starting with empty swap data.`, "warn");
+   if (loadResults instanceof Error) log(`Unable to load swap data: ${loadResults.message}. Starting with empty swap data.`, "warn");
    log (`Loading blacklist settings...`);
    loadResults = Blacklist.load();
-   if (loadResults instanceof Error) log(`Error loading blacklist data: ${loadResults.message}. Starting with empty blacklist data.`, "warn");
+   if (loadResults instanceof Error) log(`Unable to load blacklist data: ${loadResults.message}. Starting with empty blacklist data.`, "warn");
    log (`Loading madlib settings...`);
    loadResults = Madlibs.load();
-   if (loadResults instanceof Error) log(`Error loading madlibs data: ${loadResults.message}. Starting with empty madlibs data.`, "warn");
+   if (loadResults instanceof Error) log(`Unable to load madlibs data: ${loadResults.message}. Starting with empty madlibs data.`, "warn");
 
    if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) {
-      log(`Error initializing brain: no data was retrieved.`);
+      log(`Error initializing brain: no data was found.`, "error");
    }
 
    await Triggers.initialize();

@@ -30,27 +30,27 @@ const learnHistory: Trigger = {
       
       let channel: GuildChannel | undefined = context.guild?.channels.resolve(channelID) ?? undefined;
       if (!channel || channel.type !== "text") {
-         context.reply(`no that is not a valid channel`);
+         await context.reply(`no that is not a valid channel`);
          return output;
       }
       if (!context.client.user) {
-         context.reply(`I am not allowed to do that because I am not a valid user for some reason`);
+         await context.reply(`I am not allowed to do that because I am not a valid user for some reason`);
          return output;
       }
       let perms = channel.permissionsFor(context.client.user);
       if (!perms || !perms.has("READ_MESSAGE_HISTORY")) {
-         context.reply(`I am not allowed to read message history for that channel`);
+         await context.reply(`I am not allowed to read message history for that channel`);
          return output;
       }
       let learnedCount = 0,
          startTime = Date.now();
 
-      output.results.push(
+      await context.reply(
          `trying to learn channel history from ${channel.name}, this might take some time`
       );
 
       const getMessages = async () => {         
-         const MAX_MESSAGES = 1048576; // safety first
+         const MAX_MESSAGES = 2 ** 24; // 16.777 million messages max - safety first!
          let messageCount = 0,
             lastID = context.id;
          while (true) {
@@ -80,7 +80,7 @@ const learnHistory: Trigger = {
                
                // Clean message and prep for learning
                const text: string = cleanMessage(message.content, {
-                  FriendlyNames: true,
+                  UseEndearments: true,
                   Balance: true,
                   Case: "unchanged",
                });
@@ -89,7 +89,7 @@ const learnHistory: Trigger = {
             };
 
          }
-         context.reply(
+         await context.reply(
             `learned ${learnedCount} lines from channel ID ${channelID} (${
                (Date.now() - startTime) / 1000
             }s)`
@@ -100,9 +100,9 @@ const learnHistory: Trigger = {
          await getMessages();
       } catch (e: unknown) {
          if (e instanceof Error) {
-             context.reply(`error learning history: ${e.message}`);
+             await context.reply(`error learning history: ${e.message}`);
          } else {
-            context.reply(`error learning history: ${JSON.stringify(e, null, 2)}`);
+            await context.reply(`error learning history: ${JSON.stringify(e, null, 2)}`);
          }
       }
 

@@ -25,7 +25,7 @@ const story: Trigger = {
       
       for (let line of story.values()) {
          if (/yourself/iu.test(directedTo)) {
-            line = `*${line}*`;
+            line = `*${line.trim()}*`;
          } else if (/me/iu.test(directedTo)) {
             output.directedTo = getDisplayName(context.author);
          } else if (directedTo !== "") {

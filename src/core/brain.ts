@@ -1,6 +1,7 @@
 import { Presets, SingleBar } from "cli-progress";
 import { DBMap } from "../core/DBMap";
-import { readFileSync, existsSync, writeFileSync } from 'fs';
+import { createReadStream, readFileSync, existsSync, writeFileSync, statSync } from 'fs';
+import readline from "readline";
 import { resolve } from "path";
 import { env, checkFilePath } from "../utils"; 
 
@@ -94,12 +95,37 @@ class Brain {
          return false;
       }
    }
-   public static async trainFromFile(trainerName: string = "default"): Promise<boolean | Error> {
+
+   public static async trainFromFile(trainerName: string = "default", filetype: "json" | "txt" = "txt"): Promise<boolean | Error> {
       try {
-         const trainerFile = resolve(checkFilePath("resources", `${trainerName}-trainer.json`));                  
+         const trainerFile = resolve(checkFilePath("resources", `${trainerName}-trainer.${filetype}`));
          if (!existsSync(trainerFile)) throw new Error(`Unable to load brain data from file '${trainerFile}': file does not exist.`);
-         const json = readFileSync(trainerFile, "utf8");
-         return await Brain.fromJSON(JSON.parse(json));
+         
+         if (filetype === "json") {
+            const data = readFileSync(trainerFile, "utf8");
+            return await Brain.fromJSON(JSON.parse(data));
+         } else if (filetype === "txt") {            
+            
+            const size = statSync(trainerFile).size;            
+            let counter = 0;
+
+            const readInterface = readline.createInterface({
+               input: createReadStream(trainerFile, { encoding: "utf8" })
+            });
+            
+            readInterface.on("line", async line => {
+               await Brain.learn(line);
+               counter += line.length + 1;
+               console.log(`Learned ${counter} of ${size} bytes...`);
+            });
+            readInterface.on("close", () => {
+               console.log(`Finished learning!`);               
+            });
+         
+            return true;
+         } else {
+            throw new Error(`Unable to load brain data from file '${trainerFile}': unknown file type. Must be plain text or JSON with proper schema.`);
+         }
       } catch (error: unknown) {
          if (error instanceof Error) return error;
          return false;

@@ -20,7 +20,6 @@ import { readdirSync, writeFileSync, readFileSync } from "fs";
 import { join, parse } from "path";
 import { checkFilePath } from "../utils";
 
-
 interface Card {
    dimensions: {
       width: number;
@@ -73,6 +72,9 @@ interface Explanations {
 }
 
 const TAROT_DIR = checkFilePath("resources", "tarot-decks/rider-waite/");
+const FONT = checkFilePath("resources", "tarot-decks/font.ttf");
+Canvas.registerFont(FONT, { family: 'Sans Serif' });
+
 const toTitleCase = (text: string) => {
    let first = true;
    return text.split(' ').map(word => {      
