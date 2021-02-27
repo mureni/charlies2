@@ -2,15 +2,15 @@ import { TriggerResult, Trigger } from "../core";
 import { checkFilePath } from "../utils";
 import { readFileSync } from "fs";
 
-type Bible = [ {
-   abbrev: string,
-   chapters: [
-      string[],
-   ],
-   name: string
-} ];
+type Bible = [{
+   book: string,
+   verses: [{
+      ref: string,
+      text: string
+   }]
+}];
 
-const file = checkFilePath("resources", "bible_kjv.json", false);
+const file = checkFilePath("resources", "kjv.json", false);
 // TODO: Error handling if the file doesn't exist
 const data: string = readFileSync(file, "utf8");
 const json = JSON.parse(data.trim()) as Bible;
@@ -18,11 +18,10 @@ const json = JSON.parse(data.trim()) as Bible;
 const allWords: string[] = [];
 
 // Load words from resource file
-json.map(book => {
-   book.chapters.map(chapter => {
-      chapter.map(verse => {
-         allWords.push(...verse.split(" "));
-      })
+json.map(book => {      
+   book.verses.map(verse => {
+      let words = verse.text.split(" ");   
+      allWords.push(...words);
    });
 });
 
