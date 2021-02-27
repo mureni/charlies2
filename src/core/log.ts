@@ -1,37 +1,23 @@
 import { createLogger, format, transports } from "winston";
-import DailyRotateFile from "winston-daily-rotate-file";
-import { checkFilePath } from "../utils";
+import { env } from "../utils";
 const { combine, colorize, timestamp, printf } = format;
 
-const DEBUG = process.env.NODE_ENV === "development";
+const DEBUG = env("NODE_ENV", "development") === "development";
+
 const outputFormat = combine(   
    timestamp(),
    printf(info => `[${info.timestamp} - ${info.level}] ${info.message}`)
 )   
-type LogType = 'debug' | 'error' | 'warn' | 'general';
+
+export type LogType = 'debug' | 'error' | 'warn' | 'general';
 
 class Logger {
    public static output = createLogger({
       format: outputFormat,
       transports: [
-         new (DailyRotateFile)({
-            dirname: checkFilePath("logs"),
-            filename: "general-%DATE%.log",
-            datePattern: "YYYY-MM-DD-HH",
-            zippedArchive: true,
-            maxSize: '5m',
-            maxFiles: '30d'
-         }),
-         new (DailyRotateFile)({
-            level: 'error',
-            dirname: checkFilePath("logs"),
-            filename: "error-%DATE%.log",
-            datePattern: "YYYY-MM-DD-HH",
-            zippedArchive: true,
-            maxSize: '5m',
-            maxFiles: '30d'
+         new transports.Console({
+            format: combine(colorize(), outputFormat)
          })
-
       ]
    });
    public static log(message: string = '', type: LogType = (DEBUG ? 'debug' : 'general')) {
@@ -56,7 +42,6 @@ class Logger {
    } 
 }
 
-if (DEBUG) Logger.output.add(new transports.Console({format: combine(colorize(), outputFormat)}));
 const log = Logger.log;
 
 export { log };
