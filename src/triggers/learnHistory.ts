@@ -6,7 +6,8 @@ import {
    TriggerResult,
    Trigger,
 } from "../core";
-import { TextChannel, GuildChannel } from "discord.js";
+
+import { TextChannel } from "discord.js";
 
 const learnHistory: Trigger = {
    id: "learn-history",
@@ -22,85 +23,79 @@ const learnHistory: Trigger = {
          modifications: { ProcessSwaps: true },
          directedTo: undefined,
       };
-      let channelID =
-         matches.groups && matches.groups.channelID
-            ? matches.groups.channelID.trim()
-            : "";
-      if (!channelID) channelID = context.channel.id;
       
-      let channel: GuildChannel | undefined = context.guild?.channels.resolve(channelID) ?? undefined;
-      if (!channel || channel.type !== "text") {
-         await context.reply(`no that is not a valid channel`);
-         return output;
-      }
-      if (!context.client.user) {
-         await context.reply(`I am not allowed to do that because I am not a valid user for some reason`);
-         return output;
-      }
-      let perms = channel.permissionsFor(context.client.user);
-      if (!perms || !perms.has("READ_MESSAGE_HISTORY")) {
-         await context.reply(`I am not allowed to read message history for that channel`);
-         return output;
-      }
-      let learnedCount = 0,
-         startTime = Date.now();
+      const MAX_MESSAGES = 2 ** 20; // 1 million messages max - safety first!
+            
+      try {
 
-      await context.reply(
-         `trying to learn channel history from ${channel.name}, this might take some time`
-      );
+         let channelID = matches.groups && matches.groups.channelID ? matches.groups.channelID.trim() : "";
+         if (!channelID) channelID = context.channel.id;
+         
+         const channel: TextChannel | undefined = context.guild?.channels.resolve(channelID) as TextChannel ?? undefined;
+         if (!channel || channel.type !== "text") {
+            await context.reply(`that is not a valid text channel in this guild`);
+            return output;
+         }
+         if (!context.client.user) {
+            await context.reply(`I am not allowed to do that because I am not a valid user for some reason`);
+            return output;
+         }
+         const perms = channel.permissionsFor(context.client.user);
+         if (!perms || !perms.has("READ_MESSAGE_HISTORY")) {
+            await context.reply(`I am not allowed to read message history for that channel`);
+            return output;
+         }
 
-      const getMessages = async () => {         
-         const MAX_MESSAGES = 2 ** 24; // 16.777 million messages max - safety first!
-         let messageCount = 0,
-            lastID = context.id;
-         while (true) {
-            log(`Fetching 100 messages at a time from channel ID ${channelID} starting at message ID ${lastID}`);
-            const messages = await (channel as TextChannel).messages.fetch({               
+         const startTime = Date.now();
+
+         await context.reply(
+            `trying to learn channel history from ${channel.name}, this might take some time`
+         );
+         
+         let totalMessagesLearned = 0;
+         let lastMessageLearned = context.id;
+         let isStillLearning = true;
+
+         do {
+            const messages = await channel.messages.fetch({               
                limit: 100,
-               before: lastID,
+               before: lastMessageLearned,
             });
-            if (!messages || messages.size < 1 || learnedCount > MAX_MESSAGES) break;
-            messageCount = messages.size;
-            log(`Fetched ${messageCount} messages from channel ID ${channelID}`);            
+            if (!messages || messages.size < 1) isStillLearning = false;
+            
+            log(`Fetched ${messages.size} messages from channel: ${channel.id}`);
+   
             for (const [_key, message] of messages) {
-               
-               // Decrease the number of messages left to learn
-               messageCount--;
-
-               let shouldLearn: boolean = true;
-
-               // Increase the total number of learned messages
-               learnedCount++;
-               lastID = message.id;
-
-               // Check if it's a bot message and ignore if so
-               if (message.author.bot) shouldLearn = false;
-
-               if (!shouldLearn) continue;
-               
+               // Check if it's a bot message and ignore if so            
+               if (message.author.bot) continue;
+                  
                // Clean message and prep for learning
                const text: string = cleanMessage(message.content, {
                   UseEndearments: true,
                   Balance: true,
                   Case: "unchanged",
                });
-               // Learn
+   
+               // Learn            
                await Brain.learn(text);
-            };
+               
+               lastMessageLearned = message.id;
+               totalMessagesLearned++;
+            }
 
-         }
+            if (totalMessagesLearned > MAX_MESSAGES) isStillLearning = false;
+
+         } while (isStillLearning);
+
          await context.reply(
-            `learned ${learnedCount} lines from channel ID ${channelID} (${
+            `learned ${totalMessagesLearned} lines from channel ID ${channel.id} (${
                (Date.now() - startTime) / 1000
             }s)`
-         );            
-      };
-
-      try {
-         await getMessages();
+         );
+   
       } catch (e: unknown) {
          if (e instanceof Error) {
-             await context.reply(`error learning history: ${e.message}`);
+            await context.reply(`error learning history: ${e.message}`);
          } else {
             await context.reply(`error learning history: ${JSON.stringify(e, null, 2)}`);
          }
