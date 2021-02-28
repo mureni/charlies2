@@ -4,10 +4,10 @@ const roll: Trigger = {
    id: "roll",
    name: "roll",
    description: "Rolls one or more Dungeons and Dragons type multi-sided di(c)e. Minimum of 1 roll, minimum of 4 sides. Maximum of 100 rolls, maximum of 120 sides.",
-   usage: "!roll <number of rolls>d<number of sides>",
+   usage: "!roll [number-of-rolls] d [number-of-sides]",
    example: "!roll d20, !roll 4d24, !roll 1d6",
    icon: "dnd.png",
-   command: /!r(oll)? (?<rolls>\d+)?d(?<sides>\d+)/ui,
+   command: /!r(oll)? (?<rolls>\d+)?\s*d\s*(?<sides>\d+)/ui,
    action: (context: Message, matches: RegExpMatchArray = []) => {
       const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' } };
       if (matches.length === 0 || !matches.groups || matches.groups.sides === undefined) return output;
