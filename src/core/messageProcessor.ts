@@ -1,6 +1,7 @@
 import { MessageAttachment, MessageEmbed, ClientUser, Message, TextChannel } from "discord.js";
 import { getEndearment, getDisplayName, interpolateUsers, KnownUsers } from "./user";
 import { Brain } from "./brain";
+import { log } from "./log";
 import { Swap } from "../controllers/swap";
 import { TriggerResult, Triggers } from "./triggerProcessor";
 
@@ -35,6 +36,11 @@ type ModificationType = {
    Balance?: boolean,
    StripFormatting?: boolean
 }
+type OutgoingMessage = {
+   contents: string,
+   embeds?: MessageEmbed[],
+   attachments?: MessageAttachment[]
+}
 
 const escapeRegExp = (rxString: string) => rxString.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
 
@@ -48,7 +54,7 @@ const emoticonRXs = [
    `:|`, `:$`, `://)`, `://3`, `:-X`, `:X`, `:-#`, `:#`, `:-&`, `:&`, `O:-)`, `O:)`, `0:-3`, `0:3`, `0:-)`, `0:)`,
    `;^)`, `>:-)`, `>:)`, `}:-)`, `}:)`, `3:-)`, `3:)`, `>;)`, `>:3`, `>;3`, `|;-)`, `|-O`, `:-J`, `#-)`, `%-)`, `%)`,
    `:-###..`, `:###..`, `<:-|`, `',:-|`, `',:-l`, `</3`, `<\\3`, `<3` 
-].map(emoticon => escapeRegExp(emoticon)).join('|');
+].map(emoticon => newRX(`\b${escapeRegExp(emoticon)}\b`)).join('|');
 
 //erx = [`:-)`, `:)`, `:-]`, `:]`, `:-3`, `:3`, `:->`, `:>`, `8-)`, `8)`, `:-}`, `:}`, `:o)`, `:c)`, `:^)`, `=]`, `=)`, `:-D`, `:D`, `8-D`, `8D`, `x-D`, `xD`, `X-D`, `XD`, `=D`, `=3`, `B^D`, `:-))`, `:-(`, `:(`, `:-c`, `:c`,`:-<`, `:<`, `:-[`, `:[`, `:-||`, `>:[`, `:{`, `:@`, `>:(`, `:'-(`, `:'(`, `:'-)`, `:')`, `D-':`, `D:<`, `D:`, `D8`, `D;`, `D=`, `DX`, `:-O`, `:O`, `:-o`, `:o`, `:-0`, `8-0`, `>:O`, `:-*`, `:*`, `:×`, `;-)`, `;)`, `*-)`, `*)`, `;-]`, `;]`, `;^)`, `:-,`, `;D`, `:-P`, `:P`, `X-P`, `XP`, `x-p`, `xp`, `:-p`, `:p`, `:-Þ`, `:Þ`, `:-þ`, `:þ`, `:-b`, `:b`, `d:`, `=p`, `>:P`, `:-/`, `:/`, `:-.`, `>:\\`, `>:/`, `:\\`, `=/`, `=\\`, `:L`, `=L`, `:S`,`:-|`, `:|`, `:$`, `://)`, `://3`, `:-X`, `:X`, `:-#`, `:#`, `:-&`, `:&`, `O:-)`, `O:)`, `0:-3`, `0:3`, `0:-)`, `0:)`, `;^)`, `>:-)`, `>:)`, `}:-)`, `}:)`, `3:-)`, `3:)`, `>;)`, `>:3`, `>;3`, `|;-)`, `|-O`, `:-J`, `#-)`, `%-)`, `%)`, `:-###..`, `:###..`, `<:-|`, `',:-|`, `',:-l`, `</3`, `<\\3`, `<3` ].map(emoticon => emoticon.replace(/[.*+?^${}()|[\]\\\-]/ug, '\\$&')).join('|');
 
@@ -68,9 +74,11 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
    cleanText = cleanText.replace(newRX(`^\s*\b${escapeRegExp(Brain.botName)}\b[:,]?\s*`, "uig"), "");
 
    const processed: TriggerResult = await Triggers.process(message);
+   //log(`Trigger results: ${JSON.stringify(processed)}`);
 
    if (!processed.triggered) {      
-      
+      // NOTE: The below is strictly for charlies-based responses. 
+      // TODO: Move charlies response functionality to a separate processor than the generic message processor 
       /* Detect whether a conversation with the person is ongoing or if a response is appropriate */
       let shouldRespond: boolean = message.mentions.has(client) || Brain.shouldRespond(Brain.botName, message.content);
       let seed: string = "";
@@ -87,9 +95,9 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
             }
          };
       }           
-
+      
       if (shouldRespond) {
-         if (message.channel instanceof TextChannel) message.channel.startTyping();
+         if (message.channel instanceof TextChannel) message.channel.sendTyping();
          if (user) {
             user.conversations.set(message.channel.id, {
                lastSpokeAt: Date.now(),
@@ -116,7 +124,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
          if (Brain.shouldYell(message.content)) mods.Case = "upper";
 
          const directedTo = getDisplayName(message.member?.user ?? message.author, message.guild?.members);
-         await sendMessage(client, message.channel, `${directedTo}: ${response}`, mods);
+         await sendMessage(client, message.channel, { contents: `${directedTo}: ${response}` }, mods);
 
          /* Learn what it just created, to create a feedback */
          const cleanResponse = cleanMessage(response, { Case: "lower", UseEndearments: true });
@@ -130,7 +138,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
 
    } else {
       
-      if (message.channel instanceof TextChannel) message.channel.startTyping();
+      if (message.channel instanceof TextChannel) message.channel.sendTyping();
       results.triggeredBy = processed.triggeredBy;
       const mods: ModificationType = { ... processed.modifications };
       mods.Balance = true;
@@ -138,45 +146,56 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
       if (Brain.shouldYell(message.content)) mods.Case = "upper";
 
       if (processed.directedTo) {
-         if (processed.results.length > 1) {
-            // Only say the "directed to" name once if there is more than one line of response
-            processed.results.unshift(`${processed.directedTo}:`);
-         } else {
-            processed.results[0] = `${processed.directedTo}: ${processed.results[0]}`
-         }
-      }
-      let linesToSend: string[] = [];
-      let outputLength: number = 0;
-      for (const line of processed.results) {
-         if (line instanceof MessageEmbed || line instanceof MessageAttachment) {
-            // Do not process anything on RichEmbeds -- this allows triggers to be somewhat insecure, be careful!            
-            await message.channel.send(line);
-         } else {
-            // If the line will make the overall message too long, send what is in the queue and then clear it 
-            if (outputLength + line.length > MAX_LENGTH) {
-               await sendMessage(client, message.channel, linesToSend.join('\n'), mods);
-               linesToSend = [];
-            }
-            linesToSend.push(line);
-            outputLength += line.length;
-         }
-      }
-      if (linesToSend.length > 0) {         
-         await sendMessage(client, message.channel, linesToSend.join('\n'), mods);
+         processed.results[0].contents = `${processed.directedTo}: ${processed.results[0].contents}`;
       }      
-      results.response = processed.results.join('\n');
+      
+      let outgoingPayload: OutgoingMessage = { contents: "", embeds: [], attachments: [] };
+      results.response = "";
+      for (const resultsPayload of processed.results) {
+         outgoingPayload.contents = resultsPayload.contents;
+         if (resultsPayload.attachments) {
+            results.response += resultsPayload.attachments.map(attachment => `[attachment ${attachment.name}]`).join('\n');
+            //log(`Trigger results contain attachments; including attachments in message`);
+            outgoingPayload.attachments = resultsPayload.attachments;
+         }
+         if (resultsPayload.embeds) {
+            results.response += resultsPayload.embeds.map(embed => `[embed ${embed.title}]`).join('\n');
+            //log(`Trigger results contain embeds; including embeds in message`);
+            outgoingPayload.embeds = resultsPayload.embeds;
+         }         
+
+         // The results.response is really for debugging purposes, and is only used in the 'on message received' event in the main index.ts file
+         results.response += `${outgoingPayload.contents}\n`;
+
+         while (outgoingPayload.contents.length > MAX_LENGTH) {
+            log(`Trigger result text is too long; sending ${MAX_LENGTH} characters and any existing embeds/attachments, and splitting the rest up to a new line`);
+            outgoingPayload.contents = outgoingPayload.contents.substring(0, MAX_LENGTH);
+            await sendMessage(client, message.channel as TextChannel, outgoingPayload, mods);
+            // Clear the message payload since any existing embeds or attachments would have been sent with the above line
+            outgoingPayload = { contents: "", embeds: [], attachments: [] };
+            outgoingPayload.contents = outgoingPayload.contents.substring(MAX_LENGTH);            
+         }
+         // Send any message payload that is not yet sent
+         if (outgoingPayload.contents != "" || (outgoingPayload.attachments?.length ?? 0) > 0  || (outgoingPayload.embeds?.length ?? 0) > 0) {
+            //log(`Trigger result payload: ${JSON.stringify(outgoingPayload)}`);
+            await sendMessage(client, message.channel as TextChannel, outgoingPayload, mods);
+         }
+      }   
+
+      results.response = results.response.trimEnd();
    }
-   results.processedText = cleanText.trim();
-   message.channel.stopTyping(true);
+   results.processedText = cleanText.trim();   
    return results;
 }
 
 /* Utility functions for bot interface */
-const sendMessage = async (client: ClientUser, channel: TextChannel, text: string, mods?: ModificationType): Promise<boolean> => {
+const sendMessage = async (client: ClientUser, channel: TextChannel, message: OutgoingMessage, mods?: ModificationType): Promise<boolean> => {
+   
    const permissions = channel.permissionsFor(client);
    if (!permissions || !permissions.has('SEND_MESSAGES')) return false;
    if (!channel.guild) return false;
 
+   let text = message.contents;
    text = interpolateUsers(text, channel.guild.members, !!(mods?.UseEndearments));
    text = cleanMessage(text, mods);
 
@@ -186,9 +205,21 @@ const sendMessage = async (client: ClientUser, channel: TextChannel, text: strin
    if (mods?.ProcessSwaps) text = Swap.process(channel.guild.id, text);
    
    // TODO: Balance code blocks and such accounting for max length, if necessary
-   while (text !== "") {      
-      await channel.send(text.substring(0, MAX_LENGTH), { tts: !!(mods?.TTS), split: true });
-      text = text.substring(MAX_LENGTH);
+   let embeds = message.embeds ?? [];
+   let files = message.attachments ?? [];
+   // Can't send empty message with embeds to discord, hack around it 
+   if ((embeds.length > 0 || files.length > 0) && text === "") text = " "; 
+   while (text !== "" || embeds.length > 0 || files.length > 0) {      
+       //log(`Sending text: ${JSON.stringify(text)}`);
+      await channel.send({
+         content: text.substring(0, MAX_LENGTH),
+         embeds: embeds,
+         files: files,
+         tts: !!(mods?.TTS)
+      });
+      text = text.substring(MAX_LENGTH).trim();
+      embeds = [];
+      files = [];
    }
    return true;
 }
@@ -224,9 +255,11 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
    const formatCodes = {
       underline: "_",
       bold: "*",
+      bold2: "__",
       italic: "**",
       spoiler: "||",
-      strikethrough: "~~"
+      strikethrough: "~~",
+      code: "`"
    }
 
    const blockCodes = {
@@ -237,13 +270,13 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
    }
 
    /* Prevent injection of block escaping (someone maliciously putting '<[CODE]-[NUMBER]>' in the origin text */
-   const blocksRX = newRX(`<[${Object.values(blockCodes).join('')}]\-\d+>`, 'mug');
+   const blocksRX = newRX(`<[${Object.values(blockCodes).map(code => escapeRegExp(code)).join('')}]-\\d+>`, 'muigs');
    const injectionBlocks = extractBlocks(fullText, blockCodes.injections, blocksRX);
    const injected: string[] = injectionBlocks.blocks;
    fullText = injectionBlocks.text;
 
    /* Capture code blocks (between pairs of ```) as case insensitive and as-is regarding line breaks */
-   const codeRX = /```.+?```/muigs;
+   const codeRX = newRX('```.+?```', 'muigs');
    const extractedCode = extractBlocks(fullText, blockCodes.codeBlocks, codeRX);
    const codeBlocks: string[] = extractedCode.blocks;
    fullText = extractedCode.text;
@@ -261,8 +294,8 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
    fullText = extractedEmoticons.text;
 
    /* Prepare regexp for stripping formatting if required */
-   const codes = `(?:${escapeRegExp(Object.values(formatCodes).join('|'))})`;
-   const formatRX = newRX(`${codes}(?<Text>)${codes}`, 'ug');
+   const formatCodeRX = `(?:${Object.values(formatCodes).map(code => escapeRegExp(code)).join('|')})`;
+   const stripFormattingRX = newRX(`${formatCodeRX}+(?<Text>.+?)${formatCodeRX}+`, 'misug');   
 
    /* Split lines for further line-level processing */
    const lines = fullText.split(/\r?\n/ug);
@@ -273,26 +306,14 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
       let text = line;
 
       /* Replace bot name with 'my friend' (and strip initial) */
-      text = text.replace(newRX(`^${Brain.botName}:?\s*`, "ui"), "");
+      text = text.replace(newRX(`^${Brain.botName}:?\\s*`, "ui"), "");
       text = text.replace(newRX(Brain.botName, "uig"), getEndearment());
 
       /* Replace all channel mentions with 'my secret place' */
       // TODO: Change this to a rotating list of secret places
-      text = text.replace(/<#\d+>/uig, "my secret place");
-
-      /* Mild bug fix for broken brains: replace periods/other characters in the middle of full words (more than 1 characters) with a period then a space.
-         This should avoid causing problems with regular abbreviations (Dr., N.A.S.A, Mrs., etc.), and doing it after URLs should avoid breaking those */
-      text = text.replace(/([^\s\.)]{2,}?)([\.")\]?!,])([^\s\.")\]?!,])/uig, "$1$2 $3");
-      /* TODO: fix edge cases where comma should not have a space (for numbers, i.e. 2,000,000) */
-      /* TODO: fix edge cases where period is between things that aren't detected as URL but should be (i.e. sub.example.com) - period should not have space after */
-      /* TODO: fix edge cases where it is appropriate to have a character followed immediately by a quotation mark  */      
-
-      // Fix broken discord mentions caused by the above
-      text = text.replace(/<@!\s+(\d+)>/muig, "<@!$1>");
-
-      // TODO: test if this is broken or necessary
-      //text = text.replace(/"?(.+?)([\.)\]?!,])\s+"/uig, '"$1$2"');
-      
+      text = text.replace(newRX(`<#\\d+>`, "muig"), "my secret place");
+   
+    
       switch (mods?.Case) {
          case "unchanged":
             break;
@@ -305,7 +326,7 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
             break;
       }
       
-      if (mods?.StripFormatting) text = text.replace(formatRX, '$<Text>');
+      if (mods?.StripFormatting) text = text.replace(stripFormattingRX, '$<Text>');
 
       results.push(text);
    }
@@ -338,7 +359,7 @@ const extractBlocks = (text: string = "", symbol: string = "", regEx: RegExp | n
    if (matches) {
       for (let i = 0; i < matches.length; i++) {
          blocks.push(matches[i]);
-         text = text.replace(matches[i], `<${symbol}-${i}>`);
+         text = text.replace(newRX(matches[i], "musig"), `<${symbol}-${i}>`);
       }
    }
    return { text: text, blocks: blocks }
@@ -346,17 +367,17 @@ const extractBlocks = (text: string = "", symbol: string = "", regEx: RegExp | n
 const restoreBlocks = (text: string = "", symbol: string = "", blocks: string[] = []): string => {
    if (!text || !symbol || blocks.length === 0) return text;   
    for (let i = 0; i < blocks.length; i++) {
-      text = text.replace(`<${symbol}-${i}>`, blocks[i]);
+      text = text.replace(newRX(`<${symbol}-${i}>`, "musig"), blocks[i]);
    }
    return text;
 }
 
 const balanceText = (text: string): string => {
                
-   const isCodeSegmentsUnbalanced: boolean = (text.match(/`/mug) ?? []).length % 2 !== 0;
-   const numParenthesisStarted: number = (text.match(/\(/mug) ?? []).length;
-   const numParenthesisEnded: number = (text.match(/\)/mug) ?? []).length;
-   const isDoubleQuoteUnbalanced: boolean = (text.match(/"/mug) ?? []).length % 2 !== 0;
+   const isCodeSegmentsUnbalanced: boolean = (text.match(/`/musig) ?? []).length % 2 !== 0;
+   const numParenthesisStarted: number = (text.match(/\(/musig) ?? []).length;
+   const numParenthesisEnded: number = (text.match(/\)/musig) ?? []).length;
+   const isDoubleQuoteUnbalanced: boolean = (text.match(/"/musig) ?? []).length % 2 !== 0;
    
    if (isDoubleQuoteUnbalanced) {
       if (text.endsWith('"')) {

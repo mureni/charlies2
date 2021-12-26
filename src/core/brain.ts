@@ -1,6 +1,7 @@
 import { Presets, SingleBar } from "cli-progress";
 import { DBMap } from "../core/DBMap";
 import { createReadStream, readFileSync, existsSync, writeFileSync, statSync } from 'fs';
+import { log } from "./log";
 import readline from "readline";
 import { resolve } from "path";
 import { env, checkFilePath } from "../utils"; 
@@ -96,7 +97,7 @@ class Brain {
       }
    }
 
-   public static async trainFromFile(trainerName: string = "default", filetype: "json" | "txt" = "txt"): Promise<boolean | Error> {
+   public static async trainFromFile(trainerName: string = "default", filetype: "json" | "txt" = "txt", verbose: boolean = !!(env("NODE_ENV") === "development")): Promise<boolean | Error> {
       try {
          const trainerFile = resolve(checkFilePath("resources", `${trainerName}-trainer.${filetype}`));
          if (!existsSync(trainerFile)) throw new Error(`Unable to load brain data from file '${trainerFile}': file does not exist.`);
@@ -107,19 +108,23 @@ class Brain {
          } else if (filetype === "txt") {            
             
             const size = statSync(trainerFile).size;            
-            let counter = 0;
+            
 
             const readInterface = readline.createInterface({
                input: createReadStream(trainerFile, { encoding: "utf8" })
             });
             
+            const percentMark = Math.floor(size / 100);            
+            let counter = 0;
+
             readInterface.on("line", async line => {
-               await Brain.learn(line);
-               counter += line.length + 1;
-               console.log(`Learned ${counter} of ${size} bytes...`);
+               await Brain.learn(line);               
+               counter += line.length;
+               if (verbose && ((counter % percentMark) === 0 || counter < percentMark)) log(`Learned ${counter} of ${size} bytes`);
             });
-            readInterface.on("close", () => {
-               console.log(`Finished learning!`);               
+
+            readInterface.on("close", () => {               
+               log(`Finished learning!`);               
             });
          
             return true;
@@ -147,7 +152,7 @@ class Brain {
       }
    }
 
-   public static async fromJSON(json: BrainJSON, verbose: boolean = !!(process.env.NODE_ENV === "development")): Promise<boolean> {
+   public static async fromJSON(json: BrainJSON, verbose: boolean = !!(env("NODE_ENV") === "development")): Promise<boolean> {
       const hasLexicon = Reflect.has(json, "Lexicon");
       const hasNGrams = Reflect.has(json, "nGrams");
       

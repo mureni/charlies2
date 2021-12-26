@@ -22,7 +22,7 @@ const story: Trigger = {
          story.add(line);
          topic = seed !== "" ? seed : line;
       }
-      
+      const lines: string[] = [];      
       for (let line of story.values()) {
          if (/yourself/iu.test(directedTo)) {
             line = `*${line.trim()}*`;
@@ -31,9 +31,10 @@ const story: Trigger = {
          } else if (directedTo !== "") {
             output.directedTo = directedTo;
          }
-         output.results.push(line);
+         lines.push(line);
       }
-      return output;         
+      output.results = [ { contents: lines.join("\n") }];
+      return output;
    }
 }
 

@@ -16,23 +16,23 @@ const blacklistAdd: Trigger = {
       const command = matches.groups.command || "";
 
       if (!username || !command) {
-         output.results = [`missing parameters, see \`!help blacklist-add\` for details`];
+         output.results = [ { contents: `missing parameters, see \`!help blacklist-add\` for details` } ];
          return output;
       }
 
       context.guild?.members.fetch(username).then(member => {
          const trigger = Triggers.list.find(trigger => trigger.id.toLowerCase() === command.toLowerCase());
          if (!trigger) { 
-            output.results = [`command '${command}' does not exist. see \`!help commands\` for a simple list of commands.`];
+            output.results = [ { contents: `command '${command}' does not exist. see \`!help commands\` for a simple list of commands.` } ];
             return output;
          }
          
          Blacklist.add(context.guild?.id ?? "DM", member.user.id, trigger.id);            
 
-         output.results = [`user '${username}' added to blacklist for command \`${command}\``];
+         output.results = [ { contents: `user '${username}' added to blacklist for command \`${command}\`` } ];
          return output;
       }).catch(() => {
-         output.results = [`no user '${username}' found on this guild`];
+         output.results = [ { contents: `no user '${username}' found on this guild` } ];
          return output;
       });
 
@@ -53,21 +53,21 @@ const blacklistRemove: Trigger = {
       const command = matches.groups.command || "";
 
       if (!username || !command) {
-         output.results = [`missing parameters, see \`!help blacklist-add\` for details`];
+         output.results = [{ contents: `missing parameters, see \`!help blacklist-add\` for details` }];
          return output;
       }
 
       context.guild?.members.fetch(username).then(member => {
          const trigger = Triggers.list.find(trigger => trigger.id.toLowerCase() === command.toLowerCase());
          if (!trigger) { 
-            output.results = [`command '${command}' does not exist. see \`!help commands\` for a simple list of commands.`];
+            output.results = [{ contents: `command '${command}' does not exist. see \`!help commands\` for a simple list of commands.` } ];
             return output;
          }      
          Blacklist.remove(context.guild?.id ?? "DM", member.user.id, trigger.id);
-         output.results = [`user '${username}' removed from blacklist for command \`${command}\``];
+         output.results = [{ contents: `user '${username}' removed from blacklist for command \`${command}\`` } ];
          return output;
       }).catch(() => {
-         output.results = [`no user '${username}' found on this guild`];
+         output.results = [{ contents: `no user '${username}' found on this guild`}];
          return output;
       })
       

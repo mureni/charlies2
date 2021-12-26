@@ -10,7 +10,7 @@ const enableBotLearning: Trigger = {
    action: () => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
       Brain.settings.learnFromBots = true;
-      output.results = ["bot learning enabled"];
+      output.results = [{contents: "bot learning enabled"}];
       return output;
    }
 }
@@ -25,7 +25,7 @@ const disableBotLearning: Trigger = {
    action: () => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
       Brain.settings.learnFromBots = false;
-      output.results = ["bot learning disabled"];
+      output.results = [{contents: "bot learning disabled"}];
       return output;
    }
 }

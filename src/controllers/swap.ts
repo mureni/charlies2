@@ -18,7 +18,11 @@ class Swap {
          writeFileSync(filename, JSON.stringify(data, null, 2), "utf8");
          return true;
       } catch (error) {
-         return error;
+         if (error instanceof Error) {
+            return error;
+         } else {
+            return new Error("Unknown error occurred while saving swap data");
+         }
       }
    }
    
@@ -37,7 +41,11 @@ class Swap {
          }
          return true;
       } catch (error) {
-         return error;
+         if (error instanceof Error) {
+            return error;
+         } else {
+            return new Error("Unknown error occurred while loading swap data");
+         }
       }
    }
    
@@ -51,7 +59,7 @@ class Swap {
          if (newWord === `<blank>`) newWord = "";
          text = text.replace(new RegExp(word, "uig"), newWord);
       }
-      text = text.replace(/\s{2,}/g, ' ');
+      text = text.replace(/\s{2,}/g, ' ').trim();
       return text;
    }
    public static getList (guildID: string): string[] {

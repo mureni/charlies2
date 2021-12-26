@@ -1,4 +1,4 @@
-import { TriggerResult, Trigger } from "../core";
+import { TriggerResult, Trigger } from "../core/index";
 
 const a0l: Trigger = {
    id: "a0l",
@@ -9,7 +9,7 @@ const a0l: Trigger = {
    icon: "aol.png",
    action: () => {
       const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' }};
-      output.results = [phrases[Math.floor(Math.random() * phrases.length)]];      
+      output.results = [ { contents: phrases[Math.floor(Math.random() * phrases.length)] } ];
       return output;
    }
 }

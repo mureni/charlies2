@@ -41,7 +41,7 @@ const pray: Trigger = {
          response.push(allWords[wordNumber]);
       }
       
-      output.results = [response.join(" ")];
+      output.results = [{ contents: response.join(" ") }];
       return output;
    }
 }

@@ -5,9 +5,13 @@ import { ModificationType } from "./messageProcessor";
 import { log } from "./log";
 import { Blacklist } from "../controllers";
 import { checkFilePath, env } from "../utils";
-
+type OutgoingMessage = {
+   contents: string,
+   embeds?: MessageEmbed[],
+   attachments?: MessageAttachment[]
+}
 interface TriggerResult {
-   results: (string | MessageEmbed | MessageAttachment)[];
+   results: OutgoingMessage[];
    modifications: ModificationType;
    directedTo?: string;
    triggered?: boolean;
@@ -48,6 +52,7 @@ class Triggers {
             log(`Error loading trigger file ${file}: ${error}`, 'error');
          });
       }
+      Triggers.list = triggers;
       return triggers;
    }
 
@@ -71,7 +76,7 @@ class Triggers {
       }
       
       // TODO: Expand permissions and owner checking beyond Discord
-      const isAdmin = !!(message.member) && (message.member.hasPermission("ADMINISTRATOR") || message.member.hasPermission("MANAGE_GUILD"));
+      const isAdmin = !!(message.member) && (message.member.permissions.has("ADMINISTRATOR") || message.member.permissions.has("MANAGE_GUILD"));
       const isBotOwner = message.author.id === env("BOT_OWNER_DISCORD_ID");
 
       for (const trigger of Triggers.list) {
@@ -82,14 +87,17 @@ class Triggers {
 
          if (!Blacklist.allowed(message.guild?.id ?? "DM", message.author.id, trigger.id)) {
             output.directedTo = getDisplayName(sender, message.guild?.members);
-            output.results = [`you are not allowed to execute \`${trigger.id}\` in ${message.guild?.name ?? 'direct messages'}`];
+            output.results = [{ contents: `you are not allowed to execute \`${trigger.id}\` in ${message.guild?.name ?? 'direct messages'}` }];
             return { ...output, triggered: true, triggeredBy: trigger.id }
          }
 
          const triggerOutput = await trigger.action(message, matches);
-         if (triggerOutput.results.length > 0 || triggerOutput.triggered) return { ...triggerOutput, triggered: true, triggeredBy: trigger.id };
+         if (triggerOutput.results.length > 0 || triggerOutput.triggered) {
+            //log(`Successful trigger output: ${JSON.stringify(triggerOutput)}`);
+            return { ...triggerOutput, triggered: true, triggeredBy: trigger.id };
+         }
       }
-
+      //log(`Trigger output: ${JSON.stringify(output)}`);
       return { ...output, triggered: false };
    }
    
@@ -110,27 +118,30 @@ class Triggers {
       if (command === "commands") {
          const list: string[] = [];
          Triggers.list.forEach(trigger => list.push(trigger.id));
-         output.results = [`Available commands: \`${list.join(", ")}\``, `Type !help <command> for more information`];
+         output.results = [
+            { contents: `Available commands: \`${list.join(", ")}\`` },
+            { contents: `Type !help <command> for more information` }
+         ];
       } else {
          const found = Triggers.list.find(trigger => (command.match(trigger.command) !== null || command.match(trigger.id) !== null));
       
          if (!found) {
-            output.results = ["no such command exists"];
+            output.results = [{ contents: "no such command exists" }];
             return output;
          }
          const entry = new MessageEmbed()
             .setColor("#0099ff")
             .setTitle(`Help for ${found.name}`)
             .setDescription(found.description)
-            .setFooter('Items within [square] or <angled> brackets are optional. [Square brackets] means the contents can be changed by you, <angled brackets> means you have to type exactly the contents of the angled brackets.')
-            .attachFiles(found.icon ? [checkFilePath("resources", `icons/${found.icon}`)] : [checkFilePath("resources", "icons/help.png")])
-            .setThumbnail(found.icon ? `attachment://${found.icon}` : "attachment://help.png")
+            .setFooter('Items within [square] or <angled> brackets are optional. [Square brackets] means the contents can be changed by you, <angled brackets> means you have to type exactly the contents of the angled brackets.')            
+            .setThumbnail('attachment://help.png')
             .addField('Usage', found.usage);
-         if (found.adminOnly) entry.setColor('orange').setTitle(`Server Admin Only - Help for ${found.name}`);
-         if (found.ownerOnly) entry.setColor('red').setTitle(`Bot Owner Only - Help for ${found.name}`);
+         if (found.adminOnly) entry.setColor("ORANGE").setTitle(`Server Admin Only - Help for ${found.name}`);
+         if (found.ownerOnly) entry.setColor("RED").setTitle(`Bot Owner Only - Help for ${found.name}`);
          if (found.example) entry.addField('Example', found.example);
-         
-         output.results.push(entry);
+         const attachment: MessageAttachment = new MessageAttachment(found.icon ? checkFilePath("resources", `icons/${found.icon}`) : checkFilePath("resources", "icons/help.png"), "help.png");
+
+         output.results = [ { contents: "", embeds: [ entry ], attachments: [ attachment ] } ];
       }
            
       return output;

@@ -15,7 +15,7 @@ const addSwap: Trigger = {
       if (!these || !those) return output;
       
       Swap.add(context.guild?.id ?? context.author.id, these, those);
-      output.results = [`swapping \`${these}\` with \`${those}\` for ${context.guild?.name ?? 'DMs with you'}`];
+      output.results = [{ contents: `swapping \`${these}\` with \`${those}\` for ${context.guild?.name ?? 'DMs with you'}` }];
       return output;
    }
 }
@@ -32,10 +32,10 @@ const removeSwap: Trigger = {
       if (!these) return output;
       if (these.match(/<all>/ui)) {
          Swap.clear(context.guild?.id ?? context.author.id);
-         output.results = [`removed all words from the swap list for ${context.guild?.name ?? 'DMs with you'}`];
+         output.results = [{ contents: `removed all words from the swap list for ${context.guild?.name ?? 'DMs with you'}` }];
       } else {
          Swap.remove(context.guild?.id ?? context.author.id, these);
-         output.results = [`removed \`${these}\` from the swap list for ${context.guild?.name ?? 'DMs with you'}`];
+         output.results = [{ contents: `removed \`${these}\` from the swap list for ${context.guild?.name ?? 'DMs with you'}` }];
       }
       return output;
    }
@@ -50,9 +50,9 @@ const swapList: Trigger = {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
       const swaps: string[] = Swap.getList(context.guild?.id ?? context.author.id);
       if (swaps.length === 0) {
-         output.results = ["no swaps defined for this server yet"];
+         output.results = [ { contents: "no swaps defined for this server yet" }];
       } else {
-         output.results = [swaps.join(', ')];
+         output.results = [ { contents: swaps.join(', ') }];
       }
       
       return output;
@@ -68,7 +68,7 @@ const swapSave: Trigger = {
    action: () => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
       const saveResults: boolean | Error = Swap.save();
-      output.results = (saveResults instanceof Error) ? ["can't save swap data, check error log for details"] : ["swap data saved"];
+      output.results = [ { contents: (saveResults instanceof Error) ? "can't save swap data, check error log for details" : "swap data saved" } ];
       return output;
    }
 }

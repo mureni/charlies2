@@ -10,7 +10,7 @@ const madlib: Trigger = {
    action: () => {
       const output: TriggerResult = { results: [], modifications: { ProcessSwaps: true }, directedTo: undefined };            
       const size = 2 + Math.floor(Math.random() * 3);
-      output.results = [Madlibs.generate(size)];
+      output.results = [{contents: Madlibs.generate(size)}];
       return output;
    }
 }
@@ -29,7 +29,7 @@ const madlibAddWord: Trigger = {
       const word = cleanMessage((matches.groups.word || "").trim(), { Case: "lower", UseEndearments: true });
       
       const success = Madlibs.addVocab(vocabType, word);
-      output.results = [success ? `added \`${word}\` to vocabulary list for \`${vocabType}\`` : `can't do that, try again`];
+      output.results = [{ contents: success ? `added \`${word}\` to vocabulary list for \`${vocabType}\`` : `can't do that, try again` }];
       
       return output;
    }
@@ -48,7 +48,7 @@ const madlibRemoveWord: Trigger = {
       const word = cleanMessage((matches.groups.word || "").trim(), { Case: "lower", UseEndearments: true });
       
       const success = Madlibs.removeVocab(vocabType, word);
-      output.results = [success ? `removed \`${word}\` from vocabulary list for \`${vocabType}\`` : `can't do that, try again`];
+      output.results = [{ contents: success ? `removed \`${word}\` from vocabulary list for \`${vocabType}\`` : `can't do that, try again` }];
       
       return output;
    }
@@ -68,7 +68,7 @@ const madlibAddPattern: Trigger = {
       const pattern = cleanMessage((matches.groups.pattern || "").trim(), { Case: "lower", UseEndearments: true });
 
       const success = Madlibs.addPattern(pattern);
-      output.results = [success ? `added \`${pattern}\` to pattern list` : `can't do that, try again`];
+      output.results = [{ contents: success ? `added \`${pattern}\` to pattern list` : `can't do that, try again` }];
       
       return output;
    }
@@ -87,7 +87,7 @@ const madlibRemovePattern: Trigger = {
       const pattern = cleanMessage((matches.groups.pattern || "").trim(), { Case: "lower", UseEndearments: true });
       
       const success = Madlibs.removePattern(pattern);
-      output.results = [success ? `removed \`${pattern}\` from pattern list` : `can't do that, try again`];
+      output.results = [ { contents: success ? `removed \`${pattern}\` from pattern list` : `can't do that, try again` }];
       
       return output;
    }

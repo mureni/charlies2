@@ -32,13 +32,71 @@ The following are the required values for the bot settings:
 1. Copy the following files and directories:
     - `./resources/*`
     - `./src/*`
+    - `./tools/*` (NOTE: you should also run `chmod +x ./tools/*` for the scripts to properly execute)
     - `./Dockerfile`
+    - `./docker-compose.yml`
     - `./package.json`
     - `./tsconfig.json`
     - `./README.md`
     - `./.gitattributes`
-2. Create the following files and directories:
+    - `./.dockerignore`
+ 2. Create the following files and directories:
     - `./.env` (See [Required environment variables](#required-environmental-variables))
     - `./data/`
     - (Optional) `./resources/{bot-name}-settings.json` (See [Bot settings](#bot-settings))
-    - (Optional) `./data/{bot-name}-trainer.json` (See [Example trainer schema](https://github.com/mureni/charlies2/issues/1#issuecomment-774998882) - NB: Format expected to be deprecated in favor of raw text and/or other pre-processors)
+    - (Optional) `./resources/{bot-name}-trainer.{txt|json}` (See [Example trainer schema](https://github.com/mureni/charlies2/issues/1#issuecomment-774998882) 
+        - You can also create a default trainer by running the following commands:
+            - `cd ./tools/`
+            - `./generate-trainer.sh`
+        - This will create the file `./resources/default-trainer.txt` based off of data from the [ConvAI2 competition](https://convai.io)
+        - WARNING: This requires the `curl` and `jq` programs to be installed
+3. Install dependencies via `npm`:
+    - `npm install`
+4. Build a distribution version of the source:
+    - `npm run build`
+    - `docker-compose build`
+5. Run `docker-compose` as a daemon:
+    - `docker-compose up -d`
+
+# Steps to install when using git
+1. Create a directory for the project to exist in:
+    - `mkdir -p ~/charlies`
+    - `cd ~/charlies`
+2. Clone the project:
+    `git clone https://github.com/mureni/charlies2.git ~/charlies`
+3. Create the following files and directories:
+    - `./.env` (See [Required environment variables](#required-environmental-variables))
+    - `./data/`
+    - (Optional) `./resources/{bot-name}-settings.json` (See [Bot settings](#bot-settings))
+    - (Optional) `./resources/{bot-name}-trainer.{txt|json}` (See [Example trainer schema](https://github.com/mureni/charlies2/issues/1#issuecomment-774998882) 
+        - You can also create a default trainer by running the following commands:
+            - `cd ./tools/`
+            - `./generate-trainer.sh`
+        - This will create the file `./resources/default-trainer.txt` based off of data from the [ConvAI2 competition](https://convai.io)
+        - WARNING: This requires the `curl` and `jq` programs to be installed4. Install dependencies via `npm`:
+    - `npm install`
+5. Build a distribution version of the source:
+    - `npm run build`
+    - `docker-compose build`
+6. Run `docker-compose` as a daemon:
+    - `docker-compose up -d`
+
+# Steps to update when using git
+1. Run the `update` script:
+    - `./tools/update.sh`
+
+The update script, if not present, can be made as follows:
+```bash
+#!/bin/bash
+echo "Stopping docker container for charlies..."
+docker-compose down
+echo "Retrieving most recent code from remote git origin (github), master branch..."
+git pull origin master
+echo "Rebuilding charlies docker image as needed..."
+docker-compose build
+echo "Starting docker container based off of charlies docker image..."
+docker-compose up -d
+```
+
+This will pull the most recent code from the remote git repo
+

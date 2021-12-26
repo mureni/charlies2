@@ -1,4 +1,5 @@
-import { createLogger, format, transports } from "winston";
+import winston from "winston";
+const { createLogger, format, transports } = winston;
 import { env } from "../utils";
 const { combine, colorize, timestamp, printf } = format;
 

@@ -13,7 +13,7 @@ const choose: Trigger = {
       const selectedOption = options[Math.floor(Math.random() * options.length)];
       
       output.directedTo = getDisplayName(context.author);      
-      output.results = [`${selectedOption}, because: ${await Brain.getResponse(await Brain.getSeed(selectedOption))}`];
+      output.results = [{ contents: `${selectedOption}, because: ${await Brain.getResponse(await Brain.getSeed(selectedOption))}` }];
       return output;
    }
 }

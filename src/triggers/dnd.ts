@@ -29,9 +29,9 @@ const roll: Trigger = {
       const rollResults = rollDie(numRolls, numSides);
 
       output.directedTo = getDisplayName(context.author);
-      output.results = [         
-         `**Result**: ${numRolls}d${numSides} (${rollResults.join(", ")})`,
-         `**Total**: ${sum(rollResults)}`
+      output.results = [          
+         { contents: `**Result**: ${numRolls}d${numSides} (${rollResults.join(", ")})` },
+         { contents: `**Total**: ${sum(rollResults)}` }
       ];
       return output;
    }

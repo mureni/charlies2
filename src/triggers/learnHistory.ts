@@ -32,7 +32,7 @@ const learnHistory: Trigger = {
          if (!channelID) channelID = context.channel.id;
          
          const channel: TextChannel | undefined = context.guild?.channels.resolve(channelID) as TextChannel ?? undefined;
-         if (!channel || channel.type !== "text") {
+         if (!channel || channel.type !== "GUILD_TEXT") {
             await context.reply(`that is not a valid text channel in this guild`);
             return output;
          }

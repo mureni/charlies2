@@ -10,7 +10,7 @@ const hippy: Trigger = {
    action: () => {
       const output: TriggerResult = { results: [], modifications: { ProcessSwaps: true }, directedTo: undefined };            
       const size = 6 + Math.floor(Math.random() * 3);
-      output.results = [Hippy.generate(size)];
+      output.results = [ { contents: Hippy.generate(size) }];
       return output;
    }
 }

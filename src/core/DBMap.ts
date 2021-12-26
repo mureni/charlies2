@@ -217,7 +217,7 @@ export class DBMap<K, V> {
    public initialize = (datafile: string): void => {
       if (!datafile) return;
       this.datafile = datafile;
-      this.clear();
+      this.clear(); // Note: clear() also runs initDB()
    }
   
    public *entries(): IterableIterator<[K, V]> {

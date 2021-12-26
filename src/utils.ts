@@ -1,4 +1,4 @@
-import * as AppRootPath from "app-root-path";
+import AppRootPath from "app-root-path";
 import { resolve } from "path";
 import { mkdirSync, existsSync, accessSync, constants } from "fs";
 

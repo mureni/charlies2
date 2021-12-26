@@ -39,8 +39,8 @@ const lotto: Trigger = {
       const unique = matches.groups.unique ? true : false;
       const numbers = drawLotto(howMany, low, high, unique);
       output.results = [
-         `${unique && (howMany > Math.abs(high - low) + 1) ? 'not enough unique numbers to do that, but i did my best! ' : ''}providing ${numbers.length}${unique ? ' unique' : ''} number${numbers.length !== 1 ? 's' : ''} between ${low} and ${high}${howMany <= numbers.length && parseInt(matches.groups.number) > howMany ? ` (cutting you off at ${howMany} numbers btw)` : ''}:`,
-         numbers.join(", ")
+         { contents: `${unique && (howMany > Math.abs(high - low) + 1) ? 'not enough unique numbers to do that, but i did my best! ' : ''}providing ${numbers.length}${unique ? ' unique' : ''} number${numbers.length !== 1 ? 's' : ''} between ${low} and ${high}${howMany <= numbers.length && parseInt(matches.groups.number) > howMany ? ` (cutting you off at ${howMany} numbers btw)` : ''}:` },
+         { contents: numbers.join(", ") }
       ];
       return output;
    }
@@ -84,7 +84,7 @@ const checkem: Trigger = {
          result = `*${result}*`;
       }
       
-      output.results = [result];
+      output.results = [{ contents: result }];
       return output;
    }
 }
