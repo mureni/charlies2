@@ -64,10 +64,10 @@ const interpolateUsers = (text: string, members: GuildMemberManager | undefined 
       /* Replace all known aliases for each user with the user's known name */
       // TODO: Do not replace words that are also in the lexicon as actual words 
       for (let alias of KnownUsers.get(id)?.aliases.values() ?? []) {         
-         text = text.replace(newRX(`\b${escapeRegExp(alias)}\b`, "uig"), displayName);
+         text = text.replace(newRX(`\\b${escapeRegExp(alias)}\\b`, "uig"), displayName);
       }
-      text = text.replace(newRX(`<@!?\s*${escapeRegExp(id)}>`, "uig"), displayName);
-      if (useEndearments) text = text.replace(newRX(`\b${escapeRegExp(displayName)}\b`, "uig"), getEndearment());      
+      text = text.replace(newRX(`<@!?\\s*${escapeRegExp(id)}>`, "uig"), displayName);
+      if (useEndearments) text = text.replace(newRX(`\\b${escapeRegExp(displayName)}\\b`, "uig"), getEndearment());      
    }
    /* Replace any leftover user mentions with endearments */
    text = text.replace(/<@!?\s*\d+>/uig, getEndearment());
@@ -81,8 +81,8 @@ const interpolateUsers = (text: string, members: GuildMemberManager | undefined 
       members.fetch().then(fetchedMembers => {
          fetchedMembers.forEach(member => {
             const displayName = getDisplayName(member.user, members);
-            text = text.replace(newRX(`<@!?\s*${escapeRegExp(member.id)}>`, "uig"), displayName);
-            if (useEndearments) text = text.replace(newRX(`\b${escapeRegExp(displayName)}\b`, "uig"), getEndearment());
+            text = text.replace(newRX(`<@!?\\s*${escapeRegExp(member.id)}>`, "uig"), displayName);
+            if (useEndearments) text = text.replace(newRX(`\\b${escapeRegExp(displayName)}\\b`, "uig"), getEndearment());
          });        
       });
    }
