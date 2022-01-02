@@ -359,7 +359,7 @@ const extractBlocks = (text: string = "", symbol: string = "", regEx: RegExp | n
    if (matches) {
       for (let i = 0; i < matches.length; i++) {
          blocks.push(matches[i]);
-         text = text.replace(newRX(matches[i], "musig"), `<${symbol}-${i}>`);
+         text = text.replace(newRX(escapeRegExp(matches[i]), "musig"), `<${symbol}-${i}>`);
       }
    }
    return { text: text, blocks: blocks }
