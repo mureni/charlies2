@@ -54,7 +54,7 @@ const emoticonRXs = [
    `:|`, `:$`, `://)`, `://3`, `:-X`, `:X`, `:-#`, `:#`, `:-&`, `:&`, `O:-)`, `O:)`, `0:-3`, `0:3`, `0:-)`, `0:)`,
    `;^)`, `>:-)`, `>:)`, `}:-)`, `}:)`, `3:-)`, `3:)`, `>;)`, `>:3`, `>;3`, `|;-)`, `|-O`, `:-J`, `#-)`, `%-)`, `%)`,
    `:-###..`, `:###..`, `<:-|`, `',:-|`, `',:-l`, `</3`, `<\\3`, `<3` 
-].map(emoticon => newRX(`\b${escapeRegExp(emoticon)}\b`)).join('|');
+].map(emoticon => newRX(`\\b${escapeRegExp(emoticon)}\\b`)).join('|');
 
 //erx = [`:-)`, `:)`, `:-]`, `:]`, `:-3`, `:3`, `:->`, `:>`, `8-)`, `8)`, `:-}`, `:}`, `:o)`, `:c)`, `:^)`, `=]`, `=)`, `:-D`, `:D`, `8-D`, `8D`, `x-D`, `xD`, `X-D`, `XD`, `=D`, `=3`, `B^D`, `:-))`, `:-(`, `:(`, `:-c`, `:c`,`:-<`, `:<`, `:-[`, `:[`, `:-||`, `>:[`, `:{`, `:@`, `>:(`, `:'-(`, `:'(`, `:'-)`, `:')`, `D-':`, `D:<`, `D:`, `D8`, `D;`, `D=`, `DX`, `:-O`, `:O`, `:-o`, `:o`, `:-0`, `8-0`, `>:O`, `:-*`, `:*`, `:×`, `;-)`, `;)`, `*-)`, `*)`, `;-]`, `;]`, `;^)`, `:-,`, `;D`, `:-P`, `:P`, `X-P`, `XP`, `x-p`, `xp`, `:-p`, `:p`, `:-Þ`, `:Þ`, `:-þ`, `:þ`, `:-b`, `:b`, `d:`, `=p`, `>:P`, `:-/`, `:/`, `:-.`, `>:\\`, `>:/`, `:\\`, `=/`, `=\\`, `:L`, `=L`, `:S`,`:-|`, `:|`, `:$`, `://)`, `://3`, `:-X`, `:X`, `:-#`, `:#`, `:-&`, `:&`, `O:-)`, `O:)`, `0:-3`, `0:3`, `0:-)`, `0:)`, `;^)`, `>:-)`, `>:)`, `}:-)`, `}:)`, `3:-)`, `3:)`, `>;)`, `>:3`, `>;3`, `|;-)`, `|-O`, `:-J`, `#-)`, `%-)`, `%)`, `:-###..`, `:###..`, `<:-|`, `',:-|`, `',:-l`, `</3`, `<\\3`, `<3` ].map(emoticon => emoticon.replace(/[.*+?^${}()|[\]\\\-]/ug, '\\$&')).join('|');
 
@@ -70,8 +70,8 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
    let cleanText = cleanMessage(message, { Case: "lower", UseEndearments: true });
 
    /* Remove initial references to self (e.g. "charlies learn this text" -> "learn this text", "charlies: hi" -> "hi") */
-   cleanText = cleanText.replace(newRX(`^\s*\b${escapeRegExp(client.username)}\b[:,]?\s*`, "uig"), "");
-   cleanText = cleanText.replace(newRX(`^\s*\b${escapeRegExp(Brain.botName)}\b[:,]?\s*`, "uig"), "");
+   cleanText = cleanText.replace(newRX(`^\\s*\\b${escapeRegExp(client.username)}\\b[:,]?\\s*`, "uig"), "");
+   cleanText = cleanText.replace(newRX(`^\\s*\\b${escapeRegExp(Brain.botName)}\\b[:,]?\\s*`, "uig"), "");
 
    const processed: TriggerResult = await Triggers.process(message);
    //log(`Trigger results: ${JSON.stringify(processed)}`);
@@ -246,11 +246,11 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
    */
    // fullText = fullText.replace(/(\D+?)>(.+?)/muig, "$1\n>$2");
    /* Fix any broken custom emojis */
-   fullText = fullText.replace(/<:(\w+?):(\d+?)\s+>/muig, "<:$1:$2>");
+   fullText = fullText.replace(/<:(\w+?):(\d+?)\s+>/musig, "<:$1:$2>");
   
 
    /* Remove ANSI control characters and RTL marks (skipping CR and LF) */      
-   fullText = fullText.replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u200f\u061c\u00ad]/muig, '');
+   fullText = fullText.replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u200f\u061c\u00ad]/musig, '');
       
    const formatCodes = {
       underline: "_",
@@ -270,7 +270,7 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
    }
 
    /* Prevent injection of block escaping (someone maliciously putting '<[CODE]-[NUMBER]>' in the origin text */
-   const blocksRX = newRX(`<[${Object.values(blockCodes).map(code => escapeRegExp(code)).join('')}]-\\d+>`, 'muigs');
+   const blocksRX = newRX(`<[${Object.values(blockCodes).join('')}]-\\d+>`, 'muigs');
    const injectionBlocks = extractBlocks(fullText, blockCodes.injections, blocksRX);
    const injected: string[] = injectionBlocks.blocks;
    fullText = injectionBlocks.text;
@@ -298,20 +298,24 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
    const stripFormattingRX = newRX(`${formatCodeRX}+(?<Text>.+?)${formatCodeRX}+`, 'misug');   
 
    /* Split lines for further line-level processing */
-   const lines = fullText.split(/\r?\n/ug);
+   const lines = fullText.split(/\r?\n/musig);
+   
+   /* Ensure no rogue RegExp-breaking characters in the bot name */
+   const cleanBotName = escapeRegExp(Brain.botName);
 
    let results: string[] = [];
    for (const line of lines) {
 
       let text = line;
 
-      /* Replace bot name with 'my friend' (and strip initial) */
-      text = text.replace(newRX(`^${Brain.botName}:?\\s*`, "ui"), "");
-      text = text.replace(newRX(Brain.botName, "uig"), getEndearment());
+      /* Strip initial use of the bot's name (most common usage being "botname: text text text" with or without the ":") */      
+      text = text.replace(newRX(`^\\s*${cleanBotName}:?\\s*`, "musig"), "");
+      /* Replace any remaining references to the bot's name with 'my friend' or similar generic endearment */
+      text = text.replace(newRX(cleanBotName, "musig"), getEndearment());
 
       /* Replace all channel mentions with 'my secret place' */
       // TODO: Change this to a rotating list of secret places
-      text = text.replace(newRX(`<#\\d+>`, "muig"), "my secret place");
+      text = text.replace(newRX(`<#\\d+>`, "musig"), "my secret place");
    
     
       switch (mods?.Case) {
@@ -337,6 +341,9 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
 
    /* Restore URLs */
    if (urls.length > 0) result = restoreBlocks(result, blockCodes.URLs, urls);
+   
+   /* Balance brackets and quotation marks and such. Do this before restoring code blocks to avoid counting ``` as 3x ` */
+   if (mods?.Balance) result = balanceText(result);
 
    /* Restore code blocks */
    if (codeBlocks.length > 0) result = restoreBlocks(result, blockCodes.codeBlocks, codeBlocks);
@@ -344,8 +351,7 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
    /* Restore injected block escape attempts */
    if (injected.length > 0) result = restoreBlocks(result, blockCodes.injections, injected);
 
-   // Last step: balance brackets and quotation marks and such
-   if (mods?.Balance) result = balanceText(result);
+
    
    return result;
 }
@@ -353,53 +359,76 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
 const extractBlocks = (text: string = "", symbol: string = "", regEx: RegExp | null = null): { text: string, blocks: string[] } => {
    /* "Extracts" text matching the provided regular expression, saving it "as-is" and replacing
        it with a <[symbol]-[index]> where index is each instance of the text matching the regular expression */
+       
+   /* NOTE: There should be only one match per <[symbol]-[index]>. Do not use matchAll/replaceAll for this.
+            Let the regexp decide if the match is global, since this will work itself out in the number of matches found. */
    if (!text || !symbol || !regEx) return { text: text, blocks: [] };   
    const blocks: string[] = [];
    const matches = text.match(regEx);
    if (matches) {
       for (let i = 0; i < matches.length; i++) {
          blocks.push(matches[i]);
-         text = text.replace(newRX(escapeRegExp(matches[i]), "musig"), `<${symbol}-${i}>`);
+         text = text.replace(matches[i], `<${symbol}-${i}>`);
       }
    }
    return { text: text, blocks: blocks }
 }
 const restoreBlocks = (text: string = "", symbol: string = "", blocks: string[] = []): string => {
+   /* NOTE: There should be only one match per <[symbol]-[index]>. Do not use RegExp or replaceAll for this.
+            The data that is being restored is plain text, not to be evaluated any further. */
    if (!text || !symbol || blocks.length === 0) return text;   
    for (let i = 0; i < blocks.length; i++) {
-      text = text.replace(newRX(`<${symbol}-${i}>`, "musig"), blocks[i]);
+      text = text.replace(`<${symbol}-${i}>`, blocks[i]);
    }
    return text;
 }
 
 const balanceText = (text: string): string => {
-               
-   const isCodeSegmentsUnbalanced: boolean = (text.match(/`/musig) ?? []).length % 2 !== 0;
-   const numParenthesisStarted: number = (text.match(/\(/musig) ?? []).length;
-   const numParenthesisEnded: number = (text.match(/\)/musig) ?? []).length;
-   const isDoubleQuoteUnbalanced: boolean = (text.match(/"/musig) ?? []).length % 2 !== 0;
    
-   if (isDoubleQuoteUnbalanced) {
-      if (text.endsWith('"')) {
-         text = '"' + text;
-      } else {
-         text = text + '"';
-      }
-   }
-   if (numParenthesisStarted < numParenthesisEnded) {
-      text = "(".repeat(numParenthesisEnded - numParenthesisStarted) + text;
-   } else if (numParenthesisStarted > numParenthesisEnded) {
-      text = text + ")".repeat(numParenthesisStarted - numParenthesisEnded);
-   }
-   if (isCodeSegmentsUnbalanced) {
-      if (text.endsWith('`')) {
-         text = '`' + text;
-      } else { 
-         text = text + '`';
-      }
-   }
-   return text; 
+   const lines = text.split(/\r?\n/musig);
+   const results: string[] = [];
 
+   for (let line of lines) {
+   
+      const isCodeSegmentsUnbalanced: boolean = (line.match(/`/musig) ?? []).length % 2 !== 0;
+      const numParenthesisStarted: number = (line.match(/\(/musig) ?? []).length;
+      const numParenthesisEnded: number = (line.match(/\)/musig) ?? []).length;
+      const isDoubleQuoteUnbalanced: boolean = (line.match(/"/musig) ?? []).length % 2 !== 0;
+      
+      if (isDoubleQuoteUnbalanced) {
+         if (line.endsWith('"')) {
+            line = '"' + line;            
+         } else {
+            line = line + '"';            
+         }
+      }
+      if (numParenthesisStarted < numParenthesisEnded) {
+         line = "(".repeat(numParenthesisEnded - numParenthesisStarted) + line;
+      } else if (numParenthesisStarted > numParenthesisEnded) {
+         line = line + ")".repeat(numParenthesisStarted - numParenthesisEnded);
+      }
+      if (isCodeSegmentsUnbalanced) {
+         if (line.endsWith('`')) {
+            line = '`' + line;
+         } else { 
+            line = line + '`';
+         }
+      }
+      results.push(line);
+   }
+   let fixedText = results.join("\n"); 
+   
+   const isCodeBlockUnbalanced: boolean = (fixedText.match(/```/musig) ?? []).length % 2 !== 0;
+
+   if (isCodeBlockUnbalanced) {
+      if (fixedText.endsWith("```")) {
+         fixedText = '```' + fixedText;
+      } else { 
+         fixedText = fixedText + '```';
+      }
+   }
+
+   return fixedText;
 }
 
 
