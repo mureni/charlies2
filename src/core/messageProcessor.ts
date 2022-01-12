@@ -56,6 +56,8 @@ const emoticonRXs = [
    `:-###..`, `:###..`, `<:-|`, `',:-|`, `',:-l`, `</3`, `<\\3`, `<3` 
 ].map(emoticon => newRX(`\\b${escapeRegExp(emoticon)}\\b`)).join('|');
 
+const LINE_BREAK_RX = newRX(`\\r?\\n`, "musig");
+
 //erx = [`:-)`, `:)`, `:-]`, `:]`, `:-3`, `:3`, `:->`, `:>`, `8-)`, `8)`, `:-}`, `:}`, `:o)`, `:c)`, `:^)`, `=]`, `=)`, `:-D`, `:D`, `8-D`, `8D`, `x-D`, `xD`, `X-D`, `XD`, `=D`, `=3`, `B^D`, `:-))`, `:-(`, `:(`, `:-c`, `:c`,`:-<`, `:<`, `:-[`, `:[`, `:-||`, `>:[`, `:{`, `:@`, `>:(`, `:'-(`, `:'(`, `:'-)`, `:')`, `D-':`, `D:<`, `D:`, `D8`, `D;`, `D=`, `DX`, `:-O`, `:O`, `:-o`, `:o`, `:-0`, `8-0`, `>:O`, `:-*`, `:*`, `:×`, `;-)`, `;)`, `*-)`, `*)`, `;-]`, `;]`, `;^)`, `:-,`, `;D`, `:-P`, `:P`, `X-P`, `XP`, `x-p`, `xp`, `:-p`, `:p`, `:-Þ`, `:Þ`, `:-þ`, `:þ`, `:-b`, `:b`, `d:`, `=p`, `>:P`, `:-/`, `:/`, `:-.`, `>:\\`, `>:/`, `:\\`, `=/`, `=\\`, `:L`, `=L`, `:S`,`:-|`, `:|`, `:$`, `://)`, `://3`, `:-X`, `:X`, `:-#`, `:#`, `:-&`, `:&`, `O:-)`, `O:)`, `0:-3`, `0:3`, `0:-)`, `0:)`, `;^)`, `>:-)`, `>:)`, `}:-)`, `}:)`, `3:-)`, `3:)`, `>;)`, `>:3`, `>;3`, `|;-)`, `|-O`, `:-J`, `#-)`, `%-)`, `%)`, `:-###..`, `:###..`, `<:-|`, `',:-|`, `',:-l`, `</3`, `<\\3`, `<3` ].map(emoticon => emoticon.replace(/[.*+?^${}()|[\]\\\-]/ug, '\\$&')).join('|');
 
 const processMessage = async (client: ClientUser, message: Message): Promise<ProcessResults> => {
@@ -238,19 +240,11 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
       fullText = interpolateUsers(fullText, undefined, !!(mods?.UseEndearments));
    }
 
-   /* Quick bug fix for broken brains that stored "greentext" (>words) in a single line by accident
-      words words>more words>even more words ->
-         words words
-         >more words
-         >even more words
-   */
-   // fullText = fullText.replace(/(\D+?)>(.+?)/muig, "$1\n>$2");
-   /* Fix any broken custom emojis */
-   fullText = fullText.replace(/<:(\w+?):(\d+?)\s+>/musig, "<:$1:$2>");
-  
+   /* Fix any broken custom emojis (<:name:00000000>) where a space before the > was accidentally saved */
+   fullText = fullText.replace(newRX(`<:(\\w+?):(\\d+?)\\s+>`, "musig"), "<:$1:$2>");  
 
    /* Remove ANSI control characters and RTL marks (skipping CR and LF) */      
-   fullText = fullText.replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u200f\u061c\u00ad]/musig, '');
+   fullText = fullText.replace(newRX(`[\\u0000-\\u0009\\u000b\\u000c\\u000e-\\u001f\\u200f\\u061c\\u00ad]`, "musig"), '');
       
    const formatCodes = {
       underline: "_",
@@ -282,7 +276,7 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
    fullText = extractedCode.text;
 
    /* Capture URLs, case-sensitive */
-   const urlRX = /((((?:http|https|ftp|sftp):(?:\/\/)?)(?:[-;:&=\+\$,\w]+@)?[A-Za-z0-9\.-]+|(?:www\.|[-;:&=\+\$,\w]+@)[A-Za-z0-9\.-]+)((?:\/[-\+~%\/\.\w_]*)?\??(?:[-\+=&;%@\.\w_]*)#?(?:[\.!\/\\\w]*))?)/mug;
+   const urlRX = newRX(`((((?:http|https|ftp|sftp):(?:\\/\\/)?)(?:[-;:&=\\+\\$,\\w]+@)?[A-Za-z0-9\\.-]+|(?:www\\.|[-;:&=\\+\\$,\\w]+@)[A-Za-z0-9\\.-]+)((?:\\/[-\\+~%\\/\\.\\w_]*)?\\??(?:[-\\+=&;%@\\.\\w_]*)#?(?:[\\.!\\/\\\\\\w]*))?)`, "mug");
    const extractedURLs = extractBlocks(fullText, blockCodes.URLs, urlRX);
    const urls: string[] = extractedURLs.blocks;
    fullText = extractedURLs.text;
@@ -298,7 +292,7 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
    const stripFormattingRX = newRX(`${formatCodeRX}+(?<Text>.+?)${formatCodeRX}+`, 'misug');   
 
    /* Split lines for further line-level processing */
-   const lines = fullText.split(/\r?\n/musig);
+   const lines = fullText.split(LINE_BREAK_RX);
    
    /* Ensure no rogue RegExp-breaking characters in the bot name */
    const cleanBotName = escapeRegExp(Brain.botName);
@@ -385,15 +379,19 @@ const restoreBlocks = (text: string = "", symbol: string = "", blocks: string[] 
 
 const balanceText = (text: string): string => {
    
-   const lines = text.split(/\r?\n/musig);
+   const lines = text.split(LINE_BREAK_RX);
    const results: string[] = [];
+   const CODE_SEGMENT_RX = newRX(`\``, "musig");
+   const OPEN_PAREN_RX = newRX(`\\(`, "musig");
+   const CLOSE_PAREN_RX = newRX(`\\)`, "musig");
+   const DOUBLE_QUOTE_RX = newRX(`"`, "musig");
 
    for (let line of lines) {
    
-      const isCodeSegmentsUnbalanced: boolean = (line.match(/`/musig) ?? []).length % 2 !== 0;
-      const numParenthesisStarted: number = (line.match(/\(/musig) ?? []).length;
-      const numParenthesisEnded: number = (line.match(/\)/musig) ?? []).length;
-      const isDoubleQuoteUnbalanced: boolean = (line.match(/"/musig) ?? []).length % 2 !== 0;
+      const isCodeSegmentsUnbalanced: boolean = (line.match(CODE_SEGMENT_RX) ?? []).length % 2 !== 0;
+      const numParenthesisStarted: number = (line.match(OPEN_PAREN_RX) ?? []).length;
+      const numParenthesisEnded: number = (line.match(CLOSE_PAREN_RX) ?? []).length;
+      const isDoubleQuoteUnbalanced: boolean = (line.match(DOUBLE_QUOTE_RX) ?? []).length % 2 !== 0;
       
       if (isDoubleQuoteUnbalanced) {
          if (line.endsWith('"')) {
@@ -417,8 +415,14 @@ const balanceText = (text: string): string => {
       results.push(line);
    }
    let fixedText = results.join("\n"); 
+
+   /* Split any instances of ``` being next to each other by inserting a space after the first ``` */
+   const ADJACENT_CODE_BLOCK_RX = newRX(`\`{3}(\S)`, "musig");   
+   fixedText = fixedText.replace(ADJACENT_CODE_BLOCK_RX, '``` $1');
    
-   const isCodeBlockUnbalanced: boolean = (fixedText.match(/```/musig) ?? []).length % 2 !== 0;
+   /* Check for unbalanced code blocks (```) */
+   const CODE_BLOCK_RX = newRX(`\`{3}`, "musig");
+   const isCodeBlockUnbalanced: boolean = (fixedText.match(CODE_BLOCK_RX) ?? []).length % 2 !== 0;
 
    if (isCodeBlockUnbalanced) {
       if (fixedText.endsWith("```")) {

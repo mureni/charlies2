@@ -6,8 +6,9 @@
 # Data directory (should contain information at runtime only)
 data
 
-# Allow package.json 
+# Allow package.json and package-lock.json
 !package.json
+!package-lock.json
 
 # Logs
 logs
@@ -21,7 +22,7 @@ pids
 *.pid
 *.seed
 *.pid.lock
-package-lock.json
+
 
 # Dependency directories
 node_modules/

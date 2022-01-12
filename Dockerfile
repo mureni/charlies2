@@ -8,7 +8,8 @@ FROM node:16-buster AS base
 #    apk add glibc-2.32-r0.apk
         
 COPY package.json /tmp/package.json
-RUN cd /tmp && npm install 
+COPY package-lock.json /tmp/package-lock.json
+RUN cd /tmp && npm ci 
 RUN mkdir -p /opt/charlies/node_modules/ && chown -R node:node /opt/charlies/
 RUN cp -a /tmp/node_modules /opt/charlies/
 
