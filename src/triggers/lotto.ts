@@ -63,9 +63,9 @@ const checkem: Trigger = {
       
       let result = getNumber();
       if (context.author.id === env("BOT_OWNER_DISCORD_ID")) {
-         const quads = !!(Math.random() > .9);
-         const trips = !!(Math.random() > .8);
-         const dubs = !!(Math.random() > .7);
+         const quads = Boolean(Math.random() > .9);
+         const trips = Boolean(Math.random() > .8);
+         const dubs = Boolean(Math.random() > .7);
          
          if (quads) {
             while (!isQuads(result)) result = getNumber();            

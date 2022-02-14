@@ -69,7 +69,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
    /* Do not process own messages */
    if (message.author.id === client.id) return results;
    
-   let cleanText = cleanMessage(message, { Case: "lower", UseEndearments: true });
+   let cleanText = await cleanMessage(message, { Case: "lower", UseEndearments: true });
 
    /* Remove initial references to self (e.g. "charlies learn this text" -> "learn this text", "charlies: hi" -> "hi") */
    cleanText = cleanText.replace(newRX(`^\\s*\\b${escapeRegExp(client.username)}\\b[:,]?\\s*`, "uig"), "");
@@ -129,7 +129,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
          await sendMessage(client, message.channel, { contents: `${directedTo}: ${response}` }, mods);
 
          /* Learn what it just created, to create a feedback */
-         const cleanResponse = cleanMessage(response, { Case: "lower", UseEndearments: true });
+         const cleanResponse = await cleanMessage(response, { Case: "lower", UseEndearments: true });
          await Brain.learn(cleanResponse);
          
          results.response = response;
@@ -142,7 +142,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
       
       if (message.channel instanceof TextChannel) message.channel.sendTyping();
       results.triggeredBy = processed.triggeredBy;
-      const mods: ModificationType = { ... processed.modifications };
+      const mods: ModificationType = processed.modifications;
       mods.Balance = true;
       
       if (Brain.shouldYell(message.content)) mods.Case = "upper";
@@ -198,8 +198,8 @@ const sendMessage = async (client: ClientUser, channel: TextChannel, message: Ou
    if (!channel.guild) return false;
 
    let text = message.contents;
-   text = interpolateUsers(text, channel.guild.members, !!(mods?.UseEndearments));
-   text = cleanMessage(text, mods);
+   text = await interpolateUsers(text, channel.guild.members, Boolean(mods?.UseEndearments));
+   text = await cleanMessage(text, mods);
 
    /* Processing swaps should always be done AFTER cleaning the message.
       This prevents swap rules causing usernames or channels to accidentally leak 
@@ -217,7 +217,7 @@ const sendMessage = async (client: ClientUser, channel: TextChannel, message: Ou
          content: text.substring(0, MAX_LENGTH),
          embeds: embeds,
          files: files,
-         tts: !!(mods?.TTS)
+         tts: Boolean(mods?.TTS)
       });
       text = text.substring(MAX_LENGTH).trim();
       embeds = [];
@@ -226,7 +226,7 @@ const sendMessage = async (client: ClientUser, channel: TextChannel, message: Ou
    return true;
 }
 
-const cleanMessage = (message: Message | string, mods?: ModificationType): string => {
+const cleanMessage = async (message: Message | string, mods?: ModificationType): Promise<string> => {
 
    // TODO: Memoize all regexps
 
@@ -234,10 +234,10 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
 
    if (message instanceof Message) {
       fullText = message.content.trim();
-      fullText = interpolateUsers(fullText, message.guild?.members, !!(mods?.UseEndearments));      
+      fullText = await interpolateUsers(fullText, message.guild?.members, Boolean(mods?.UseEndearments));      
    } else {
       fullText = message.trim();
-      fullText = interpolateUsers(fullText, undefined, !!(mods?.UseEndearments));
+      fullText = await interpolateUsers(fullText, undefined, Boolean(mods?.UseEndearments));
    }
 
    /* Fix any broken custom emojis (<:name:00000000>) where a space before the > was accidentally saved */

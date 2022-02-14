@@ -97,7 +97,7 @@ class Brain {
       }
    }
 
-   public static async trainFromFile(trainerName: string = "default", filetype: "json" | "txt" = "txt", verbose: boolean = !!(env("NODE_ENV") === "development")): Promise<boolean | Error> {
+   public static async trainFromFile(trainerName: string = "default", filetype: "json" | "txt" = "txt", verbose: boolean = Boolean(env("NODE_ENV") === "development")): Promise<boolean | Error> {
       try {
          const trainerFile = resolve(checkFilePath("resources", `${trainerName}-trainer.${filetype}`));
          if (!existsSync(trainerFile)) throw new Error(`Unable to load brain data from file '${trainerFile}': file does not exist.`);
@@ -152,7 +152,7 @@ class Brain {
       }
    }
 
-   public static async fromJSON(json: BrainJSON, verbose: boolean = !!(env("NODE_ENV") === "development")): Promise<boolean> {
+   public static async fromJSON(json: BrainJSON, verbose: boolean = Boolean(env("NODE_ENV") === "development")): Promise<boolean> {
       const hasLexicon = Reflect.has(json, "Lexicon");
       const hasNGrams = Reflect.has(json, "nGrams");
       

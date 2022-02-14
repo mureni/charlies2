@@ -330,7 +330,7 @@ client.on("messageCreate", async (message: Message): Promise<void> => {
       });
    }
 
-   const messageSource: string = `${message.guild?.name ?? 'Private'}:#${message.channel.name}:${getDisplayName(message.author)}`;
+   const messageSource: string = `${message.guild?.name ?? 'Private'}:#${message.channel.name}:${await getDisplayName(message.author)}`;
    log(`<${messageSource}> ${message.content}`);
    const results: ProcessResults = await processMessage(client.user, message);
    if (results.learned) {

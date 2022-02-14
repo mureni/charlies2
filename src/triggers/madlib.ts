@@ -21,12 +21,12 @@ const madlibAddWord: Trigger = {
    description: "Adds a word of <type> to the madlib generator; if <type> does not exist, it will create the new vocabulary type and add the word",
    usage: "madlib-add-word <type> <word>",
    command: /^madlib-add-word (?<type>.+?) (?<word>.+)$/ui,
-   action: (_context: Message, matches: RegExpMatchArray = []) => {
+   action: async (_context: Message, matches: RegExpMatchArray = []) => {
       const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' }, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
       
-      const vocabType = `[${cleanMessage((matches.groups.type || "").trim(), { Case: "lower", UseEndearments: true })}]`;
-      const word = cleanMessage((matches.groups.word || "").trim(), { Case: "lower", UseEndearments: true });
+      const vocabType = `[${await cleanMessage((matches.groups.type || "").trim(), { Case: "lower", UseEndearments: true })}]`;
+      const word = await cleanMessage((matches.groups.word || "").trim(), { Case: "lower", UseEndearments: true });
       
       const success = Madlibs.addVocab(vocabType, word);
       output.results = [{ contents: success ? `added \`${word}\` to vocabulary list for \`${vocabType}\`` : `can't do that, try again` }];
@@ -40,12 +40,12 @@ const madlibRemoveWord: Trigger = {
    description: "Removes a word of <type> from the madlib generator",
    usage: "madlib-remove-word <type> <word>",
    command: /^madlib-remove-word (?<type>.+?) (?<word>.+)$/ui,
-   action: (_context: Message, matches: RegExpMatchArray = []) => {
+   action: async (_context: Message, matches: RegExpMatchArray = []) => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
       
-      const vocabType = `[${cleanMessage((matches.groups.type || "").trim(), { Case: "lower", UseEndearments: true })}]`;
-      const word = cleanMessage((matches.groups.word || "").trim(), { Case: "lower", UseEndearments: true });
+      const vocabType = `[${await cleanMessage((matches.groups.type || "").trim(), { Case: "lower", UseEndearments: true })}]`;
+      const word = await cleanMessage((matches.groups.word || "").trim(), { Case: "lower", UseEndearments: true });
       
       const success = Madlibs.removeVocab(vocabType, word);
       output.results = [{ contents: success ? `removed \`${word}\` from vocabulary list for \`${vocabType}\`` : `can't do that, try again` }];
@@ -61,11 +61,11 @@ const madlibAddPattern: Trigger = {
    usage: "madlib-add-pattern <pattern>",
    example: "madlib-add-pattern the [adverb] [noun] [verb]ed [preposition] the [noun].",
    command: /^madlib-add-pattern (?<pattern>.+)$/ui,
-   action: (_context: Message, matches: RegExpMatchArray = []) => {
+   action: async (_context: Message, matches: RegExpMatchArray = []) => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
       
-      const pattern = cleanMessage((matches.groups.pattern || "").trim(), { Case: "lower", UseEndearments: true });
+      const pattern = await cleanMessage((matches.groups.pattern || "").trim(), { Case: "lower", UseEndearments: true });
 
       const success = Madlibs.addPattern(pattern);
       output.results = [{ contents: success ? `added \`${pattern}\` to pattern list` : `can't do that, try again` }];
@@ -80,11 +80,11 @@ const madlibRemovePattern: Trigger = {
    description: "Removes a pattern from the madlib generator, if it exists",
    usage: "madlib-remove-pattern <pattern>",
    command: /^madlib-remove-pattern (?<pattern>.+)$/ui,
-   action: (_context: Message, matches: RegExpMatchArray = []) => {
+   action: async (_context: Message, matches: RegExpMatchArray = []) => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
       if (matches.length === 0 || !matches.groups) return output;
       
-      const pattern = cleanMessage((matches.groups.pattern || "").trim(), { Case: "lower", UseEndearments: true });
+      const pattern = await cleanMessage((matches.groups.pattern || "").trim(), { Case: "lower", UseEndearments: true });
       
       const success = Madlibs.removePattern(pattern);
       output.results = [ { contents: success ? `removed \`${pattern}\` from pattern list` : `can't do that, try again` }];

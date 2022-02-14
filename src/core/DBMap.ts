@@ -180,7 +180,7 @@ export class DBMap<K, V> {
       return;      
    }
    public has(key: K): boolean {
-      return !!(this.keystring(key) ?? false);
+      return Boolean(this.keystring(key) ?? false);
    }
    
    public clear(): void {

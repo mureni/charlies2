@@ -12,7 +12,7 @@ const choose: Trigger = {
       const options: string[] = matches[0].replace(/^choose\s+/iu, '').split(/\s+or\s+/gui);
       const selectedOption = options[Math.floor(Math.random() * options.length)];
       
-      output.directedTo = getDisplayName(context.author);      
+      output.directedTo = await getDisplayName(context.author);      
       output.results = [{ contents: `${selectedOption}, because: ${await Brain.getResponse(await Brain.getSeed(selectedOption))}` }];
       return output;
    }

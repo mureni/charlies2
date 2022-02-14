@@ -70,7 +70,7 @@ const learnHistory: Trigger = {
                if (message.author.bot) continue;
                   
                // Clean message and prep for learning
-               const text: string = cleanMessage(message.content, {
+               const text: string = await cleanMessage(message.content, {
                   UseEndearments: true,
                   Balance: true,
                   Case: "unchanged",

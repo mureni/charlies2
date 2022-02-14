@@ -76,7 +76,7 @@ class Triggers {
       }
       
       // TODO: Expand permissions and owner checking beyond Discord
-      const isAdmin = !!(message.member) && (message.member.permissions.has("ADMINISTRATOR") || message.member.permissions.has("MANAGE_GUILD"));
+      const isAdmin = Boolean(message.member && (message.member.permissions.has("ADMINISTRATOR") || message.member.permissions.has("MANAGE_GUILD")));
       const isBotOwner = message.author.id === env("BOT_OWNER_DISCORD_ID");
 
       for (const trigger of Triggers.list) {
@@ -86,7 +86,7 @@ class Triggers {
          if (!matches) continue;
 
          if (!Blacklist.allowed(message.guild?.id ?? "DM", message.author.id, trigger.id)) {
-            output.directedTo = getDisplayName(sender, message.guild?.members);
+            output.directedTo = await getDisplayName(sender, message.guild?.members);
             output.results = [{ contents: `you are not allowed to execute \`${trigger.id}\` in ${message.guild?.name ?? 'direct messages'}` }];
             return { ...output, triggered: true, triggeredBy: trigger.id }
          }
