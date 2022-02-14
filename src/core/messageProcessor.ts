@@ -125,7 +125,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
          if (message.tts) mods.TTS = true;
          if (Brain.shouldYell(message.content)) mods.Case = "upper";
 
-         const directedTo = getDisplayName(message.member?.user ?? message.author, message.guild?.members);
+         const directedTo = await getDisplayName(message.member?.user ?? message.author, message.guild?.members);
          await sendMessage(client, message.channel, { contents: `${directedTo}: ${response}` }, mods);
 
          /* Learn what it just created, to create a feedback */
