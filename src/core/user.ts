@@ -1,4 +1,5 @@
 import { GuildMemberManager, User } from "discord.js";
+import { newRX, escapeRegExp } from "../utils";
 
 interface Conversation {   
    lastSpokeAt: number;
@@ -11,18 +12,7 @@ interface KnownUser {
    conversations: Map<string, Conversation>;
 }
 
-const memoizedRX: Map<string, RegExp> = new Map<string, RegExp>();
-
-const newRX = (expr: string, flags?: string) => {
-   if (!memoizedRX.has(expr)) {
-      const rx = flags ? new RegExp(expr, flags) : new RegExp(expr);
-      memoizedRX.set(expr, rx);
-      return rx;
-   } else {
-      return memoizedRX.get(expr) as RegExp;
-   }   
-}
-
+// TODO: Convert KnownUsers to DBMap for persistence?
 const KnownUsers: Map<string, KnownUser> = new Map<string, KnownUser>();
 
 const getEndearment = (plural: boolean = false): string => {
@@ -50,9 +40,6 @@ const getDisplayName = async (member: User, memberManager?: GuildMemberManager) 
    return displayName;
 }
 
-const escapeRegExp = (rx: string) => {
-   return rx.replace(/[.*+?^${}()|[\]\\]/ug, '\\$&');
-};
 // TODO: Change user interpolation from getting discord info to internal KnownUsers
 
 const interpolateUsers = async (text: string, members: GuildMemberManager | undefined = undefined, useEndearments: boolean = false): Promise<string> => {   
@@ -81,7 +68,7 @@ const interpolateUsers = async (text: string, members: GuildMemberManager | unde
    /* Replace any leftover user mentions with endearments, if appropriate */
    if (useEndearments) text = text.replace(/<@!?\s*\d+>/uig, getEndearment());
 
-   /* Swap @roles, @everyone, @here references with plural endearment ('useEndearments' flag does not apply to these) */
+   /* Swap @roles, @everyone, @here references with plural endearment ('useEndearments' flag does not apply to these) */   
    text = text.replace(/<@&\d+>/uig, getEndearment(true));
    text = text.replace(/@everyone|@here|@room/uig, getEndearment(true));
    

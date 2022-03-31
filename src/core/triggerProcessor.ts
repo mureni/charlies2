@@ -9,6 +9,9 @@ type OutgoingMessage = {
    contents: string,
    embeds?: MessageEmbed[],
    attachments?: MessageAttachment[]
+   error?: { 
+      message: string;      
+   }
 }
 interface TriggerResult {
    results: OutgoingMessage[];
@@ -16,6 +19,9 @@ interface TriggerResult {
    directedTo?: string;
    triggered?: boolean;
    triggeredBy?: string;
+   error?: { 
+      message: string;      
+   }
 }
 
 // TODO: Add "resources" field to allow a trigger to have static resources it can pull from (i.e. dictionaries, image folders, etc.)
@@ -85,7 +91,7 @@ class Triggers {
          const matches = message.content.match(trigger.command);
          if (!matches) continue;
 
-         if (!Blacklist.allowed(message.guild?.id ?? "DM", message.author.id, trigger.id)) {
+         if (Blacklist.denied(message.guild?.id ?? "DM", message.author.id, trigger.id)) {
             output.directedTo = await getDisplayName(sender, message.guild?.members);
             output.results = [{ contents: `you are not allowed to execute \`${trigger.id}\` in ${message.guild?.name ?? 'direct messages'}` }];
             return { ...output, triggered: true, triggeredBy: trigger.id }

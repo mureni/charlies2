@@ -58,20 +58,5 @@ const swapList: Trigger = {
       return output;
    }
 }
-const swapSave: Trigger = {
-   id: "save-swap",
-   name: "Save swap",
-   description: "Saves swap data",
-   usage: "save-swap",
-   command: /^save-swap$/ui,
-   ownerOnly: true,
-   action: () => {
-      const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
-      const saveResults: boolean | Error = Swap.save();
-      output.results = [ { contents: (saveResults instanceof Error) ? "can't save swap data, check error log for details" : "swap data saved" } ];
-      return output;
-   }
-}
-
-const triggers = [ swapSave, swapList, addSwap, removeSwap ];
+const triggers = [ swapList, addSwap, removeSwap ];
 export { triggers };

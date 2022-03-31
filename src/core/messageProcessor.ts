@@ -4,18 +4,8 @@ import { Brain } from "./brain";
 import { log } from "./log";
 import { Swap } from "../controllers/swap";
 import { TriggerResult, Triggers } from "./triggerProcessor";
+import { escapeRegExp, newRX } from "../utils";
 
-const memoizedRX: Map<string, RegExp> = new Map<string, RegExp>();
-
-const newRX = (expr: string, flags?: string) => {
-   if (!memoizedRX.has(expr)) {
-      const rx = flags ? new RegExp(expr, flags) : new RegExp(expr);
-      memoizedRX.set(expr, rx);
-      return rx;
-   } else {
-      return memoizedRX.get(expr) as RegExp;
-   }   
-}
 
 // Maximum length of discord message
 const MAX_LENGTH = 1950;
@@ -42,7 +32,7 @@ type OutgoingMessage = {
    attachments?: MessageAttachment[]
 }
 
-const escapeRegExp = (rxString: string) => rxString.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+
 
 const emoticonRXs = [
    `:-)`, `:)`, `:-]`, `:]`, `:-3`, `:3`,	`:->`, `:>`, `8-)`, `8)`, `:-}`, `:}`, `:o)`, `:c)`, `:^)`, `=]`, `=)`,
@@ -77,6 +67,10 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
 
    const processed: TriggerResult = await Triggers.process(message);
    //log(`Trigger results: ${JSON.stringify(processed)}`);
+
+   if (processed.error) {
+      log(processed.error.message, "error");
+   }
 
    if (!processed.triggered) {      
       // NOTE: The below is strictly for charlies-based responses. 

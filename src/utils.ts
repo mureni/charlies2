@@ -39,4 +39,18 @@ const env = (envVar: string, defaultValue: string = "") => {
    return defaultValue;
 }
 
-export { env, checkFilePath };
+const escapeRegExp = (rxString: string) => rxString.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+
+const memoizedRX: Map<string, RegExp> = new Map<string, RegExp>();
+
+const newRX = (expr: string, flags?: string) => {
+   if (!memoizedRX.has(expr)) {
+      const rx = flags ? new RegExp(expr, flags) : new RegExp(expr);
+      memoizedRX.set(expr, rx);
+      return rx;
+   } else {
+      return memoizedRX.get(expr) as RegExp;
+   }   
+}
+
+export { env, checkFilePath, escapeRegExp, newRX };

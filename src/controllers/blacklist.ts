@@ -1,17 +1,14 @@
-import { checkFilePath } from "../utils";
-import { writeFileSync, readFileSync, existsSync } from "fs";
+import { checkFilePath, env } from "../utils";
+import { DBMap } from "../core/DBMap";
 
-const BLACKLIST_FILE = checkFilePath("data", "blacklist.json");
 
-interface BlacklistJSON {
-   [serverID: string]: {
-      [userID: string]: string[];      
-   }
-}
+type BlacklistCommand = Set<string>;
+type BlacklistUser = Map<string, BlacklistCommand>;
 
 class Blacklist {
-   private static list: Map<string, Map<string, Set<string>>> = new Map();  
+   private static list: DBMap<string, BlacklistUser> = new DBMap<string, BlacklistUser>(checkFilePath("data", `${env("BOT_NAME")}-blacklist.sql`), "contexts", false);
 
+/* DEPRECATED
    public static load(filename = BLACKLIST_FILE): boolean | Error {
       if (!existsSync(filename)) return new Error(`Blacklist file ${filename} does not exist.`);
       const data = JSON.parse(readFileSync(filename, "utf8"));
@@ -42,27 +39,36 @@ class Blacklist {
       writeFileSync(filename, JSON.stringify(data, null, 2), "utf8");
       return true;
    }
-   
-   public static add(guildID: string, userID: string, trigger: string): void {
-      if (!Blacklist.list.has(guildID)) Blacklist.list.set(guildID, new Map<string, Set<string>>());
-      const userList = Blacklist.list.get(guildID) as Map<string, Set<string>>;
-      if (!userList.has(userID)) userList.set(userID, new Set<string>());
-      const triggerList = userList.get(userID) as Set<string>;
-      triggerList.add(trigger);
+*/
+
+   public static add(context: string = "*:*", userID: string = "", command: string = ""): void {
+      if (!context || !userID || !command) return;   
+      const userList = Blacklist.list.get(context) ?? new Map<string, Set<string>>();      
+      const commandList = userList.get(userID) ?? new Set<string>();
+      commandList.add(command);
+      userList.set(userID, commandList);
+      Blacklist.list.set(context, userList);
    }
-   public static remove(guildID: string, userID: string, trigger: string): void {
-      if (!Blacklist.list.has(guildID)) return;
-      const userList = Blacklist.list.get(guildID) as Map<string, Set<string>>;
+   public static remove(context: string = "*:*", userID: string = "", command: string = ""): void {
+      if (!context || !userID || !command) return;
+      const userList = Blacklist.list.get(context) ?? new Map<string, Set<string>>();
       if (!userList.has(userID)) return;
-      const triggerList = userList.get(userID) as Set<string>;
-      triggerList.delete(trigger);
+      const commandList = userList.get(userID) ?? new Set<string>();
+      commandList.delete(command);
+      userList.set(userID, commandList);
+      Blacklist.list.set(context, userList);
    }
-   public static allowed(guildID: string, userID: string, trigger: string): boolean {
-      if (!Blacklist.list.has(guildID)) return true;
-      const userList = Blacklist.list.get(guildID) as Map<string, Set<string>>;
-      if (!userList.has(userID)) return true;
-      const triggerList = userList.get(userID) as Set<string>;
-      return !triggerList.has(trigger);
+   public static denied(context: string = "*:*", userID: string = "", command: string = ""): boolean {
+      if (!context || !userID || !command) return false;
+      if (!Blacklist.list.has(context)) return false;
+      const userList = Blacklist.list.get(context) ?? new Map<string, Set<string>>();
+      if (!userList.has(userID)) return false;
+      const triggerList = userList.get(userID) ?? new Set<string>();
+      return triggerList.has(command);
+   }
+
+   public static allowed(context: string = "*:*", userID: string = "", command: string = ""): boolean {
+      return !Blacklist.denied(context, userID, command);
    }
 }
 

@@ -2,7 +2,7 @@ import "dotenv/config";
 
 import { Intents, Message, TextChannel, Client } from "discord.js";
 import { log, Brain, ProcessResults, processMessage, getDisplayName, KnownUsers, Conversation, Triggers } from "./core";
-import { Swap, Blacklist, Madlibs } from "./controllers";
+
 import { env } from "./utils";
 
 // TODO: Refactor everything for cleaner code 
@@ -43,17 +43,7 @@ const initialize = async () => {
          if (loadResults instanceof Error) log(`Error loading trainer file: ${loadResults.message}. Going to have a broken brain.`, "error");
       }
    }
-
-   log (`Loading swap settings...`);
-   loadResults = Swap.load();
-   if (loadResults instanceof Error) log(`Unable to load swap data: ${loadResults.message}. Starting with empty swap data.`, "warn");
-   log (`Loading blacklist settings...`);
-   loadResults = Blacklist.load();
-   if (loadResults instanceof Error) log(`Unable to load blacklist data: ${loadResults.message}. Starting with empty blacklist data.`, "warn");
-   log (`Loading madlib settings...`);
-   loadResults = Madlibs.load();
-   if (loadResults instanceof Error) log(`Unable to load madlibs data: ${loadResults.message}. Starting with empty madlibs data.`, "warn");
-
+ 
    if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) {
       log(`Error initializing brain: no data was found.`, "error");
    }
@@ -79,10 +69,7 @@ const client = new Client({
    intents: intents   
 });
 const dirty = {
-   brain: false,
-   swaps: false,
-   blacklist: false,
-   madlibs: false
+   brain: false
 }
 
 
@@ -97,6 +84,7 @@ const saveData = (): void => {
       dirty.brain = false;
    }
    
+   /* DEPRECATED 
    saveResults = dirty.swaps ? Swap.save() : false;
    if (saveResults instanceof Error) {
       log(`Error saving swap data: ${saveResults.message}`, "error");
@@ -120,6 +108,8 @@ const saveData = (): void => {
       log(`Blacklist data saved.`);
       dirty.blacklist = false;
    } 
+      */
+
 }
 
 /* Define exit handler and exit events */
@@ -306,11 +296,11 @@ client.on("messageReactionRemoveAll", _message => {});
 
 client.on("messageCreate", async (message: Message): Promise<void> => {
    if (!initialized) {
-      log(`Bot not yet initialized, cannot process incoming message`);
+      log(`Bot not yet initialized, cannot process incoming message`, "warn");
       return;
    }
    if (!client.user) {
-      log(`No client user found, cannot process incoming message`);
+      log(`No client user found, cannot process incoming message`, "warn");
       return;
    }
    if (!(message.channel instanceof TextChannel)
@@ -318,7 +308,7 @@ client.on("messageCreate", async (message: Message): Promise<void> => {
       || (message.author.bot && !Brain.settings.learnFromBots)
       || (message.author.id === client.user.id)
    ) {
-      // log(`Invalid message: type=${message.type}, author=${message.author.id}, self=${client.user.id}, bot=${message.author.bot}, channel=${message.channel}, guild=${message.guild ?? 'DM'}, message=${message.content}`, "warn");
+      //log(`Invalid message: type=${message.type}, author=${message.author.id}, self=${client.user.id}, bot=${message.author.bot}, channel=${message.channel}, guild=${message.guild ?? 'DM'}, message=${message.content}`, "error");
       return;
    }
 
@@ -337,10 +327,7 @@ client.on("messageCreate", async (message: Message): Promise<void> => {
       log(`Learned: ${results.processedText}`, "debug");
       dirty.brain = true;
    }      
-   if (results.triggeredBy) {
-      dirty.blacklist = true;
-      dirty.swaps = true;
-      dirty.madlibs = true;
+   if (results.triggeredBy) {      
       log(`Processing trigger: ${results.triggeredBy}`, "debug");
    }
    if (results.response) log(`Responded with: ${results.response}`, "debug");

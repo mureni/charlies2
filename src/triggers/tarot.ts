@@ -1,5 +1,5 @@
 import { MessageEmbed, MessageAttachment } from "discord.js";
-import { Message, TriggerResult, Trigger } from "../core";
+import { Message, TriggerResult, Trigger, log } from "../core";
 import { getTarotHand } from "../controllers";
 
 const tarot: Trigger = {
@@ -24,13 +24,14 @@ const tarot: Trigger = {
             embed.addField(explanation[card].name, `${explanation[card].description}\n*${explanation[card].meaning}*`);
          }            
          embed.setImage("attachment://tarot.png");
-         console.log(`Generating tarot hand`);
+         log(`Generating tarot hand`);
          output.results = [ { contents: "", embeds: [embed], attachments: [attachment] } ];
          output.triggered = true;
-         console.log(`Tarot output: ${JSON.stringify(output)}`);
+         log(`Tarot output: ${JSON.stringify(output)}`);
          return output;
-      } catch (error) {
-         output.results = [ { contents: `Error occurred while generating tarot card: ${error}` } ];
+      } catch (error) {         
+         const errString: string = (error instanceof Error) ? error.message : error as string;
+         output.results = [ { contents: `Error occurred while generating tarot card: ${errString}`, error: { message: errString }} ];         
          return output;
       }      
    }
