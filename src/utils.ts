@@ -39,7 +39,11 @@ const env = (envVar: string, defaultValue: string = "") => {
    return defaultValue;
 }
 
-const escapeRegExp = (rxString: string) => rxString.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
+function randFrom<T>(array: T[]): T { return array[Math.floor(Math.random() * array.length)] };
+
+// Note: the second .replace() is necessary to handle the dash/hyphen (-) in unicode strings 
+const escapeRegExp = (rxString: string) => rxString.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&').replace(/-/g, '\\x2d');
 
 const memoizedRX: Map<string, RegExp> = new Map<string, RegExp>();
 
@@ -53,4 +57,4 @@ const newRX = (expr: string, flags?: string) => {
    }   
 }
 
-export { env, checkFilePath, escapeRegExp, newRX };
+export { env, checkFilePath, escapeRegExp, newRX, clamp, randFrom };

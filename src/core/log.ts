@@ -14,6 +14,7 @@ export type LogType = 'debug' | 'error' | 'warn' | 'general';
 
 class Logger {
    public static output = createLogger({
+      levels: winston.config.npm.levels,  
       format: outputFormat,
       transports: [
          new transports.Console({
@@ -31,12 +32,12 @@ class Logger {
          case 'warn': 
             Logger.output.warn(message);
             break;
-         case 'general': 
+         case 'debug':
             Logger.output.info(message);
             break;
-         case 'debug':
-         default:
-            if (DEBUG) Logger.output.info(message);
+         case 'general':                  
+         default:            
+            Logger.output.info(message);
             break;                
       }     
       return;

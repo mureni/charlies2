@@ -226,11 +226,22 @@ const cleanMessage = async (message: Message | string, mods?: ModificationType):
 
    let fullText: string;
 
+   const botNameCleaner = (text: string) => {
+         /* Ensure no rogue RegExp-breaking characters in the bot name */
+      const cleanBotName = escapeRegExp(Brain.botName);
+      /* Strip initial use of the bot's name (most common usage being "botname: text text text" with or without the ":") */      
+      log(`text before first clean: ${text}`, "debug");
+      text = text.replace(newRX(`^\\s*${cleanBotName}:?\\s*`, "musig"), "");
+      log(`text after first clean: ${text}`, "debug");
+      /* Replace any remaining references to the bot's name with 'my friend' or similar generic endearment */
+      return text.replace(newRX(cleanBotName, "musig"), getEndearment());
+   }
+
    if (message instanceof Message) {
-      fullText = message.content.trim();
+      fullText = botNameCleaner(message.content.trim());
       fullText = await interpolateUsers(fullText, message.guild?.members, Boolean(mods?.UseEndearments));      
    } else {
-      fullText = message.trim();
+      fullText = botNameCleaner(message.trim());
       fullText = await interpolateUsers(fullText, undefined, Boolean(mods?.UseEndearments));
    }
 
@@ -288,18 +299,13 @@ const cleanMessage = async (message: Message | string, mods?: ModificationType):
    /* Split lines for further line-level processing */
    const lines = fullText.split(LINE_BREAK_RX);
    
-   /* Ensure no rogue RegExp-breaking characters in the bot name */
-   const cleanBotName = escapeRegExp(Brain.botName);
 
    let results: string[] = [];
    for (const line of lines) {
 
       let text = line;
 
-      /* Strip initial use of the bot's name (most common usage being "botname: text text text" with or without the ":") */      
-      text = text.replace(newRX(`^\\s*${cleanBotName}:?\\s*`, "musig"), "");
-      /* Replace any remaining references to the bot's name with 'my friend' or similar generic endearment */
-      text = text.replace(newRX(cleanBotName, "musig"), getEndearment());
+
 
       /* Replace all channel mentions with 'my secret place' */
       // TODO: Change this to a rotating list of secret places
