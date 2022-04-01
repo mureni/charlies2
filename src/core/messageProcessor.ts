@@ -227,12 +227,10 @@ const cleanMessage = async (message: Message | string, mods?: ModificationType):
    let fullText: string;
 
    const botNameCleaner = (text: string) => {
-         /* Ensure no rogue RegExp-breaking characters in the bot name */
+      /* Ensure no rogue RegExp-breaking characters in the bot name */
       const cleanBotName = escapeRegExp(Brain.botName);
       /* Strip initial use of the bot's name (most common usage being "botname: text text text" with or without the ":") */      
-      log(`text before first clean: ${text}`, "debug");
       text = text.replace(newRX(`^\\s*${cleanBotName}:?\\s*`, "musig"), "");
-      log(`text after first clean: ${text}`, "debug");
       /* Replace any remaining references to the bot's name with 'my friend' or similar generic endearment */
       return text.replace(newRX(cleanBotName, "musig"), getEndearment());
    }

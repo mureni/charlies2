@@ -33,7 +33,7 @@ class Logger {
             Logger.output.warn(message);
             break;
          case 'debug':
-            Logger.output.info(message);
+            if (DEBUG) Logger.output.info(message);
             break;
          case 'general':                  
          default:            
