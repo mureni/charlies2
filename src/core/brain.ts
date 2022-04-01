@@ -4,11 +4,8 @@ import { createReadStream, readFileSync, existsSync, writeFileSync, statSync } f
 import { log } from "./log";
 import readline from "readline";
 import { resolve } from "path";
-import { env, checkFilePath } from "../utils"; 
+import { env, checkFilePath, escapeRegExp, clamp, randFrom } from "../utils"; 
 
-const escapeRegExp = (rxString: string) => rxString.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
-const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
-function randFrom<T>(array: T[]): T { return array[Math.floor(Math.random() * array.length)] };
 
 
 const SENTENCE_REGEX = /\n/;
