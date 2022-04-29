@@ -7,18 +7,22 @@ const joke: Trigger = {
    id: "joke",
    name: "joke",
    description: "jokes",
-   usage: "tell <me/[person]/yourself> a<nother> joke",
-   command: /tell (?<person>.+)? ?(?:a(?:nother)?) ?joke/ui,
+   usage: "tell <me/[person]/yourself> a<nother> joke <about [topic]>",
+   command: /tell (?<person>.+)? ?(?:a(?:nother)?) ?joke(?: about (?<topic>.+))/ui,
    icon: "joke.png",
    action: async (context: Message, matches: RegExpMatchArray = []) => {
         const backupJoke = dadjokes[Math.floor(Math.random() * dadjokes.length)];
         const output: TriggerResult = { results: [ { contents: backupJoke } ], modifications: { Case: 'unchanged' }};
         if (matches.length === 0 || !matches.groups) return output;      
         const directedTo = (matches.groups.person ?? "").trim();
+        const topic = (matches.groups.topic ?? "").trim();
         try {
-            const response = await fetch(`${API}`);            
+            const response = await fetch(`${API}${topic ? `&contains=${encodeURIComponent(topic)}` : ''}`);
             if (response.ok) {
                 let line = (await response.text()).replace("\n", "");
+                if (line.match(/^Error 106/i)) {
+                    line = `dunno any jokes about ${topic}, here's a robot dad joke instead: ${backupJoke}`;
+                }
                 if (/yourself/iu.test(directedTo)) {
                     line = `*${line.trim()}*`;
                  } else if (/me/iu.test(directedTo)) {
