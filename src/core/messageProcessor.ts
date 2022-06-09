@@ -15,6 +15,7 @@ interface ProcessResults {
    triggeredBy?: string;
    processedText: string;
    response?: string;
+   directedTo?: string;
 }
 
 type ModificationType = {
@@ -52,7 +53,7 @@ const LINE_BREAK_RX = newRX(`\\r?\\n`, "musig");
 
 const processMessage = async (client: ClientUser, message: Message): Promise<ProcessResults> => {
    const results: ProcessResults = { learned: false, processedText: "" }
-   if (!(message.channel instanceof TextChannel) || message.type !== "DEFAULT") return results;
+   if (!(message.channel instanceof TextChannel) || !(message.type === "DEFAULT" || message.type === "REPLY")) return results;
    
    /* TODO: Process server-specific blacklists to prevent users from responding */
 
@@ -77,6 +78,13 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
       // TODO: Move charlies response functionality to a separate processor than the generic message processor 
       /* Detect whether a conversation with the person is ongoing or if a response is appropriate */
       let shouldRespond: boolean = message.mentions.has(client) || Brain.shouldRespond(Brain.botName, message.content);
+
+      /* If the message is a reference (reply) then check if the referenced message should be responded to */
+      if (message.reference) {
+         const referencedMessage = await message.fetchReference();
+         if (referencedMessage.mentions.has(client) || Brain.shouldRespond(Brain.botName, referencedMessage.content)) shouldRespond = true;
+      }
+
       let seed: string = "";
 
       // TODO: Populate and maintain KnownUsers
@@ -120,6 +128,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
          if (Brain.shouldYell(message.content)) mods.Case = "upper";
 
          const directedTo = await getDisplayName(message.member?.user ?? message.author, message.guild?.members);
+         results.directedTo = directedTo;
          await sendMessage(client, message.channel, { contents: `${directedTo}: ${response}` }, mods);
 
          /* Learn what it just created, to create a feedback */
@@ -143,6 +152,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
 
       if (processed.directedTo) {
          processed.results[0].contents = `${processed.directedTo}: ${processed.results[0].contents}`;
+         results.directedTo = processed.directedTo;
       }      
       
       let outgoingPayload: OutgoingMessage = { contents: "", embeds: [], attachments: [] };

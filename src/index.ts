@@ -303,10 +303,10 @@ client.on("messageCreate", async (message: Message): Promise<void> => {
       log(`No client user found, cannot process incoming message`, "warn");
       return;
    }
-   if (!(message.channel instanceof TextChannel)
-      || message.type !== "DEFAULT"
+   if (!(message.channel instanceof TextChannel)      
       || (message.author.bot && !Brain.settings.learnFromBots)
       || (message.author.id === client.user.id)
+      || !(message.type === "DEFAULT" || message.type === "REPLY")
    ) {
       //log(`Invalid message: type=${message.type}, author=${message.author.id}, self=${client.user.id}, bot=${message.author.bot}, channel=${message.channel}, guild=${message.guild ?? 'DM'}, message=${message.content}`, "error");
       return;
@@ -321,7 +321,24 @@ client.on("messageCreate", async (message: Message): Promise<void> => {
    }
 
    const messageSource: string = `${message.guild?.name ?? 'Private'}:#${message.channel.name}:${await getDisplayName(message.author)}`;
-   log(`<${messageSource}> ${message.content}`);
+
+   // Logging
+   let content: string = message.content;
+   if (message.embeds) {
+      for (const embed of message.embeds) {
+         const url = embed.url ?? `no URL`;
+         if (!content.includes(url)) content += `[Embedded content: ${url}]\n`;
+      }
+   }
+   if (message.attachments) {
+      for (const [_attachmentSnowflake, attachmentData] of message.attachments) {
+         const url = attachmentData.url ?? 'no URL';
+         content += `[Attached content: ${url}]\n`;
+      }
+   }
+   // Log the incoming message
+   log(`<${messageSource}> ${content}`);
+   
    const results: ProcessResults = await processMessage(client.user, message);
    if (results.learned) {
       log(`Learned: ${results.processedText}`, "debug");
@@ -330,7 +347,14 @@ client.on("messageCreate", async (message: Message): Promise<void> => {
    if (results.triggeredBy) {      
       log(`Processing trigger: ${results.triggeredBy}`, "debug");
    }
-   if (results.response) log(`Responded with: ${results.response}`, "debug");
+
+   // Log the bot response, if any
+   const botSource: string = `${message.guild?.name ?? 'Private'}:#${message.channel.name}:${Brain.botName}`;
+   const botResponse: string | undefined = (results.directedTo ? `${results.directedTo}: ${results.response}` : results.response);
+   
+   if (botResponse) log(`<${botSource}> ${botResponse}`);  
+          
+         
 });
 
 

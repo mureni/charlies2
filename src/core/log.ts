@@ -1,9 +1,9 @@
 import winston from "winston";
 const { createLogger, format, transports } = winston;
-import { env } from "../utils";
+import { DEBUG } from "../utils";
 const { combine, colorize, timestamp, printf } = format;
 
-const DEBUG = env("NODE_ENV", "development") === "development";
+
 
 const outputFormat = combine(   
    timestamp(),

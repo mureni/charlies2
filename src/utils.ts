@@ -57,4 +57,6 @@ const newRX = (expr: string, flags?: string) => {
    }   
 }
 
-export { env, checkFilePath, escapeRegExp, newRX, clamp, randFrom };
+const DEBUG = env("NODE_ENV", "development") === "development";
+
+export { env, checkFilePath, escapeRegExp, newRX, clamp, randFrom, DEBUG };
