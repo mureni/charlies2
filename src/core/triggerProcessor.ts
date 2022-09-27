@@ -99,11 +99,11 @@ class Triggers {
 
          const triggerOutput = await trigger.action(message, matches);
          if (triggerOutput.results.length > 0 || triggerOutput.triggered) {
-            //log(`Successful trigger output: ${JSON.stringify(triggerOutput)}`);
+            log(`Successful trigger output: ${JSON.stringify(triggerOutput)}`, "debug");
             return { ...triggerOutput, triggered: true, triggeredBy: trigger.id };
          }
       }
-      //log(`Trigger output: ${JSON.stringify(output)}`);
+      log(`Trigger output: ${JSON.stringify(output)}`, "debug");
       return { ...output, triggered: false };
    }
    

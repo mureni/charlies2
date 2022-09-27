@@ -55,6 +55,9 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
    const results: ProcessResults = { learned: false, processedText: "" }
    if (!(message.channel instanceof TextChannel) || !(message.type === "DEFAULT" || message.type === "REPLY")) return results;
    
+   const permissions = message.channel.permissionsFor(client);
+   
+   
    /* TODO: Process server-specific blacklists to prevent users from responding */
 
    /* Do not process own messages */
@@ -67,7 +70,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
    cleanText = cleanText.replace(newRX(`^\\s*\\b${escapeRegExp(Brain.botName)}\\b[:,]?\\s*`, "uig"), "");
 
    const processed: TriggerResult = await Triggers.process(message);
-   //log(`Trigger results: ${JSON.stringify(processed)}`);
+   log(`Trigger results: ${JSON.stringify(processed)}`, "debug");
 
    if (processed.error) {
       log(processed.error.message, "error");
@@ -100,7 +103,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
          };
       }           
       
-      if (shouldRespond) {
+      if (shouldRespond && !(!permissions || !permissions.has('SEND_MESSAGES'))) {         
          if (message.channel instanceof TextChannel) message.channel.sendTyping();
          if (user) {
             user.conversations.set(message.channel.id, {
@@ -143,12 +146,12 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
 
    } else {
       
-      if (message.channel instanceof TextChannel) message.channel.sendTyping();
+      if (message.channel instanceof TextChannel && !(!permissions || !permissions.has('SEND_MESSAGES'))) message.channel.sendTyping();
       results.triggeredBy = processed.triggeredBy;
       const mods: ModificationType = processed.modifications;
-      mods.Balance = true;
+      if (!mods.KeepOriginal) mods.Balance = true;
       
-      if (Brain.shouldYell(message.content)) mods.Case = "upper";
+      if (!(mods.KeepOriginal || mods.Case === "unchanged") && Brain.shouldYell(message.content)) mods.Case = "upper";
 
       if (processed.directedTo) {
          processed.results[0].contents = `${processed.directedTo}: ${processed.results[0].contents}`;
@@ -200,7 +203,14 @@ const sendMessage = async (client: ClientUser, channel: TextChannel, message: Ou
    const permissions = channel.permissionsFor(client);
    if (!permissions || !permissions.has('SEND_MESSAGES')) return false;
    if (!channel.guild) return false;
-
+   if (mods?.KeepOriginal) {
+      // Reset all other mods
+      mods.Balance = false;
+      mods.Case = "unchanged";
+      mods.ProcessSwaps = false;
+      mods.StripFormatting = false;
+      mods.UseEndearments = false;
+   }
    let text = message.contents;
    text = await interpolateUsers(text, channel.guild.members, Boolean(mods?.UseEndearments));
    text = await cleanMessage(text, mods);
@@ -236,6 +246,14 @@ const cleanMessage = async (message: Message | string, mods?: ModificationType):
 
    let fullText: string;
 
+   if (mods?.KeepOriginal) {
+      // Reset all other mods
+      mods.Balance = false;
+      mods.Case = "unchanged";
+      mods.ProcessSwaps = false;
+      mods.StripFormatting = false;
+      mods.UseEndearments = false;
+   }
    const botNameCleaner = (text: string) => {
       /* Ensure no rogue RegExp-breaking characters in the bot name */
       const cleanBotName = escapeRegExp(Brain.botName);
@@ -283,7 +301,7 @@ const cleanMessage = async (message: Message | string, mods?: ModificationType):
    fullText = injectionBlocks.text;
 
    /* Capture code blocks (between pairs of ```) as case insensitive and as-is regarding line breaks */
-   const codeRX = newRX('```.+?```', 'muigs');
+   const codeRX = newRX('```[.\n]+?```', 'muigs');
    const extractedCode = extractBlocks(fullText, blockCodes.codeBlocks, codeRX);
    const codeBlocks: string[] = extractedCode.blocks;
    fullText = extractedCode.text;

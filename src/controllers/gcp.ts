@@ -63,15 +63,15 @@ class GCPDot {
                 break;
             case (highest >= 0.95):
                 color = '#0EEEFF';
-                explanation = 'Small network variance. Probably chance fluctuation. The index is between 90% and 95%.';
+                explanation = 'Small network variance. Probably chance fluctuation. The index is between 93% and 95%.';
                 break;
             case (highest >= 0.93):
                 color = '#ACF2FF';
-                explanation = 'Small network variance. Probably chance fluctuation. The index is between 90% and 95%.';
+                explanation = 'Small network variance. Probably chance fluctuation. The index is between 91.25% and 93%.';
                 break;
             case (highest >= 0.9125):
                 color = '#64FAAB';
-                explanation = 'Small network variance. Probably chance fluctuation. The index is between 90% and 95%.';
+                explanation = 'Small network variance. Probably chance fluctuation. The index is between 90% and 91.25%.';
                 break;
             case (highest >= 0.90):
                 color = '#64FA64';
@@ -79,31 +79,31 @@ class GCPDot {
                 break;
             case (highest >= 0.40):
                 color = '#AEFA00';
-                explanation = 'Normally random network variance. This is average or expected behavior. The index is between 40% and 90%.';
+                explanation = 'Normally random network variance. This is average or expected behavior. The index is between 30% and 40%.';
                 break;
             case (highest >= 0.30):
                 color = '#F9FA00';
-                explanation = 'Slightly increased network variance. Probably chance fluctuation. The index is between 10% and 40%.';
+                explanation = 'Slightly increased network variance. Probably chance fluctuation. The index is between 23% and 30%.';
                 break;
             case (highest >= 0.23):
                 color = '#F9FA00';
-                explanation = 'Slightly increased network variance. Probably chance fluctuation. The index is between 10% and 40%.';
+                explanation = 'Slightly increased network variance. Probably chance fluctuation. The index is between 15% and 23%.';
                 break;
             case (highest >= 0.15):
                 color = '#FFD517';
-                explanation = 'Slightly increased network variance. Probably chance fluctuation. The index is between 10% and 40%.';
+                explanation = 'Slightly increased network variance. Probably chance fluctuation. The index is between 8% and 15%.';
                 break;
             case (highest >= 0.08):
                 color = '#FFB82E';
-                explanation = 'Strongly increased network variance. May be chance fluctuation, with the index between 5% and 10%.';
+                explanation = 'Strongly increased network variance. May be chance fluctuation, with the index between 5% and 8%.';
                 break;
             case (highest >= 0.05):
                 color = '#FF1E1E';
-                explanation = 'Strongly increased network variance. May be chance fluctuation, with the index between 5% and 10%.';
+                explanation = 'Strongly increased network variance. May be chance fluctuation, with the index between 1% and 5%.';
                 break;
             case (highest >= 0.01):
                 color = '#FFA8C0';
-                explanation = 'Significantly large network variance. Suggests broadly shared coherence of thought and emotion. The index is less than 5%.';
+                explanation = 'Significantly large network variance. Suggests broadly shared coherence of thought and emotion. The index is less than or equal to 1%.';
                 break;
             default:
                 color = '#CDCDCD';
