@@ -13,9 +13,9 @@ const blacklist: Trigger = {
    example: "blacklist add *:* BadGuy a0l",
    ownerOnly: false,
    adminOnly: true,
-   action: async (context: Message, matches: RegExpMatchArray = []) => {
+   action: async (context: Message, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { KeepOriginal: true, UseEndearments: false, Case: 'unchanged' }, directedTo: undefined };
-      if (matches.length === 0 || !matches.groups) return output;
+      if (!matches || matches.length === 0 || !matches.groups) return output;
       if (!(context.client)) return output;
       const addOrRemove = matches.groups.addOrRemove ?? "";
       const username = matches.groups.user ?? "";

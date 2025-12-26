@@ -7,9 +7,9 @@ const lotto: Trigger = {
    description: "Draws up to 200 random lottery numbers. Defaults to between 1 and 100, negatives are ignored",
    usage: "give me <number> [unique] [lotto/lottery] numbers [between <low> and <high>]",
    command: /give me (?<number>\d+) ?(?<unique>unique)? ?(?:lotto|lottery)? numbers? ?(?:between (?<low>\d+) and (?<high>\d+))?/ui,
-   action: (_context: Message, matches: RegExpMatchArray = []) => {
+   action: (_context: Message, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' } };      
-      if (matches.length === 0 || !matches.groups || matches.groups.number === undefined) return output;
+      if (!matches || matches.length === 0 || !matches.groups || matches.groups.number === undefined) return output;
       const clamp = (n: number, low: number, high: number): number => Math.max(Math.min(high, n), low);
       const howMany: number = clamp(parseInt(matches.groups.number), 0, 200);
       if (howMany <= 0) return output;

@@ -9,9 +9,9 @@ const tarot: Trigger = {
    usage: "tarot [spread]",
    example: "tarot star",
    command: /^tarot ?(?<spread>.+)?$/ui,
-   action: async (_context: Message, matches: RegExpMatchArray = []) => {
+   action: async (_context: Message, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
-      const spread = matches.groups?.spread ?? "standard";
+      const spread = matches?.groups?.spread ?? "standard";
       try {
          const hand = await getTarotHand(spread);
          const attachment = new MessageAttachment(hand.image, "tarot.png");

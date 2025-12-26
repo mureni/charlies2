@@ -7,9 +7,9 @@ const addSwap: Trigger = {
    description: "Adds words to server-specific swap list",
    usage: "swap [this] with [that]",
    command: /^swap\s+(?:(?<this>.+)\s+with\s+(?<that>.+))?/ui,
-   action: (context: Message, matches: RegExpMatchArray = []) => {
+   action: (context: Message, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
-      if (matches.length === 0 || !matches.groups) return output;
+      if (!matches || matches.length === 0 || !matches.groups) return output;
       const these = (matches.groups.this || "").toLowerCase().trim();
       const those = (matches.groups.that || "").toLowerCase().trim();
       if (!these || !those) return output;
@@ -25,9 +25,9 @@ const removeSwap: Trigger = {
    description: "Remove a word from the server-specific swap list. Use <all> to remove everything.",
    usage: "unswap [this]/<all>",
    command: /^unswap\s+(?<this>.+)/ui,
-   action: (context: Message, matches: RegExpMatchArray = []) => {
+   action: (context: Message, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
-      if (matches.length === 0 || !matches.groups) return output;
+      if (!matches || matches.length === 0 || !matches.groups) return output;
       const these = matches.groups.this || "";
       if (!these) return output;
       if (these.match(/<all>/ui)) {

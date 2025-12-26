@@ -6,9 +6,9 @@ const story: Trigger = {
    description: "Tells a story about a topic. Text in < > are optional, text in [] can be changed.",
    usage: "tell <me/[person]/yourself> a<nother> <long> story <about [topic]>",
    command: /tell (?<person>.+)? ?(?:a(?:nother)?) (?<long>long)? ?story(?: about (?<topic>.+))?/ui,
-   action: async (context: Message, matches: RegExpMatchArray = []) => {
+   action: async (context: Message, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { ProcessSwaps: true }, directedTo: undefined };
-      if (matches.length === 0 || !matches.groups) return output;
+      if (!matches || matches.length === 0 || !matches.groups) return output;
       const storyLength = (3 + Math.floor(Math.random() * 5)) * (matches.groups.long !== undefined ? 3 : 1);
       const directedTo = (matches.groups.person || "").trim();
       let seed = (matches.groups.topic || "").trim();

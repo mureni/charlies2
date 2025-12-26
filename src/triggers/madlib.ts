@@ -7,10 +7,10 @@ const madlib: Trigger = {
    description: "Generates a random paragraph based on known madlib patterns, with optional category",
    usage: "madlib [category]",
    command: /^madlib(?<category>\s+.+)?$/ui,
-   action: async (_context: Message, matches: RegExpMatchArray = []) => {
+   action: async (_context: Message, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { ProcessSwaps: true }, directedTo: undefined };            
       
-      const category = await cleanMessage((matches.groups?.category ?? "general").trim(), { Case: "lower", UseEndearments: true });      
+      const category = await cleanMessage((matches?.groups?.category ?? "general").trim(), { Case: "lower", UseEndearments: true });      
       const size = 2 + Math.floor(Math.random() * 3);
       output.results = [{contents: Madlibs.generate(size, category)}];
       return output;
@@ -23,9 +23,9 @@ const madlibAddWord: Trigger = {
    description: "Adds a word of <type> to the madlib generator for <category>; if <category> or <type> does not exist, it will create the new vocabulary category and type and add the word",
    usage: "madlib-add-word <category> <type> <word>",
    command: /^madlib-add-word (?<category>.+?) (?<type>.+?) (?<word>.+)$/ui,
-   action: async (_context: Message, matches: RegExpMatchArray = []) => {
+   action: async (_context: Message, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' }, directedTo: undefined };
-      if (matches.length === 0 || !matches.groups) return output;
+      if (!matches || matches.length === 0 || !matches.groups) return output;
 
       const category = await cleanMessage((matches.groups.category ?? "general").trim(), { Case: "lower", UseEndearments: true });      
       const vocabType = `[${await cleanMessage((matches.groups.type ?? "").trim(), { Case: "lower", UseEndearments: true })}]`;
@@ -43,9 +43,9 @@ const madlibRemoveWord: Trigger = {
    description: "Removes a word of <type> from the madlib generator for <category>",
    usage: "madlib-remove-word <category> <type> <word>",
    command: /^madlib-remove-word (?<category>.+?) (?<type>.+?) (?<word>.+)$/ui,
-   action: async (_context: Message, matches: RegExpMatchArray = []) => {
+   action: async (_context: Message, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
-      if (matches.length === 0 || !matches.groups) return output;
+      if (!matches || matches.length === 0 || !matches.groups) return output;
       
       const category = await cleanMessage((matches.groups.category ?? "general").trim(), { Case: "lower", UseEndearments: true });      
       const vocabType = `[${await cleanMessage((matches.groups.type ?? "").trim(), { Case: "lower", UseEndearments: true })}]`;
@@ -65,9 +65,9 @@ const madlibAddPattern: Trigger = {
    usage: "madlib-add-pattern <category> <pattern>",
    example: "madlib-add-pattern general the [adverb] [noun] [verb]ed [preposition] the [noun].",
    command: /^madlib-add-pattern (?<category>.+?) (?<pattern>.+)$/ui,
-   action: async (_context: Message, matches: RegExpMatchArray = []) => {
+   action: async (_context: Message, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
-      if (matches.length === 0 || !matches.groups) return output;
+      if (!matches || matches.length === 0 || !matches.groups) return output;
       
       const category = await cleanMessage((matches.groups.category ?? "general").trim(), { Case: "lower", UseEndearments: true });      
       const pattern = await cleanMessage((matches.groups.pattern || "").trim(), { Case: "lower", UseEndearments: true });
@@ -85,9 +85,9 @@ const madlibRemovePattern: Trigger = {
    description: "Removes a pattern from the madlib generator for <category>, if it exists",
    usage: "madlib-remove-pattern <category> <pattern>",
    command: /^madlib-remove-pattern (?<category>.+?) (?<pattern>.+)$/ui,
-   action: async (_context: Message, matches: RegExpMatchArray = []) => {
+   action: async (_context: Message, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
-      if (matches.length === 0 || !matches.groups) return output;
+      if (!matches || matches.length === 0 || !matches.groups) return output;
       
       const category = await cleanMessage((matches.groups.category ?? "general").trim(), { Case: "lower", UseEndearments: true });      
       const pattern = await cleanMessage((matches.groups.pattern || "").trim(), { Case: "lower", UseEndearments: true });

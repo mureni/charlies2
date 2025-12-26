@@ -36,6 +36,7 @@ The constructor accepts an options object. The table below describes each option
 | cacheSize | number | `256` | Max size of the in-memory LRU cache. `0` disables caching. |
 | objectKeyTracking | `"full"` \| `"weak"` | `"full"` | `"full"` preserves object keys for iteration. `"weak"` allows GC at the cost of losing object keys during iteration. |
 | indexes | `{ name?: string, expression: IndexExpr \| IndexExpr[] }[]` | unset | List of index definitions with strict, structured expressions. |
+| allowSchemaMigration | boolean | `false` | Allows one-time migration from legacy `key`/`value` tables to `key_hash` schema. |
 
 Notes on indexes:
 - Each entry becomes a `CREATE INDEX` statement on the backing table.
@@ -276,3 +277,14 @@ console.log(nGrams.get("the|cat|is"));
 // lexicon.clear();
 // nGrams.clear();
 ```
+
+# Migration notes
+
+If you have legacy `DBMap` tables (with `key`/`value` columns), migration is a one-time conversion. In production, keep `allowSchemaMigration` off and run the migration script explicitly.
+
+Run the migration tool:
+```bash
+DB_PATH=./data/<botname>.sql DB_TABLES=lexicon,ngrams \
+  npx ts-node --transpile-only tools/migrate-sqlite-collections.ts
+```
+- Migrations default to off; use `allowSchemaMigration` only when you intend to convert legacy tables.

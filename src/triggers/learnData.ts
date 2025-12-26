@@ -13,7 +13,7 @@ import {
     adminOnly: true,
     ownerOnly: true,
     command: /^!list-channels?/iu,
-    action: async (context: Message, _matches: RegExpMatchArray = []) => {      
+    action: async (context: Message, _matches?: RegExpMatchArray) => {      
        const output: TriggerResult = {
           results: [],
           modifications: { KeepOriginal: true },

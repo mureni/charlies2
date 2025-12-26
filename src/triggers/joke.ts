@@ -9,11 +9,11 @@ const joke: Trigger = {
    usage: "tell <me/[person]/yourself> a<nother> joke <about [topic]>",
    command: /tell (?<person>.+)? ?(?:a(?:nother)?) ?joke(?: about (?<topic>.+))?/ui,
    icon: "joke.png",
-   action: async (context: Message, matches: RegExpMatchArray = []) => {
+   action: async (context: Message, matches?: RegExpMatchArray) => {
         
         const output: TriggerResult = { results: [ { contents: "I don't know any jokes" } ],  modifications: { ProcessSwaps: true }, directedTo: undefined };
 
-        if (matches.length === 0 || !matches.groups) return output;      
+        if (!matches || matches.length === 0 || !matches.groups) return output;      
         const directedTo = (matches.groups.person ?? "").trim();
         const topic = (matches.groups.topic ?? "").trim();
         

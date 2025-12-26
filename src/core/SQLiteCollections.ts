@@ -41,6 +41,7 @@ export interface SQLiteCollectionOptions {
    cacheSize?: number;
    objectKeyTracking?: SQLiteObjectKeyTracking;
    indexes?: SQLiteIndexDefinition[];
+   allowSchemaMigration?: boolean;
 }
 
 const DEFAULT_PRAGMAS = ["journal_mode = WAL", "synchronous = NORMAL"];
@@ -302,25 +303,7 @@ abstract class SQLiteCollectionBase {
          this.db.pragma(pragma);
       }
 
-      this.db.prepare(`CREATE TABLE IF NOT EXISTS ${this.table} (
-         id INTEGER PRIMARY KEY AUTOINCREMENT,
-         key_hash TEXT NOT NULL UNIQUE,
-         value TEXT
-      )`).run();
-
-      if (options?.indexes?.length) {
-         const baseName = this.table.replace(/[^A-Za-z0-9_]/g, "_");
-         options.indexes.forEach((entry, index) => {
-            const indexName = sanitizeTableName(entry.name ?? `${baseName}_idx_${index}`);
-            const expressions = Array.isArray(entry.expression) ? entry.expression : [entry.expression];
-            const sqlExpression = expressions.map((expr) => buildIndexExpression(expr)).join(", ");
-            this.db.prepare(`CREATE INDEX IF NOT EXISTS ${indexName} ON ${this.table} (${sqlExpression})`).run();
-         });
-      }
-
-      if (options?.purgeStaleObjectKeys ?? true) {
-         this.db.prepare(`DELETE FROM ${this.table} WHERE key_hash LIKE 'object:%' OR key_hash LIKE 'symbol:%'`).run();
-      }
+      this.ensureSchema(options);
 
       const countRow = this.db.prepare(`SELECT COUNT(*) as count FROM ${this.table}`).get() as { count: number };
       this.sizeCache = Number.isFinite(countRow.count) ? countRow.count : 0;
@@ -370,6 +353,99 @@ abstract class SQLiteCollectionBase {
       } catch {
          fs.copyFileSync(sourcePath, targetPath);
       }
+   }
+
+   private ensureSchema(options: SQLiteCollectionOptions | undefined): void {
+      const tableExists = this.db
+         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+         .get(this.table);
+
+      if (!tableExists) {
+         this.createTable();
+         this.createIndexes(options);
+         return;
+      }
+
+      const columns = this.db.prepare(`PRAGMA table_info(${this.table})`).all() as Array<{ name: string }>;
+      const hasKeyHash = columns.some((column) => column.name === "key_hash");
+      if (hasKeyHash) {
+         this.createIndexes(options);
+         if (options?.purgeStaleObjectKeys ?? true) {
+            this.db.prepare(`DELETE FROM ${this.table} WHERE key_hash LIKE 'object:%' OR key_hash LIKE 'symbol:%'`).run();
+         }
+         return;
+      }
+
+      const hasLegacyKey = columns.some((column) => column.name === "key");
+      if (hasLegacyKey) {
+         if (!options?.allowSchemaMigration) {
+            throw new Error(
+               `Table '${this.table}' uses legacy schema; set allowSchemaMigration to migrate it.`
+            );
+         }
+         this.migrateLegacyTable(options);
+         return;
+      }
+
+      throw new Error(`Table '${this.table}' has an incompatible schema.`);
+   }
+
+   private createTable(): void {
+      this.db.prepare(`CREATE TABLE IF NOT EXISTS ${this.table} (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         key_hash TEXT NOT NULL UNIQUE,
+         value TEXT
+      )`).run();
+   }
+
+   private createIndexes(options: SQLiteCollectionOptions | undefined): void {
+      if (!options?.indexes?.length) return;
+      const baseName = this.table.replace(/[^A-Za-z0-9_]/g, "_");
+      options.indexes.forEach((entry, index) => {
+         const indexName = sanitizeTableName(entry.name ?? `${baseName}_idx_${index}`);
+         const expressions = Array.isArray(entry.expression) ? entry.expression : [entry.expression];
+         const sqlExpression = expressions.map((expr) => buildIndexExpression(expr)).join(", ");
+         this.db.prepare(`CREATE INDEX IF NOT EXISTS ${indexName} ON ${this.table} (${sqlExpression})`).run();
+      });
+   }
+
+   private migrateLegacyTable(options: SQLiteCollectionOptions | undefined): void {
+      const legacyTable = sanitizeTableName(`${this.table}_legacy_${Date.now()}`);
+      this.db.prepare(`ALTER TABLE ${this.table} RENAME TO ${legacyTable}`).run();
+      this.createTable();
+
+      const rows = this.db.prepare(`SELECT key, value FROM ${legacyTable}`).all() as Array<{ key: string; value: string }>;
+      const insert = this.db.prepare(`INSERT INTO ${this.table} (key_hash, value) VALUES (@key_hash, @value)`);
+      const tx = this.db.transaction((entries: Array<{ key_hash: string; value: string }>) => {
+         for (const entry of entries) insert.run(entry);
+      });
+
+      const migrated = rows.map((row) => {
+         let parsedKey: unknown = row.key;
+         try {
+            parsedKey = JSON.parse(row.key, JSONReviver);
+         } catch {
+            parsedKey = row.key;
+         }
+         const keyForHash = this.isLegacyPrimitiveKey(parsedKey) ? parsedKey : row.key;
+         return { key_hash: encodeKey(keyForHash, this.registry), value: row.value };
+      });
+
+      tx(migrated);
+      this.createIndexes(options);
+      if (options?.purgeStaleObjectKeys ?? true) {
+         this.db.prepare(`DELETE FROM ${this.table} WHERE key_hash LIKE 'object:%' OR key_hash LIKE 'symbol:%'`).run();
+      }
+   }
+
+   private isLegacyPrimitiveKey(value: unknown): boolean {
+      const keyType = typeof value;
+      if (value === null) return true;
+      return keyType === "string"
+         || keyType === "number"
+         || keyType === "boolean"
+         || keyType === "undefined"
+         || keyType === "bigint";
    }
 
    protected encodeKey(key: unknown): string {

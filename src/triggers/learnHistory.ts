@@ -17,7 +17,7 @@ const learnHistory: Trigger = {
    adminOnly: true,
    ownerOnly: true,
    command: /^learn-history ?(?<channelID>.+)?/iu,
-   action: async (context: Message, matches: RegExpMatchArray = []) => {      
+   action: async (context: Message, matches?: RegExpMatchArray) => {      
       const output: TriggerResult = {
          results: [],
          modifications: { ProcessSwaps: true },
@@ -28,7 +28,7 @@ const learnHistory: Trigger = {
             
       try {
 
-         let channelID = matches.groups && matches.groups.channelID ? matches.groups.channelID.trim() : "";
+         let channelID = matches?.groups?.channelID ? matches.groups.channelID.trim() : "";
          if (!channelID) channelID = context.channel.id;
          
          const channel: TextChannel | undefined = context.guild?.channels.resolve(channelID) as TextChannel ?? undefined;

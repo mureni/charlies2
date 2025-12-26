@@ -8,9 +8,9 @@ const roll: Trigger = {
    example: "!roll d20, !roll 4d24, !roll 1d6",
    icon: "dnd.png",
    command: /!r(oll)? (?<rolls>\d+)?\s*d\s*(?<sides>\d+)/ui,
-   action: async (context: Message, matches: RegExpMatchArray = []) => {
+   action: async (context: Message, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' } };
-      if (matches.length === 0 || !matches.groups || matches.groups.sides === undefined) return output;
+      if (!matches || matches.length === 0 || !matches.groups || matches.groups.sides === undefined) return output;
       
       const clamp = (n: number, low: number, high: number): number => Math.max(Math.min(high, n), low);
       const sum = (values: Array<number>): number => values.reduce((prev, cur) => prev + cur, 0);

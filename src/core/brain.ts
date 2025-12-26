@@ -1,5 +1,5 @@
 import { Presets, SingleBar } from "cli-progress";
-import { DBMap } from "../core/DBMap";
+import { SQLiteMap } from "../core/SQLiteCollections";
 import { createReadStream, readFileSync, existsSync, writeFileSync, statSync } from 'fs';
 import { log } from "./log";
 import readline from "readline";
@@ -76,8 +76,18 @@ class Brain {
       }
    }
    */
-   public static lexicon: DBMap<string, Set<string>> = new DBMap<string, Set<string>>(checkFilePath("data", env("BOT_NAME") + ".sql"), "lexicon", false);
-   public static nGrams: DBMap<string, nGram> = new DBMap<string, nGram>(checkFilePath("data", env("BOT_NAME") + ".sql"), "ngrams", false);
+   public static lexicon: SQLiteMap<string, Set<string>> = new SQLiteMap<string, Set<string>>({
+      filename: checkFilePath("data", env("BOT_NAME") + ".sql"),
+      table: "lexicon",
+      cacheSize: 128,
+      allowSchemaMigration: env("NODE_ENV") !== "production"
+   });
+   public static nGrams: SQLiteMap<string, nGram> = new SQLiteMap<string, nGram>({
+      filename: checkFilePath("data", env("BOT_NAME") + ".sql"),
+      table: "ngrams",
+      cacheSize: 64,
+      allowSchemaMigration: env("NODE_ENV") !== "production"
+   });
    public static chainLength: number = 3;
    public static botName: string = env("BOT_NAME") ?? "chatbot";
    public static settings: BrainSettings;

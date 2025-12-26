@@ -53,7 +53,7 @@ class GCPDot {
     }
 
     public static parseDotResults(dotData: string): DotData {
-        const values: RegExpMatchArray = dotData.match(/(0\.\d+)/g) ?? [];
+        const values = dotData.match(/(0\.\d+)/g) ?? [];
         const highest = Math.max(...values.map(v => parseFloat(v)));
         let color: string, explanation: string;
         switch (true) {

@@ -8,7 +8,7 @@ const gcp: Trigger = {
    description: "Shows the current status of the Global Consciousness Project Dot",
    usage: "gcp",   
    command: /\bgcp\b/ui,
-   action: async (_context: Message, _matches: RegExpMatchArray = []) => {
+   action: async (_context: Message, _matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
       
       try {

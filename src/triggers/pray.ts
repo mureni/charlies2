@@ -57,9 +57,9 @@ const bibleVerse: Trigger = {
    example: "!bible genesis 1:3-5",
    command: /^!?bible\s+(?<book>.+)\s+(?<chapter>\d+):(?<verse>\d+)\s*-?\s*(?<verseRange>\d+)?\s*$/ui,   
    icon: "bible-verse.png",
-   action: async (_context, matches: RegExpMatchArray = []) => {
+   action: async (_context, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { Balance: false, ProcessSwaps: false, Case: "unchanged", UseEndearments: false }, directedTo: undefined };
-      if (matches.length === 0 || !matches.groups) return output;
+      if (!matches || matches.length === 0 || !matches.groups) return output;
       const requestedBook = (matches.groups.book ?? "").trim().toLocaleLowerCase();
       // leaving these as integers for easier range checking. do not need to make them strings at this time since it's a fixed format.
       const requestedChapter = parseInt(matches.groups.chapter ?? "1");
