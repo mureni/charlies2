@@ -68,6 +68,10 @@ const assertValueEqual = (actual: unknown, expected: unknown): void => {
    assert.deepStrictEqual(actual, expected);
 };
 
+const expectThrow = (fn: () => void, message: RegExp): void => {
+   assert.throws(fn, message);
+};
+
 const test = (name: string, fn: () => void): void => {
    try {
       fn();
@@ -140,6 +144,15 @@ const dumpRawTable = (label: string, dbPath: string, table: string): void => {
       }
    }
    db.close();
+};
+
+const getIndexNames = (dbPath: string, table: string): string[] => {
+   const db = new Database(dbPath, { readonly: true });
+   const rows = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?").all(table) as Array<{
+      name: string;
+   }>;
+   db.close();
+   return rows.map((row) => row.name).sort();
 };
 
 test("SQLiteMap basic operations and iteration order", () => {
@@ -612,4 +625,180 @@ test("SQLiteMap matches native Map for random operations", () => {
    assertMapMatches(actual, expected);
    dumpRawTable("map-oracle", dbPath, "map_oracle");
    actual.close();
+});
+
+test("SQLiteMap convenience methods are available and correct", () => {
+   const dir = makeTempDir();
+   const dbPath = makeDbPath(dir, "map-convenience");
+   const map = new SQLiteMap<string, number>({ filename: dbPath, table: "map_convenience", backupOnClear: false });
+
+   assert.strictEqual(map.safeGet("missing", 5), 5);
+   map.set("a", 1);
+   map.update("a", (value) => value + 1, 0);
+   map.update("b", (value) => value + 1, 3);
+   assert.strictEqual(map.get("a"), 2);
+   assert.strictEqual(map.get("b"), 3);
+
+   const filtered = map.filter((value) => value >= 2);
+   assert.deepStrictEqual(Array.from(filtered.entries()), [["a", 2], ["b", 3]]);
+
+   const merged = new SQLiteMap<string, number>({ filename: dbPath, table: "map_convenience_merge", backupOnClear: false });
+   merged.set("a", 10);
+   merged.set("c", 4);
+   map.merge(merged, (_key, left, right) => left + right);
+   assert.deepStrictEqual(map.get("a"), 12);
+   assert.deepStrictEqual(map.get("c"), 4);
+
+   const key = map.randomKey;
+   const value = map.randomValue;
+   const entry = map.randomEntry;
+   assert.ok(map.keyArray.includes(key));
+   assert.ok(map.valueArray.includes(value));
+   assert.ok(map.entriesArray.some(([k, v]) => k === entry[0] && v === entry[1]));
+
+   merged.close();
+   map.close();
+});
+
+test("SQLiteMap creates structured indexes and composite indexes", () => {
+   const dir = makeTempDir();
+   const dbPath = makeDbPath(dir, "map-indexes");
+   const map = new SQLiteMap<string, { count: number; tokens: string[] }>({
+      filename: dbPath,
+      table: "map_indexes",
+      backupOnClear: false,
+      indexes: [
+         { name: "idx_count", expression: { jsonExtract: "$.count" } },
+         { name: "idx_type", expression: { jsonType: "$.tokens" } },
+         { name: "idx_len", expression: { jsonArrayLength: "$.tokens" } },
+         { name: "idx_valid", expression: { jsonValid: true } },
+         { name: "idx_combo", expression: [
+            { jsonExtract: "$.count" },
+            { jsonExtract: "$.tokens[0]" }
+         ] }
+      ]
+   });
+
+   const indexNames = getIndexNames(dbPath, "map_indexes");
+   assert.ok(indexNames.includes("idx_count"));
+   assert.ok(indexNames.includes("idx_type"));
+   assert.ok(indexNames.includes("idx_len"));
+   assert.ok(indexNames.includes("idx_valid"));
+   assert.ok(indexNames.includes("idx_combo"));
+   map.close();
+});
+
+test("SQLiteMap objectKeyTracking full preserves object keys in iteration", () => {
+   const dir = makeTempDir();
+   const dbPath = makeDbPath(dir, "map-object-keys-full");
+   const map = new SQLiteMap<object, string>({
+      filename: dbPath,
+      table: "map_object_keys_full",
+      backupOnClear: false,
+      objectKeyTracking: "full"
+   });
+   const obj = { id: 1 };
+   map.set(obj, "value");
+   map.set({ id: 2 }, "other");
+   const keys = Array.from(map.keys());
+   assert.ok(keys.some((key) => key === obj));
+   assert.strictEqual(map.has(obj), true);
+   assert.strictEqual(map.get(obj), "value");
+   map.close();
+});
+
+test("SQLiteMap objectKeyTracking weak skips object keys in iteration", () => {
+   const dir = makeTempDir();
+   const dbPath = makeDbPath(dir, "map-object-keys-weak");
+   const map = new SQLiteMap<unknown, string>({
+      filename: dbPath,
+      table: "map_object_keys_weak",
+      backupOnClear: false,
+      objectKeyTracking: "weak"
+   });
+   const obj = { id: 1 };
+   map.set(obj, "value");
+   map.set("primitive", "ok");
+   const keys = Array.from(map.keys());
+   assert.ok(keys.includes("primitive"));
+   assert.ok(keys.every((key) => typeof key !== "object"));
+   assert.strictEqual(map.has(obj), true);
+   assert.strictEqual(map.get(obj), "value");
+   map.close();
+});
+
+test("SQLiteMap cacheSize 0 does not change correctness", () => {
+   const dir = makeTempDir();
+   const dbPath = makeDbPath(dir, "map-cache-zero");
+   const map = new SQLiteMap<string, number>({
+      filename: dbPath,
+      table: "map_cache_zero",
+      cacheSize: 0,
+      backupOnClear: false
+   });
+   map.set("a", 1);
+   map.set("b", 2);
+   assert.strictEqual(map.get("a"), 1);
+   assert.strictEqual(map.has("b"), true);
+   map.delete("a");
+   assert.strictEqual(map.has("a"), false);
+   map.close();
+});
+
+test("SQLiteSet cacheSize 0 does not change correctness", () => {
+   const dir = makeTempDir();
+   const dbPath = makeDbPath(dir, "set-cache-zero");
+   const set = new SQLiteSet<string>({
+      filename: dbPath,
+      table: "set_cache_zero",
+      cacheSize: 0,
+      backupOnClear: false
+   });
+   set.add("a");
+   set.add("b");
+   assert.strictEqual(set.has("a"), true);
+   set.delete("a");
+   assert.strictEqual(set.has("a"), false);
+   set.close();
+});
+
+test("SQLiteMap rejects invalid index definitions", () => {
+   const dir = makeTempDir();
+   const dbPath = makeDbPath(dir, "map-indexes-invalid");
+
+   expectThrow(
+      () => {
+         new SQLiteMap<string, { count: number }>({
+            filename: dbPath,
+            table: "map_indexes_invalid",
+            backupOnClear: false,
+            indexes: [{ name: "idx-bad-name", expression: { jsonExtract: "$.count" } }]
+         });
+      },
+      /Invalid table name/
+   );
+
+   expectThrow(
+      () => {
+         new SQLiteMap<string, { count: number }>({
+            filename: dbPath,
+            table: "map_indexes_invalid2",
+            backupOnClear: false,
+            indexes: [{ name: "idx_count", expression: { jsonExtract: "count" } }]
+         });
+      },
+      /Invalid JSON path/
+   );
+
+   expectThrow(
+      () => {
+         new SQLiteMap<string, { count: number }>({
+            filename: dbPath,
+            table: "map_indexes_invalid3",
+            backupOnClear: false,
+            indexes: [{ name: "idx_count", expression: { jsonExtract: "$.count;drop" } }]
+         });
+      },
+      /Invalid JSON path/
+   );
 });

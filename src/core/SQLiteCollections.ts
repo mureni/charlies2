@@ -10,6 +10,16 @@ import Database from "better-sqlite3";
 export type SQLiteSerializer = (value: unknown) => string;
 export type SQLiteDeserializer = (value: string) => unknown;
 export type SQLiteObjectKeyTracking = "full" | "weak";
+export type SQLiteIndexExpression =
+   | { column: "id" | "key_hash" | "value" }
+   | { jsonExtract: string }
+   | { jsonType: string }
+   | { jsonArrayLength: string }
+   | { jsonValid: true };
+export type SQLiteIndexDefinition = {
+   name?: string;
+   expression: SQLiteIndexExpression | SQLiteIndexExpression[];
+};
 
 type ReadonlySetLikeCompat<T> = {
    has(value: T): boolean;
@@ -30,6 +40,7 @@ export interface SQLiteCollectionOptions {
    backupSuffix?: string;
    cacheSize?: number;
    objectKeyTracking?: SQLiteObjectKeyTracking;
+   indexes?: SQLiteIndexDefinition[];
 }
 
 const DEFAULT_PRAGMAS = ["journal_mode = WAL", "synchronous = NORMAL"];
@@ -183,6 +194,24 @@ const sanitizeTableName = (table: string): string => {
    return table;
 };
 
+const validateJsonPath = (pathValue: string): string => {
+   if (!pathValue.startsWith("$.") && pathValue !== "$") {
+      throw new TypeError(`Invalid JSON path: ${pathValue}`);
+   }
+   if (/[^A-Za-z0-9_\$\.\[\]\*]/.test(pathValue)) {
+      throw new TypeError(`Invalid JSON path: ${pathValue}`);
+   }
+   return pathValue;
+};
+
+const buildIndexExpression = (expression: SQLiteIndexExpression): string => {
+   if ("column" in expression) return expression.column;
+   if ("jsonValid" in expression) return "json_valid(value)";
+   if ("jsonExtract" in expression) return `json_extract(value, '${validateJsonPath(expression.jsonExtract)}')`;
+   if ("jsonType" in expression) return `json_type(value, '${validateJsonPath(expression.jsonType)}')`;
+   return `json_array_length(value, '${validateJsonPath(expression.jsonArrayLength)}')`;
+};
+
 const forEachReadonlySetLike = <U>(setLike: ReadonlySetLikeCompat<U>, fn: (value: U) => void): void => {
    const maybeForEach = (setLike as { forEach?: unknown }).forEach;
    if (typeof maybeForEach === "function") {
@@ -278,6 +307,16 @@ abstract class SQLiteCollectionBase {
          key_hash TEXT NOT NULL UNIQUE,
          value TEXT
       )`).run();
+
+      if (options?.indexes?.length) {
+         const baseName = this.table.replace(/[^A-Za-z0-9_]/g, "_");
+         options.indexes.forEach((entry, index) => {
+            const indexName = sanitizeTableName(entry.name ?? `${baseName}_idx_${index}`);
+            const expressions = Array.isArray(entry.expression) ? entry.expression : [entry.expression];
+            const sqlExpression = expressions.map((expr) => buildIndexExpression(expr)).join(", ");
+            this.db.prepare(`CREATE INDEX IF NOT EXISTS ${indexName} ON ${this.table} (${sqlExpression})`).run();
+         });
+      }
 
       if (options?.purgeStaleObjectKeys ?? true) {
          this.db.prepare(`DELETE FROM ${this.table} WHERE key_hash LIKE 'object:%' OR key_hash LIKE 'symbol:%'`).run();
@@ -467,6 +506,66 @@ export class SQLiteMap<K, V> extends SQLiteCollectionBase {
 
    public get [Symbol.toStringTag](): string {
       return "SQLiteMap";
+   }
+
+   public safeGet(key: K, defaultValue: V): V {
+      return this.get(key) ?? defaultValue;
+   }
+
+   public update(key: K, updater: (value: V, key: K) => V, defaultValue: V): void {
+      if (this.has(key)) {
+         this.set(key, updater(this.safeGet(key, defaultValue), key));
+      } else {
+         this.set(key, defaultValue);
+      }
+   }
+
+   public filter(predicate: (value: V, key: K) => boolean): Map<K, V> {
+      const newMap = new Map<K, V>();
+      for (const [key, value] of this.entries()) {
+         if (predicate(value, key)) newMap.set(key, value);
+      }
+      return newMap;
+   }
+
+   public merge(
+      map: SQLiteMap<K, V> | Map<K, V>,
+      resolve: (key: K, A: V, B: V) => V = (_key: K, _A: V, B: V) => B
+   ): void {
+      for (const [key, value] of map.entries()) {
+         if (this.has(key)) {
+            this.set(key, resolve(key, this.safeGet(key, value), value));
+         } else {
+            this.set(key, value);
+         }
+      }
+   }
+
+   public get keyArray(): Array<K> {
+      return Array.from(this.keys());
+   }
+
+   public get valueArray(): Array<V> {
+      return Array.from(this.values());
+   }
+
+   public get entriesArray(): Array<[K, V]> {
+      return Array.from(this.entries());
+   }
+
+   public get randomKey(): K {
+      const keys = this.keyArray;
+      return keys[Math.floor(Math.random() * keys.length)];
+   }
+
+   public get randomValue(): V {
+      const values = this.valueArray;
+      return values[Math.floor(Math.random() * values.length)];
+   }
+
+   public get randomEntry(): [K, V] {
+      const entries = this.entriesArray;
+      return entries[Math.floor(Math.random() * entries.length)];
    }
 }
 

@@ -35,6 +35,21 @@ The constructor accepts an options object. The table below describes each option
 | backupSuffix | string | unset | Optional suffix appended to backup filenames. |
 | cacheSize | number | `256` | Max size of the in-memory LRU cache. `0` disables caching. |
 | objectKeyTracking | `"full"` \| `"weak"` | `"full"` | `"full"` preserves object keys for iteration. `"weak"` allows GC at the cost of losing object keys during iteration. |
+| indexes | `{ name?: string, expression: IndexExpr \| IndexExpr[] }[]` | unset | List of index definitions with strict, structured expressions. |
+
+Notes on indexes:
+- Each entry becomes a `CREATE INDEX` statement on the backing table.
+- Expressions are structured so there is no raw SQL input.
+- JSON paths are validated and compiled into `json_extract`/`json_type`.
+- Composite indexes are expressed as an array of expressions.
+- TODO: Consider `json_each`/`json_tree` helpers for targeted queries once we have real use cases.
+
+IndexExpr shape:
+- `{ column: "id" | "key_hash" | "value" }`
+- `{ jsonExtract: "$.path" }`
+- `{ jsonType: "$.path" }`
+- `{ jsonArrayLength: "$.path" }`
+- `{ jsonValid: true }`
 
 # Cache size guidance
 
@@ -151,6 +166,23 @@ The goal is to mirror `Map` and `Set` as closely as possible while keeping stora
 | `[Symbol.iterator]` | yes | Returns entries iterator. |
 | `[Symbol.toStringTag]` | yes | `"SQLiteMap"`. |
 
+## SQLiteMap convenience methods
+
+These mirror the helper methods in `DBMap` so existing call sites can move over without rework.
+
+| Method | Description |
+| ------ | ----------- |
+| `safeGet(key, defaultValue)` | Returns stored value or a fallback. |
+| `update(key, updater, defaultValue)` | Updates value in place or inserts default. |
+| `filter(predicate)` | Returns a plain `Map` of matching entries. |
+| `merge(map, resolve?)` | Merges another map into this one with conflict resolution. |
+| `keyArray` | Array of keys in insertion order. |
+| `valueArray` | Array of values in insertion order. |
+| `entriesArray` | Array of entries in insertion order. |
+| `randomKey` | Random key (undefined if empty). |
+| `randomValue` | Random value (undefined if empty). |
+| `randomEntry` | Random entry (undefined if empty). |
+
 ## SQLiteSet compatibility
 
 | Method | Support | Notes |
@@ -201,7 +233,15 @@ const lexicon = new SQLiteMap<string, string[]>({
 const nGrams = new SQLiteMap<string, { count: number; tokens: string[] }>({
   filename: "brain.db",
   table: "ngrams",
-  cacheSize: 64
+  cacheSize: 64,
+  indexes: [
+    { expression: { jsonExtract: "$.count" } },
+    { name: "ngrams_tokens_first", expression: { jsonExtract: "$.tokens[0]" } },
+    { name: "ngrams_count_token", expression: [
+      { jsonExtract: "$.count" },
+      { jsonExtract: "$.tokens[0]" }
+    ] }
+  ]
 });
 
 const addNGram = (ngram: string, tokens: string[]): void => {
