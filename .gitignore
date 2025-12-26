@@ -2,6 +2,7 @@
 .vscode
 .devcontainer
 .github
+.review
 
 # Data directory (should contain information at runtime only)
 data

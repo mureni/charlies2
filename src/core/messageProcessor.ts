@@ -203,22 +203,23 @@ const sendMessage = async (client: ClientUser, channel: TextChannel, message: Ou
    const permissions = channel.permissionsFor(client);
    if (!permissions || !permissions.has('SEND_MESSAGES')) return false;
    if (!channel.guild) return false;
-   if (mods?.KeepOriginal) {
+   const workingMods = mods ? { ...mods } : undefined;
+   if (workingMods?.KeepOriginal) {
       // Reset all other mods
-      mods.Balance = false;
-      mods.Case = "unchanged";
-      mods.ProcessSwaps = false;
-      mods.StripFormatting = false;
-      mods.UseEndearments = false;
+      workingMods.Balance = false;
+      workingMods.Case = "unchanged";
+      workingMods.ProcessSwaps = false;
+      workingMods.StripFormatting = false;
+      workingMods.UseEndearments = false;
    }
    let text = message.contents;
-   text = await interpolateUsers(text, channel.guild.members, Boolean(mods?.UseEndearments));
-   text = await cleanMessage(text, mods);
+   text = await interpolateUsers(text, channel.guild.members, Boolean(workingMods?.UseEndearments));
+   text = await cleanMessage(text, workingMods);
 
    /* Processing swaps should always be done AFTER cleaning the message.
       This prevents swap rules causing usernames or channels to accidentally leak 
    */
-   if (mods?.ProcessSwaps) text = Swap.process(channel.guild.id, text);
+   if (workingMods?.ProcessSwaps) text = Swap.process(channel.guild.id, text);
    
    // TODO: Balance code blocks and such accounting for max length, if necessary
    let embeds = message.embeds ?? [];
@@ -231,7 +232,7 @@ const sendMessage = async (client: ClientUser, channel: TextChannel, message: Ou
          content: text.substring(0, MAX_LENGTH),
          embeds: embeds,
          files: files,
-         tts: Boolean(mods?.TTS)
+         tts: Boolean(workingMods?.TTS)
       });
       text = text.substring(MAX_LENGTH).trim();
       embeds = [];
@@ -246,13 +247,14 @@ const cleanMessage = async (message: Message | string, mods?: ModificationType):
 
    let fullText: string;
 
-   if (mods?.KeepOriginal) {
+   const workingMods = mods ? { ...mods } : undefined;
+   if (workingMods?.KeepOriginal) {
       // Reset all other mods
-      mods.Balance = false;
-      mods.Case = "unchanged";
-      mods.ProcessSwaps = false;
-      mods.StripFormatting = false;
-      mods.UseEndearments = false;
+      workingMods.Balance = false;
+      workingMods.Case = "unchanged";
+      workingMods.ProcessSwaps = false;
+      workingMods.StripFormatting = false;
+      workingMods.UseEndearments = false;
    }
    const botNameCleaner = (text: string) => {
       /* Ensure no rogue RegExp-breaking characters in the bot name */
@@ -265,10 +267,10 @@ const cleanMessage = async (message: Message | string, mods?: ModificationType):
 
    if (message instanceof Message) {
       fullText = botNameCleaner(message.content.trim());
-      fullText = await interpolateUsers(fullText, message.guild?.members, Boolean(mods?.UseEndearments));      
+      fullText = await interpolateUsers(fullText, message.guild?.members, Boolean(workingMods?.UseEndearments));      
    } else {
       fullText = botNameCleaner(message.trim());
-      fullText = await interpolateUsers(fullText, undefined, Boolean(mods?.UseEndearments));
+      fullText = await interpolateUsers(fullText, undefined, Boolean(workingMods?.UseEndearments));
    }
 
    /* Fix any broken custom emojis (<:name:00000000>) where a space before the > was accidentally saved */
@@ -301,7 +303,7 @@ const cleanMessage = async (message: Message | string, mods?: ModificationType):
    fullText = injectionBlocks.text;
 
    /* Capture code blocks (between pairs of ```) as case insensitive and as-is regarding line breaks */
-   const codeRX = newRX('```[.\n]+?```', 'muigs');
+   const codeRX = newRX('```[\\s\\S]+?```', 'muigs');
    const extractedCode = extractBlocks(fullText, blockCodes.codeBlocks, codeRX);
    const codeBlocks: string[] = extractedCode.blocks;
    fullText = extractedCode.text;
@@ -338,7 +340,7 @@ const cleanMessage = async (message: Message | string, mods?: ModificationType):
       text = text.replace(newRX(`<#\\d+>`, "musig"), "my secret place");
    
     
-      switch (mods?.Case) {
+      switch (workingMods?.Case) {
          case "unchanged":
             break;
          case "upper":
@@ -350,7 +352,7 @@ const cleanMessage = async (message: Message | string, mods?: ModificationType):
             break;
       }
       
-      if (mods?.StripFormatting) text = text.replace(stripFormattingRX, '$<Text>');
+      if (workingMods?.StripFormatting) text = text.replace(stripFormattingRX, '$<Text>');
 
       results.push(text);
    }
@@ -363,7 +365,7 @@ const cleanMessage = async (message: Message | string, mods?: ModificationType):
    if (urls.length > 0) result = restoreBlocks(result, blockCodes.URLs, urls);
    
    /* Balance brackets and quotation marks and such. Do this before restoring code blocks to avoid counting ``` as 3x ` */
-   if (mods?.Balance) result = balanceText(result);
+   if (workingMods?.Balance) result = balanceText(result);
 
    /* Restore code blocks */
    if (codeBlocks.length > 0) result = restoreBlocks(result, blockCodes.codeBlocks, codeBlocks);
@@ -384,14 +386,31 @@ const extractBlocks = (text: string = "", symbol: string = "", regEx: RegExp | n
             Let the regexp decide if the match is global, since this will work itself out in the number of matches found. */
    if (!text || !symbol || !regEx) return { text: text, blocks: [] };   
    const blocks: string[] = [];
-   const matches = text.match(regEx);
-   if (matches) {
-      for (let i = 0; i < matches.length; i++) {
-         blocks.push(matches[i]);
-         text = text.replace(matches[i], `<${symbol}-${i}>`);
+   if (regEx.global) {
+      const workingRX = new RegExp(regEx.source, regEx.flags);
+      const matches = Array.from(text.matchAll(workingRX));
+      if (matches.length > 0) {
+         let rebuilt = "";
+         let lastIndex = 0;
+         matches.forEach((match, index) => {
+            const matchText = match[0];
+            const matchIndex = match.index ?? 0;
+            rebuilt += text.slice(lastIndex, matchIndex);
+            rebuilt += `<${symbol}-${index}>`;
+            blocks.push(matchText);
+            lastIndex = matchIndex + matchText.length;
+         });
+         rebuilt += text.slice(lastIndex);
+         text = rebuilt;
+      }
+   } else {
+      const match = text.match(regEx);
+      if (match && match.index !== undefined) {
+         blocks.push(match[0]);
+         text = text.slice(0, match.index) + `<${symbol}-0>` + text.slice(match.index + match[0].length);
       }
    }
-   return { text: text, blocks: blocks }
+   return { text: text, blocks: blocks };
 }
 const restoreBlocks = (text: string = "", symbol: string = "", blocks: string[] = []): string => {
    /* NOTE: There should be only one match per <[symbol]-[index]>. Do not use RegExp or replaceAll for this.

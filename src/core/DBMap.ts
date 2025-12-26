@@ -34,12 +34,12 @@ export class DBMap<K, V> {
    private db: Database.Database | undefined = undefined;   
    private dbStatements: {
       insert: undefined | Database.Statement<{ key: string, value: string }>;
-      select: undefined | Database.Statement<string>;
-      delete: undefined | Database.Statement<string>;
-      selectKeys: undefined | Database.Statement<string[]>;
-      selectValues: undefined | Database.Statement<string[]>;
-      selectEntries: undefined | Database.Statement<{ key: string, value: string }[]>;
-      count: undefined | Database.Statement;
+      select: undefined | Database.Statement<[string], { value: string }>;
+      delete: undefined | Database.Statement<[string]>;
+      selectKeys: undefined | Database.Statement<[], { key: string }>;
+      selectValues: undefined | Database.Statement<[], { value: string }>;
+      selectEntries: undefined | Database.Statement<[], { key: string, value: string }>;
+      count: undefined | Database.Statement<[], { 'COUNT(*)': number } | undefined>;
    } = {
       insert: undefined, select: undefined, delete: undefined, selectKeys: undefined, selectValues: undefined, selectEntries: undefined, count: undefined
    };
@@ -94,7 +94,7 @@ export class DBMap<K, V> {
          // Single use functions, no transaction needed (no changes made)
          this.dbStatements.select = db.prepare(`SELECT value FROM ${this.table} WHERE key = ?`);
          this.dbActions.select = (key: string): string | undefined => {
-            if (!key) return "";
+            if (!key) return undefined;
             const obj = this.dbStatements.select!.get(key) ?? undefined;            
             if (!obj || !obj['value']) return undefined;
             return obj['value'];
@@ -115,14 +115,14 @@ export class DBMap<K, V> {
 
          this.dbStatements.count = db.prepare(`SELECT COUNT(*) FROM ${this.table}`);
          this.dbActions.count = (): number => {
-            const result: { [request: string]: number } = this.dbStatements.count!.get();
+            const result: { 'COUNT(*)': number } | undefined = this.dbStatements.count!.get();
             if (this.debug) {
                console.log(`[SQL] Retrieving row count of ${this.table}:`);
                console.dir(result);
             }
             if (!result) return 0;
             let value = Number(result['COUNT(*)']) ?? 0;
-            return (value !== NaN) ? value : 0;
+            return Number.isFinite(value) ? value : 0;
          }
          
          this.db = db;
@@ -170,7 +170,7 @@ export class DBMap<K, V> {
    }
 
    public set(key: K, value: V): void {
-      if (!value || !this.dbActions.insert) return;
+      if (value === undefined || !this.dbActions.insert) return;
       
       const keystring = this.keystring(key);
       const valuestring = JSON.stringify(value, JSONReplacer);
@@ -180,16 +180,23 @@ export class DBMap<K, V> {
       return;      
    }
    public has(key: K): boolean {
-      return Boolean(this.keystring(key) ?? false);
+      if (!this.dbActions.select) return false;
+      const keystring = this.keystring(key);
+      if (!keystring) return false;
+      return this.dbActions.select(keystring) !== undefined;
    }
    
    public clear(): void {
       this.keycache = new Array();      
-      // technically does not delete the table, to prevent accidents, and just makes a new one
+      // Intentionally non-destructive: renames the table to a backup and creates a new empty one.
       this.table = this.name ?? "dbmap";
       if (this.db) {
-         // rename the table for backup purposes, and close the current database connection
-         this.db.prepare(`ALTER TABLE ${this.table} RENAME TO ${idgen(this.table)}`).run();
+         // Rename the table for backup purposes; fall back to re-init if rename fails.
+         try {
+            this.db.prepare(`ALTER TABLE ${this.table} RENAME TO ${idgen(this.table)}`).run();
+         } catch (err: unknown) {
+            if (this.debug) console.error(`[DBMap-${this.name}] Unable to rename table for backup: ${String(err)}`);
+         }
          this.closeDB();
       }
       this.initDB(this.datafile);

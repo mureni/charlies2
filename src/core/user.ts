@@ -77,11 +77,11 @@ const interpolateUsers = async (text: string, members: GuildMemberManager | unde
       try {
          const fetchedMembers = await members.fetch();
          
-         fetchedMembers.forEach(async member => {
+         for (const member of fetchedMembers.values()) {
             const displayName = await getDisplayName(member.user, members);
             text = text.replace(newRX(`<@!?\\s*${escapeRegExp(member.id)}>`, "uig"), displayName);
             if (useEndearments) text = text.replace(newRX(`\\b${escapeRegExp(displayName)}\\b`, "uig"), getEndearment());
-         });        
+         }
          
       } catch (e) {         
          // NOOP - most likely GUILD_MEMBERS_TIMEOUT, irrelevant if it works really. 
