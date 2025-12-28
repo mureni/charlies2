@@ -3,6 +3,40 @@ import { log } from "./log";
 import { ModificationType, ProcessResults, processMessage, cleanMessage } from "./messageProcessor";
 import { Trigger, Triggers, TriggerResult } from "./triggerProcessor";
 import { Conversation, KnownUsers, getDisplayName, interpolateUsers, getEndearment } from "./user";
-import { Message } from "discord.js";
+import {
+   CoreMessage,
+   OutgoingAttachment,
+   OutgoingEmbed,
+   OutgoingEmbedField,
+   OutgoingMessage,
+   PlatformAdapter,
+   PlatformHistoryQuery,
+   PlatformMemberQuery,
+   PlatformPermission
+} from "../platform";
 
-export { Conversation, KnownUsers, Message, Brain, log, ModificationType, ProcessResults, processMessage, cleanMessage, Trigger, Triggers, TriggerResult, getDisplayName, interpolateUsers, getEndearment };
+export {
+   Conversation,
+   KnownUsers,
+   Brain,
+   log,
+   ModificationType,
+   ProcessResults,
+   processMessage,
+   cleanMessage,
+   Trigger,
+   Triggers,
+   TriggerResult,
+   getDisplayName,
+   interpolateUsers,
+   getEndearment,
+   CoreMessage,
+   OutgoingAttachment,
+   OutgoingEmbed,
+   OutgoingEmbedField,
+   OutgoingMessage,
+   PlatformAdapter,
+   PlatformHistoryQuery,
+   PlatformMemberQuery,
+   PlatformPermission
+};

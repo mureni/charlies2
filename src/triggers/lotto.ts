@@ -1,4 +1,4 @@
-import { Message, TriggerResult, Trigger } from "../core";
+import { CoreMessage, TriggerResult, Trigger } from "../core";
 import { env } from "../utils";
 
 const lotto: Trigger = {
@@ -7,7 +7,7 @@ const lotto: Trigger = {
    description: "Draws up to 200 random lottery numbers. Defaults to between 1 and 100, negatives are ignored",
    usage: "give me <number> [unique] [lotto/lottery] numbers [between <low> and <high>]",
    command: /give me (?<number>\d+) ?(?<unique>unique)? ?(?:lotto|lottery)? numbers? ?(?:between (?<low>\d+) and (?<high>\d+))?/ui,
-   action: (_context: Message, matches?: RegExpMatchArray) => {
+   action: (_context: CoreMessage, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' } };      
       if (!matches || matches.length === 0 || !matches.groups || matches.groups.number === undefined) return output;
       const clamp = (n: number, low: number, high: number): number => Math.max(Math.min(high, n), low);
@@ -53,7 +53,7 @@ const checkem: Trigger = {
    usage: "checkem",
    command: /checkem|dubs|trips|quads/ui,
    icon: "checkem.png",
-   action: (context: Message) => {
+   action: (context: CoreMessage) => {
       const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' } };            
       const isDubs = (str: string) => /(.)\1{1}$/.test(str);
       const isTrips = (str: string) => /(.)\1{2}$/.test(str);
@@ -62,7 +62,7 @@ const checkem: Trigger = {
       const getNumber = (): string => Math.round(Math.random() * 9999).toString();
       
       let result = getNumber();
-      if (context.author.id === env("BOT_OWNER_DISCORD_ID")) {
+      if (context.authorId === env("BOT_OWNER_DISCORD_ID")) {
          const quads = Boolean(Math.random() > .9);
          const trips = Boolean(Math.random() > .8);
          const dubs = Boolean(Math.random() > .7);

@@ -1,22 +1,34 @@
+import "source-map-support/register";
 import "dotenv/config";
 
-import { Intents, Message, TextChannel, Client } from "discord.js";
-import { log, Brain, ProcessResults, processMessage, getDisplayName, KnownUsers, Conversation, Triggers } from "./core";
+import { GatewayIntentBits, Partials, Message, Client, MessageType } from "discord.js";
+import { log, Brain, ProcessResults, processMessage, KnownUsers, Conversation, Triggers } from "./core";
+import { toCoreMessage } from "./platform";
 
 import { env } from "./utils";
 
 // TODO: Refactor everything for cleaner code 
+const traceFlow = env("TRACE_FLOW") === "true";
+const trace = (message: string, data?: unknown): void => {
+   if (traceFlow) log(data ? { message: `Flow: ${message}`, data } : `Flow: ${message}`, "trace");
+};
 
 /* ACTIVATE */
 let initialized: boolean = false;
-// TODO: Whenever top-level await works properly, await the initialization to avoid initial learning causing a Discord timeout
+let initializing: boolean = false;
+const mandatoryEnvVars = ["DISCORD_AUTH", "BOT_OWNER_DISCORD_ID", "BOT_NAME", "NODE_ENV"];
+
+const preflightEnv = () => {
+   for (const envVar of mandatoryEnvVars) {
+      if (env(envVar) === "") throw new Error(`Environment variable ${envVar} not found in environment. This value must be set to continue. Exiting...`);
+   }
+};
+
 const initialize = async () => {
    log(`Initializing...`);
    let loadResults: boolean | Error;
 
    log(`Loading environment variables...`);
-   const mandatoryEnvVars = ["DISCORD_AUTH", "BOT_OWNER_DISCORD_ID", "BOT_NAME", "NODE_ENV"];
-
    for (const envVar of mandatoryEnvVars) {
       if (env(envVar) === "") throw new Error(`Environment variable ${envVar} not found in environment. This value must be set to continue. Exiting...`);      
    }
@@ -53,20 +65,33 @@ const initialize = async () => {
    initialized = true;
 }
 
+const startInitialization = async () => {
+   if (initialized || initializing) return;
+   initializing = true;
+   try {
+      await initialize();
+   } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      log(`Initialization failed: ${message}`, "error");
+   } finally {
+      initializing = false;
+   }
+};
+
 
 /* Initialize discord client */
 let reconnectAttempts: number = 0;
-const intents = new Intents();
-intents.add(Intents.FLAGS.GUILD_MEMBERS, 
-            Intents.FLAGS.GUILD_MESSAGES,
-            Intents.FLAGS.GUILD_MESSAGE_REACTIONS,
-            Intents.FLAGS.GUILD_EMOJIS_AND_STICKERS,
-            Intents.FLAGS.DIRECT_MESSAGES,
-            Intents.FLAGS.DIRECT_MESSAGE_REACTIONS,
-            Intents.FLAGS.GUILDS);
-
 const client = new Client({
-   intents: intents   
+   intents: [
+      GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.GuildMessageReactions,
+      GatewayIntentBits.MessageContent,
+      GatewayIntentBits.DirectMessages,
+      GatewayIntentBits.DirectMessageReactions,
+      GatewayIntentBits.Guilds
+   ],
+   partials: [Partials.Channel]
 });
 const dirty = {
    brain: false
@@ -113,11 +138,19 @@ const saveData = (): void => {
 }
 
 /* Define exit handler and exit events */
-const exitHandler = async () => {      
-   log(`Saving data, shutting down client, exiting with code: ${process.exitCode}.`);
+let shuttingDown: boolean = false;
+const exitHandler = async (signal?: NodeJS.Signals) => {
+   if (shuttingDown) return;
+   shuttingDown = true;
+   log(`Saving data, shutting down client${signal ? ` (signal: ${signal})` : ""}.`);
    saveData();
-   client.destroy(); 
-}
+   try {
+      await client.destroy();
+   } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      log(`Error during shutdown: ${message}`, "error");
+   }
+};
 
 /* BAD IDEA: 
 
@@ -129,12 +162,15 @@ if (process.env.NODE_ENV === "production") {
    });
 }
 */
-process
-   .on('exit', exitHandler)
-   .on('SIGINT', exitHandler)
-   .on('SIGTERM', exitHandler)
-   .on('SIGUSR1', exitHandler)
-   .on('SIGUSR2', exitHandler);
+const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGUSR1", "SIGUSR2"];
+for (const signal of signals) {
+   process.once(signal, () => {
+      void exitHandler(signal).finally(() => {
+         const exitCode = signal === "SIGINT" ? 130 : 0;
+         process.exit(exitCode);
+      });
+   });
+}
 
 
 
@@ -156,9 +192,26 @@ const login = (): Promise<any> => client.login(env("DISCORD_AUTH"))
 client.on("error", error => {
    log(`Error occurred: ${error.message}`, "error");      
 });
-client.on("ready", async () => {
+if (env("DISCORD_DEBUG") === "true") {
+   client.on("debug", info => {
+      log(`Discord debug: ${info}`, "debug");
+   });
+   client.on("shardDisconnect", (event, shardId) => {
+      log(`Discord shard disconnect: shard=${shardId} code=${event.code} reason=${event.reason ?? "none"}`, "warn");
+   });
+   client.on("shardError", (error, shardId) => {
+      log(`Discord shard error: shard=${shardId} error=${error.message}`, "error");
+   });
+   client.on("shardResume", (shardId, replayedEvents) => {
+      log(`Discord shard resume: shard=${shardId} replayed=${replayedEvents}`, "debug");
+   });
+}
+client.on("clientReady", async () => {
    log(`Connected to Discord server.`);      
    //setInterval(saveData, 7200000); // Save data every 2 hours if it is dirty
+   setImmediate(() => {
+      void startInitialization();
+   });
 
    // List the guilds connected to
    /* const guilds = await client.guilds.fetch();
@@ -295,6 +348,10 @@ client.on("messageReactionRemove", (_reaction, _user) => {});
 client.on("messageReactionRemoveAll", _message => {});
 
 client.on("messageCreate", async (message: Message): Promise<void> => {
+   if (!message.inGuild()) {
+      // TODO: Remove after DM flow is verified.
+      log(`DM received: "${message.content}" (len=${message.content.length})`, "debug");
+   }
    if (!initialized) {
       log(`Bot not yet initialized, cannot process incoming message`, "warn");
       return;
@@ -303,12 +360,16 @@ client.on("messageCreate", async (message: Message): Promise<void> => {
       log(`No client user found, cannot process incoming message`, "warn");
       return;
    }
-   if (!(message.channel instanceof TextChannel)      
-      || (message.author.bot && !Brain.settings.learnFromBots)
+   if ((message.author.bot && !Brain.settings.learnFromBots)
       || (message.author.id === client.user.id)
-      || !(message.type === "DEFAULT" || message.type === "REPLY")
+      || !(message.type === MessageType.Default || message.type === MessageType.Reply)
    ) {
-      //log(`Invalid message: type=${message.type}, author=${message.author.id}, self=${client.user.id}, bot=${message.author.bot}, channel=${message.channel}, guild=${message.guild ?? 'DM'}, message=${message.content}`, "error");
+      trace(`skip messageCreate`, {
+         type: message.type,
+         author: message.author.id,
+         self: client.user.id,
+         bot: message.author.bot
+      });
       return;
    }
 
@@ -320,26 +381,31 @@ client.on("messageCreate", async (message: Message): Promise<void> => {
       });
    }
 
-   const messageSource: string = `${message.guild?.name ?? 'Private'}:#${message.channel.name}:${await getDisplayName(message.author)}`;
+   const channelName = "name" in message.channel ? String(message.channel.name) : "DM";
+   const coreMessage = await toCoreMessage(message);
+   const messageSource: string = `${message.guild?.name ?? 'Private'}:#${channelName}:${coreMessage.authorName}`;
 
    // Logging
    let content: string = message.content;
+   log(`Message content (raw): "${content}" (len=${content.length})`, "debug");
    if (message.embeds) {
       for (const embed of message.embeds) {
          const url = embed.url ?? `no URL`;
          if (!content.includes(url)) content += `[Embedded content: ${url}]\n`;
       }
    }
+   log(`Message content (after embeds): "${content}" (len=${content.length})`, "debug");
    if (message.attachments) {
       for (const [_attachmentSnowflake, attachmentData] of message.attachments) {
          const url = attachmentData.url ?? 'no URL';
          content += `[Attached content: ${url}]\n`;
       }
    }
+   log(`Message content (after attachments): "${content}" (len=${content.length})`, "debug");
    // Log the incoming message
    log(`<${messageSource}> ${content}`);
    
-   const results: ProcessResults = await processMessage(client.user, message);
+   const results: ProcessResults = await processMessage(coreMessage);
    if (results.learned) {
       log(`Learned: ${results.processedText}`, "debug");
       dirty.brain = true;
@@ -349,7 +415,8 @@ client.on("messageCreate", async (message: Message): Promise<void> => {
    }
 
    // Log the bot response, if any
-   const botSource: string = `${message.guild?.name ?? 'Private'}:#${message.channel.name}:${Brain.botName}`;
+   const botChannelName = "name" in message.channel ? String(message.channel.name) : "DM";
+   const botSource: string = `${message.guild?.name ?? 'Private'}:#${botChannelName}:${Brain.botName}`;
    const botResponse: string | undefined = (results.directedTo ? `${results.directedTo}: ${results.response}` : results.response);
    
    if (botResponse) log(`<${botSource}> ${botResponse}`);  
@@ -358,6 +425,13 @@ client.on("messageCreate", async (message: Message): Promise<void> => {
 });
 
 
-// TODO: Fix this terribly broken initialization thing so that initial learning doesn't freeze everything up and cause discord to fail on first run
-initialize();
-login();
+try {
+   preflightEnv();
+   log(`Environment variables OK. Attempting Discord login...`);
+   log(`Discord Developer Portal: enable the Message Content Intent for this bot to access message.content.`, "warn");
+   void login();
+} catch (error: unknown) {
+   const message = error instanceof Error ? error.message : String(error);
+   log(`Startup failed before login: ${message}`, "error");
+   process.exitCode = 1;
+}

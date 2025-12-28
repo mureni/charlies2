@@ -1,5 +1,4 @@
-import { MessageEmbed, MessageAttachment } from "discord.js";
-import { Message, TriggerResult, Trigger, log } from "../core";
+import { CoreMessage, TriggerResult, Trigger, log, OutgoingAttachment, OutgoingEmbed } from "../core";
 import { getTarotHand } from "../controllers";
 
 const tarot: Trigger = {
@@ -9,21 +8,24 @@ const tarot: Trigger = {
    usage: "tarot [spread]",
    example: "tarot star",
    command: /^tarot ?(?<spread>.+)?$/ui,
-   action: async (_context: Message, matches?: RegExpMatchArray) => {
+   action: async (_context: CoreMessage, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
       const spread = matches?.groups?.spread ?? "standard";
       try {
          const hand = await getTarotHand(spread);
-         const attachment = new MessageAttachment(hand.image, "tarot.png");
-         const embed = new MessageEmbed()
-            .setTitle("Explanation")
-            .setColor("#ffffff")
-            .setDescription("Following is a brief explanation of your tarot hand");               
+         const attachment: OutgoingAttachment = { name: "tarot.png", data: hand.image };
          const explanation = hand.explanation;
-         for (let card in Object.keys(explanation)) {
-            embed.addField(explanation[card].name, `${explanation[card].description}\n*${explanation[card].meaning}*`);
-         }            
-         embed.setImage("attachment://tarot.png");
+         const fields = Object.values(explanation).map((entry) => ({
+            name: entry.name,
+            value: `${entry.description}\n*${entry.meaning}*`
+         }));
+         const embed: OutgoingEmbed = {
+            title: "Explanation",
+            color: "#ffffff",
+            description: "Following is a brief explanation of your tarot hand",
+            fields,
+            imageAttachmentName: "tarot.png"
+         };
          log(`Generating tarot hand`);
          output.results = [ { contents: "", embeds: [embed], attachments: [attachment] } ];
          output.triggered = true;

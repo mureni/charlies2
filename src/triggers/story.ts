@@ -1,4 +1,4 @@
-import { Message, TriggerResult, Trigger, getDisplayName, Brain } from "../core";
+import { CoreMessage, TriggerResult, Trigger, Brain } from "../core";
 
 const story: Trigger = {
    id: "story",
@@ -6,7 +6,7 @@ const story: Trigger = {
    description: "Tells a story about a topic. Text in < > are optional, text in [] can be changed.",
    usage: "tell <me/[person]/yourself> a<nother> <long> story <about [topic]>",
    command: /tell (?<person>.+)? ?(?:a(?:nother)?) (?<long>long)? ?story(?: about (?<topic>.+))?/ui,
-   action: async (context: Message, matches?: RegExpMatchArray) => {
+   action: async (context: CoreMessage, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { ProcessSwaps: true }, directedTo: undefined };
       if (!matches || matches.length === 0 || !matches.groups) return output;
       const storyLength = (3 + Math.floor(Math.random() * 5)) * (matches.groups.long !== undefined ? 3 : 1);
@@ -27,7 +27,7 @@ const story: Trigger = {
          if (/yourself/iu.test(directedTo)) {
             line = `*${line.trim()}*`;
          } else if (/me/iu.test(directedTo)) {
-            output.directedTo = await getDisplayName(context.author);
+            output.directedTo = context.authorName;
          } else if (directedTo !== "") {
             output.directedTo = directedTo;
          }

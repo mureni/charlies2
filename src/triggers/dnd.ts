@@ -1,4 +1,4 @@
-import { Message, TriggerResult, Trigger, getDisplayName } from "../core";
+import { CoreMessage, TriggerResult, Trigger } from "../core";
 
 const roll: Trigger = {
    id: "roll",
@@ -8,7 +8,7 @@ const roll: Trigger = {
    example: "!roll d20, !roll 4d24, !roll 1d6",
    icon: "dnd.png",
    command: /!r(oll)? (?<rolls>\d+)?\s*d\s*(?<sides>\d+)/ui,
-   action: async (context: Message, matches?: RegExpMatchArray) => {
+   action: async (context: CoreMessage, matches?: RegExpMatchArray) => {
       const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' } };
       if (!matches || matches.length === 0 || !matches.groups || matches.groups.sides === undefined) return output;
       
@@ -28,7 +28,7 @@ const roll: Trigger = {
       
       const rollResults = rollDie(numRolls, numSides);
 
-      output.directedTo = await getDisplayName(context.author);
+      output.directedTo = context.authorName;
       output.results = [          
          { contents: `**Result**: ${numRolls}d${numSides} (${rollResults.join(", ")})` },
          { contents: `**Total**: ${sum(rollResults)}` }

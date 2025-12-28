@@ -1,10 +1,10 @@
-import { MessageAttachment, MessageEmbed, ClientUser, Message, TextChannel } from "discord.js";
-import { getEndearment, getDisplayName, interpolateUsers, KnownUsers } from "./user";
+import { getEndearment, interpolateUsers, KnownUsers } from "./user";
 import { Brain } from "./brain";
 import { log } from "./log";
 import { Swap } from "../controllers/swap";
 import { TriggerResult, Triggers } from "./triggerProcessor";
-import { escapeRegExp, newRX } from "../utils";
+import { env, escapeRegExp, newRX } from "../utils";
+import { CoreMessage, OutgoingMessage, OutgoingMessage as PlatformOutgoingMessage } from "../platform";
 
 
 // Maximum length of discord message
@@ -27,12 +27,7 @@ type ModificationType = {
    Balance?: boolean,
    StripFormatting?: boolean
 }
-type OutgoingMessage = {
-   contents: string,
-   embeds?: MessageEmbed[],
-   attachments?: MessageAttachment[]
-}
-
+type MemberContext = Parameters<typeof interpolateUsers>[1];
 
 
 const emoticonRXs = [
@@ -48,25 +43,43 @@ const emoticonRXs = [
 ].map(emoticon => newRX(`\\b${escapeRegExp(emoticon)}\\b`)).join('|');
 
 const LINE_BREAK_RX = newRX(`\\r?\\n`, "musig");
+const traceFlow = env("TRACE_FLOW") === "true";
+const trace = (message: string, data?: unknown): void => {
+   if (traceFlow) log(data ? { message: `Flow: ${message}`, data } : `Flow: ${message}`, "trace");
+};
 
 //erx = [`:-)`, `:)`, `:-]`, `:]`, `:-3`, `:3`, `:->`, `:>`, `8-)`, `8)`, `:-}`, `:}`, `:o)`, `:c)`, `:^)`, `=]`, `=)`, `:-D`, `:D`, `8-D`, `8D`, `x-D`, `xD`, `X-D`, `XD`, `=D`, `=3`, `B^D`, `:-))`, `:-(`, `:(`, `:-c`, `:c`,`:-<`, `:<`, `:-[`, `:[`, `:-||`, `>:[`, `:{`, `:@`, `>:(`, `:'-(`, `:'(`, `:'-)`, `:')`, `D-':`, `D:<`, `D:`, `D8`, `D;`, `D=`, `DX`, `:-O`, `:O`, `:-o`, `:o`, `:-0`, `8-0`, `>:O`, `:-*`, `:*`, `:×`, `;-)`, `;)`, `*-)`, `*)`, `;-]`, `;]`, `;^)`, `:-,`, `;D`, `:-P`, `:P`, `X-P`, `XP`, `x-p`, `xp`, `:-p`, `:p`, `:-Þ`, `:Þ`, `:-þ`, `:þ`, `:-b`, `:b`, `d:`, `=p`, `>:P`, `:-/`, `:/`, `:-.`, `>:\\`, `>:/`, `:\\`, `=/`, `=\\`, `:L`, `=L`, `:S`,`:-|`, `:|`, `:$`, `://)`, `://3`, `:-X`, `:X`, `:-#`, `:#`, `:-&`, `:&`, `O:-)`, `O:)`, `0:-3`, `0:3`, `0:-)`, `0:)`, `;^)`, `>:-)`, `>:)`, `}:-)`, `}:)`, `3:-)`, `3:)`, `>;)`, `>:3`, `>;3`, `|;-)`, `|-O`, `:-J`, `#-)`, `%-)`, `%)`, `:-###..`, `:###..`, `<:-|`, `',:-|`, `',:-l`, `</3`, `<\\3`, `<3` ].map(emoticon => emoticon.replace(/[.*+?^${}()|[\]\\\-]/ug, '\\$&')).join('|');
 
-const processMessage = async (client: ClientUser, message: Message): Promise<ProcessResults> => {
+const processMessage = async (message: CoreMessage): Promise<ProcessResults> => {
    const results: ProcessResults = { learned: false, processedText: "" }
-   if (!(message.channel instanceof TextChannel) || !(message.type === "DEFAULT" || message.type === "REPLY")) return results;
-   
-   const permissions = message.channel.permissionsFor(client);
-   
+   const memberContext = message.memberContext as MemberContext | undefined;
+   const platform = message.platform;
+   const canSend = platform?.canSend ? await platform.canSend(message.channelId, message.guildId) : true;
+   trace(
+      "processMessage start",
+      {
+         author: message.authorId,
+         channel: message.channelId,
+         type: message.channel?.type ?? "unknown",
+         isBot: Boolean(message.isBot),
+         isSelf: Boolean(message.isSelf),
+         mentionsBot: Boolean(message.mentionsBot),
+         canSend,
+         platform: platform
+      }
+   );
    
    /* TODO: Process server-specific blacklists to prevent users from responding */
 
    /* Do not process own messages */
-   if (message.author.id === client.id) return results;
+   if (message.isSelf) {
+      trace(`skip: isSelf=true`);
+      return results;
+   }
    
-   let cleanText = await cleanMessage(message, { Case: "lower", UseEndearments: true });
+   let cleanText = await cleanMessage(message.content, { Case: "lower", UseEndearments: true }, memberContext);
 
    /* Remove initial references to self (e.g. "charlies learn this text" -> "learn this text", "charlies: hi" -> "hi") */
-   cleanText = cleanText.replace(newRX(`^\\s*\\b${escapeRegExp(client.username)}\\b[:,]?\\s*`, "uig"), "");
    cleanText = cleanText.replace(newRX(`^\\s*\\b${escapeRegExp(Brain.botName)}\\b[:,]?\\s*`, "uig"), "");
 
    const processed: TriggerResult = await Triggers.process(message);
@@ -80,33 +93,42 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
       // NOTE: The below is strictly for charlies-based responses. 
       // TODO: Move charlies response functionality to a separate processor than the generic message processor 
       /* Detect whether a conversation with the person is ongoing or if a response is appropriate */
-      let shouldRespond: boolean = message.mentions.has(client) || Brain.shouldRespond(Brain.botName, message.content);
+      let shouldRespond: boolean = Boolean(message.mentionsBot) || Brain.shouldRespond(Brain.botName, message.content);
+      trace("shouldRespond seed", { mentionsBot: Boolean(message.mentionsBot), shouldRespond });
 
       /* If the message is a reference (reply) then check if the referenced message should be responded to */
-      if (message.reference) {
-         const referencedMessage = await message.fetchReference();
-         if (referencedMessage.mentions.has(client) || Brain.shouldRespond(Brain.botName, referencedMessage.content)) shouldRespond = true;
+      if (message.referencedContent) {
+         if (message.referencedMentionsBot || Brain.shouldRespond(Brain.botName, message.referencedContent)) shouldRespond = true;
       }
 
       let seed: string = "";
+      let conversationActive = false;
 
       // TODO: Populate and maintain KnownUsers
-      const user = KnownUsers.get(message.author.id)!;         
+      const user = KnownUsers.get(message.authorId)!;         
       if (user) {         
-         const conversation = user.conversations.get(message.channel.id);
+         const conversation = user.conversations.get(message.channelId);
          if (conversation) {
             // Optimal time is roughly 7 seconds delay for a conversation
             if (Date.now() - conversation.lastSpokeAt < Brain.settings.conversationTimeLimit) {
                shouldRespond = true;
+               conversationActive = true;
                seed = [cleanText, conversation.lastTopic].join(" ");
             }
          };
       }           
       
-      if (shouldRespond && !(!permissions || !permissions.has('SEND_MESSAGES'))) {         
-         if (message.channel instanceof TextChannel) message.channel.sendTyping();
+      if (shouldRespond && canSend && platform) {         
+         trace("respond", {
+            shouldRespond,
+            canSend,
+            platform: platform,
+            conversationActive,
+            seedProvided: seed !== ""
+         });
+         await platform.sendTyping(message.channelId);
          if (user) {
-            user.conversations.set(message.channel.id, {
+            user.conversations.set(message.channelId, {
                lastSpokeAt: Date.now(),
                lastTopic: cleanText
             });
@@ -130,15 +152,22 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
          if (message.tts) mods.TTS = true;
          if (Brain.shouldYell(message.content)) mods.Case = "upper";
 
-         const directedTo = await getDisplayName(message.member?.user ?? message.author, message.guild?.members);
+         const directedTo = message.authorName;
          results.directedTo = directedTo;
-         await sendMessage(client, message.channel, { contents: `${directedTo}: ${response}` }, mods);
+         await sendMessage(message, { contents: `${directedTo}: ${response}` }, mods);
 
          /* Learn what it just created, to create a feedback */
-         const cleanResponse = await cleanMessage(response, { Case: "lower", UseEndearments: true });
+         const cleanResponse = await cleanMessage(response, { Case: "lower", UseEndearments: true }, memberContext);
          await Brain.learn(cleanResponse);
          
          results.response = response;
+      } else {
+         trace("not responding", {
+            shouldRespond,
+            canSend,
+            platform: platform,
+            conversationActive
+         });
       }
 
       results.learned = await Brain.learn(cleanText);
@@ -146,7 +175,8 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
 
    } else {
       
-      if (message.channel instanceof TextChannel && !(!permissions || !permissions.has('SEND_MESSAGES'))) message.channel.sendTyping();
+      trace("triggered", { canSend, platform: platform, resultsCount: processed.results.length });
+      if (canSend && platform) await platform.sendTyping(message.channelId);
       results.triggeredBy = processed.triggeredBy;
       const mods: ModificationType = processed.modifications;
       if (!mods.KeepOriginal) mods.Balance = true;
@@ -160,7 +190,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
       
       let outgoingPayload: OutgoingMessage = { contents: "", embeds: [], attachments: [] };
       results.response = "";
-      for (const resultsPayload of processed.results) {
+      for (const resultsPayload of processed.results as PlatformOutgoingMessage[]) {
          outgoingPayload.contents = resultsPayload.contents;
          if (resultsPayload.attachments) {
             results.response += resultsPayload.attachments.map(attachment => `[attachment ${attachment.name}]`).join('\n');
@@ -179,7 +209,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
          while (outgoingPayload.contents.length > MAX_LENGTH) {
             log(`Trigger result text is too long; sending ${MAX_LENGTH} characters and any existing embeds/attachments, and splitting the rest up to a new line`);
             outgoingPayload.contents = outgoingPayload.contents.substring(0, MAX_LENGTH);
-            await sendMessage(client, message.channel as TextChannel, outgoingPayload, mods);
+            await sendMessage(message, outgoingPayload, mods);
             // Clear the message payload since any existing embeds or attachments would have been sent with the above line
             outgoingPayload = { contents: "", embeds: [], attachments: [] };
             outgoingPayload.contents = outgoingPayload.contents.substring(MAX_LENGTH);            
@@ -187,7 +217,7 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
          // Send any message payload that is not yet sent
          if (outgoingPayload.contents != "" || (outgoingPayload.attachments?.length ?? 0) > 0  || (outgoingPayload.embeds?.length ?? 0) > 0) {
             //log(`Trigger result payload: ${JSON.stringify(outgoingPayload)}`);
-            await sendMessage(client, message.channel as TextChannel, outgoingPayload, mods);
+            await sendMessage(message, outgoingPayload, mods);
          }
       }   
 
@@ -198,11 +228,13 @@ const processMessage = async (client: ClientUser, message: Message): Promise<Pro
 }
 
 /* Utility functions for bot interface */
-const sendMessage = async (client: ClientUser, channel: TextChannel, message: OutgoingMessage, mods?: ModificationType): Promise<boolean> => {
-   
-   const permissions = channel.permissionsFor(client);
-   if (!permissions || !permissions.has('SEND_MESSAGES')) return false;
-   if (!channel.guild) return false;
+const sendMessage = async (context: CoreMessage, message: OutgoingMessage, mods?: ModificationType): Promise<boolean> => {
+   const platform = context.platform;
+   if (!platform) {
+      trace(`sendMessage skipped: platform=false channel=${context.channelId}`);
+      return false;
+   }
+   const memberContext = context.memberContext as MemberContext | undefined;
    const workingMods = mods ? { ...mods } : undefined;
    if (workingMods?.KeepOriginal) {
       // Reset all other mods
@@ -213,13 +245,13 @@ const sendMessage = async (client: ClientUser, channel: TextChannel, message: Ou
       workingMods.UseEndearments = false;
    }
    let text = message.contents;
-   text = await interpolateUsers(text, channel.guild.members, Boolean(workingMods?.UseEndearments));
-   text = await cleanMessage(text, workingMods);
+   text = await interpolateUsers(text, memberContext, Boolean(workingMods?.UseEndearments));
+   text = await cleanMessage(text, workingMods, memberContext);
 
    /* Processing swaps should always be done AFTER cleaning the message.
       This prevents swap rules causing usernames or channels to accidentally leak 
    */
-   if (workingMods?.ProcessSwaps) text = Swap.process(channel.guild.id, text);
+   if (workingMods?.ProcessSwaps && context.guildId) text = Swap.process(context.guildId, text);
    
    // TODO: Balance code blocks and such accounting for max length, if necessary
    let embeds = message.embeds ?? [];
@@ -228,10 +260,10 @@ const sendMessage = async (client: ClientUser, channel: TextChannel, message: Ou
    if ((embeds.length > 0 || files.length > 0) && text === "") text = " "; 
    while (text !== "" || embeds.length > 0 || files.length > 0) {      
        //log(`Sending text: ${JSON.stringify(text)}`);
-      await channel.send({
-         content: text.substring(0, MAX_LENGTH),
-         embeds: embeds,
-         files: files,
+      await platform.sendMessage(context.channelId, {
+         contents: text.substring(0, MAX_LENGTH),
+         embeds,
+         attachments: files,
          tts: Boolean(workingMods?.TTS)
       });
       text = text.substring(MAX_LENGTH).trim();
@@ -241,7 +273,7 @@ const sendMessage = async (client: ClientUser, channel: TextChannel, message: Ou
    return true;
 }
 
-const cleanMessage = async (message: Message | string, mods?: ModificationType): Promise<string> => {
+const cleanMessage = async (text: string, mods?: ModificationType, members?: MemberContext): Promise<string> => {
 
    // TODO: Memoize all regexps
 
@@ -265,13 +297,8 @@ const cleanMessage = async (message: Message | string, mods?: ModificationType):
       return text.replace(newRX(cleanBotName, "musig"), getEndearment());
    }
 
-   if (message instanceof Message) {
-      fullText = botNameCleaner(message.content.trim());
-      fullText = await interpolateUsers(fullText, message.guild?.members, Boolean(workingMods?.UseEndearments));      
-   } else {
-      fullText = botNameCleaner(message.trim());
-      fullText = await interpolateUsers(fullText, undefined, Boolean(workingMods?.UseEndearments));
-   }
+   fullText = botNameCleaner(text.trim());
+   fullText = await interpolateUsers(fullText, members, Boolean(workingMods?.UseEndearments));
 
    /* Fix any broken custom emojis (<:name:00000000>) where a space before the > was accidentally saved */
    fullText = fullText.replace(newRX(`<:(\\w+?):(\\d+?)\\s+>`, "musig"), "<:$1:$2>");  

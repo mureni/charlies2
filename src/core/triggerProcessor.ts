@@ -1,18 +1,15 @@
-import { Message, MessageEmbed, MessageAttachment, User } from "discord.js";
-import { getDisplayName } from "./user";
-import { readdirSync } from "fs";
+import { readdirSync, readFileSync } from "fs";
 import { ModificationType } from "./messageProcessor";
 import { log } from "./log";
 import { Blacklist } from "../controllers";
 import { checkFilePath, env } from "../utils";
-type OutgoingMessage = {
-   contents: string,
-   embeds?: MessageEmbed[],
-   attachments?: MessageAttachment[]
-   error?: { 
-      message: string;      
-   }
-}
+import {
+   CoreMessage,
+   OutgoingAttachment,
+   OutgoingEmbed,
+   OutgoingEmbedField,
+   OutgoingMessage
+} from "../platform";
 interface TriggerResult {
    results: OutgoingMessage[];
    modifications: ModificationType;
@@ -33,7 +30,7 @@ interface Trigger {
    description: string;
    usage: string;
    command: RegExp;
-   action(context?: Message, matches?: RegExpMatchArray): TriggerResult | Promise<TriggerResult>;
+   action(context?: CoreMessage, matches?: RegExpMatchArray): TriggerResult | Promise<TriggerResult>;
    ownerOnly?: boolean;
    adminOnly?: boolean;
    example?: string;
@@ -62,7 +59,7 @@ class Triggers {
       return triggers;
    }
 
-   public static async process(message: Message): Promise<TriggerResult> {
+   public static async process(message: CoreMessage): Promise<TriggerResult> {
 
       if (Triggers.list.length === 0) {
          Triggers.list = await Triggers.initialize();
@@ -70,20 +67,13 @@ class Triggers {
 
       const output: TriggerResult = await Triggers.help(message);
       if (output.results.length > 0) return { ...output, triggered: true, triggeredBy: "help" };
-      if (!message.author || message.author.bot) return output;
+      if (message.isBot) return output;
       
-      let sender: User;
-      if (message.member) {
-         // text channel
-         sender = message.member.user;
-      } else {
-         // DM
-         sender = message.author;
-      }
+      const senderName = message.authorName || message.authorId;
       
       // TODO: Expand permissions and owner checking beyond Discord
-      const isAdmin = Boolean(message.member && (message.member.permissions.has("ADMINISTRATOR") || message.member.permissions.has("MANAGE_GUILD")));
-      const isBotOwner = message.author.id === env("BOT_OWNER_DISCORD_ID");
+      const isAdmin = Boolean(message.isAdmin);
+      const isBotOwner = Boolean(message.isBotOwner || message.authorId === env("BOT_OWNER_DISCORD_ID"));
 
       for (const trigger of Triggers.list) {
          if (trigger.ownerOnly && !isBotOwner) continue;
@@ -91,9 +81,9 @@ class Triggers {
          const matches = message.content.match(trigger.command);
          if (!matches) continue;
 
-         if (Blacklist.denied(message.guild?.id ?? "DM", message.author.id, trigger.id)) {
-            output.directedTo = await getDisplayName(sender, message.guild?.members);
-            output.results = [{ contents: `you are not allowed to execute \`${trigger.id}\` in ${message.guild?.name ?? 'direct messages'}` }];
+         if (Blacklist.denied(message.guildId ?? "DM", message.authorId, trigger.id)) {
+            output.directedTo = senderName;
+            output.results = [{ contents: `you are not allowed to execute \`${trigger.id}\` in ${message.guildName ?? 'direct messages'}` }];
             return { ...output, triggered: true, triggeredBy: trigger.id }
          }
 
@@ -107,7 +97,7 @@ class Triggers {
       return { ...output, triggered: false };
    }
    
-   private static async help(message: Message): Promise<TriggerResult> {
+   private static async help(message: CoreMessage): Promise<TriggerResult> {
       // TODO: Make into cleaner thing 
 
       if (Triggers.list.length === 0) {
@@ -135,18 +125,24 @@ class Triggers {
             output.results = [{ contents: "no such command exists" }];
             return output;
          }
-         const entry = new MessageEmbed()
-            .setColor("#0099ff")
-            .setTitle(`Help for ${found.name}`)
-            .setDescription(found.description)
-            .setFooter('Items within [square] or <angled> brackets are optional. [Square brackets] means the contents can be changed by you, <angled brackets> means you have to type exactly the contents of the angled brackets.')            
-            .setThumbnail('attachment://help.png')
-            .addField('Usage', found.usage);
-         if (found.adminOnly) entry.setColor("ORANGE").setTitle(`Server Admin Only - Help for ${found.name}`);
-         if (found.ownerOnly) entry.setColor("RED").setTitle(`Bot Owner Only - Help for ${found.name}`);
-         if (found.example) entry.addField('Example', found.example);
-         const attachment: MessageAttachment = new MessageAttachment(found.icon ? checkFilePath("resources", `icons/${found.icon}`) : checkFilePath("resources", "icons/help.png"), "help.png");
-
+         const fields: OutgoingEmbedField[] = [{ name: "Usage", value: found.usage }];
+         if (found.example) fields.push({ name: "Example", value: found.example });
+         const entry: OutgoingEmbed = {
+            color: found.ownerOnly ? "RED" : found.adminOnly ? "ORANGE" : "#0099ff",
+            title: `${found.ownerOnly ? "Bot Owner Only - " : found.adminOnly ? "Server Admin Only - " : ""}Help for ${found.name}`,
+            description: found.description,
+            footer: "Items within [square] or <angled> brackets are optional. [Square brackets] means the contents can be changed by you, <angled brackets> means you have to type exactly the contents of the angled brackets.",
+            fields,
+            thumbnailAttachmentName: "help.png",
+            imageAttachmentName: "help.png"
+         };
+         const attachmentPath = found.icon
+            ? checkFilePath("resources", `icons/${found.icon}`)
+            : checkFilePath("resources", "icons/help.png");
+         const attachment: OutgoingAttachment = {
+            name: "help.png",
+            data: readFileSync(attachmentPath)
+         };
          output.results = [ { contents: "", embeds: [ entry ], attachments: [ attachment ] } ];
       }
            

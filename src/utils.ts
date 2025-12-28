@@ -57,6 +57,12 @@ const newRX = (expr: string, flags?: string) => {
    }   
 }
 
-const DEBUG = env("NODE_ENV", "development") === "development";
+const isTruthyEnv = (value: string | undefined) => Boolean(value && /^(1|true|yes|on)$/i.test(value));
+const DEBUG =
+   env("NODE_ENV", "development") === "development"
+   || isTruthyEnv(env("DEBUG"))
+   || isTruthyEnv(env("TRACE_FLOW"))
+   || isTruthyEnv(env("DISCORD_DEBUG"))
+   || isTruthyEnv(env("TRACE_CALLSITE"));
 
 export { env, checkFilePath, escapeRegExp, newRX, clamp, randFrom, DEBUG };

@@ -1,5 +1,5 @@
 import {
-    Message,
+    CoreMessage,
     TriggerResult,
     Trigger,
  } from "../core";
@@ -13,7 +13,7 @@ import {
     adminOnly: true,
     ownerOnly: true,
     command: /^!list-channels?/iu,
-    action: async (context: Message, _matches?: RegExpMatchArray) => {      
+    action: async (context: CoreMessage, _matches?: RegExpMatchArray) => {      
        const output: TriggerResult = {
           results: [],
           modifications: { KeepOriginal: true },
@@ -21,18 +21,20 @@ import {
        };              
              
        try {
-            // step 1: get the list of guilds the bot is in            
-            const guilds = context.client.guilds.cache.map(v => v);
-            const channels = context.client.channels.cache.map(v => v);
-
-            for (let guild of guilds) {
+            if (!context.platform) {
+                output.results.push({ contents: "platform adapter not available" });
+                return output;
+            }
+            const guilds = await context.platform.fetchGuilds();
+            for (const guild of guilds) {
 
                 let lines: string[] = ['```md'];
                 lines.push(`*guild id:* ${guild.id} | *guild name:* ${guild.name}`);
                 log(`*guild id:* ${guild.id} | *guild name:* ${guild.name}`, "debug");               
                 
-                for (let channel of channels) {
-                    if (channel.type !== "GUILD_TEXT" || channel.guildId !== guild.id) continue;
+                const channels = await context.platform.fetchChannels(guild.id);
+                for (const channel of channels) {
+                    if (channel.type !== "text" || channel.guildId !== guild.id) continue;
                     lines.push(` - *channel id:* ${channel.id} | *channel name:* ${channel.name}`);
                     log(` - *channel id:* ${channel.id} | *channel name:* ${channel.name}`, "debug");
                 }
@@ -45,11 +47,14 @@ import {
 
                 
        } catch (e: unknown) {
-          if (e instanceof Error) {
-             await context.reply(`error retrieving channel list: ${e.message}`);
+          const message = e instanceof Error
+             ? `error retrieving channel list: ${e.message}`
+             : `error retrieving channel list: ${JSON.stringify(e, null, 2)}`;
+          if (context.platform) {
+             await context.platform.reply(context.id, message);
           } else {
-             await context.reply(`error retrieving channel list: ${JSON.stringify(e, null, 2)}`);
-          }          
+             output.results.push({ contents: message });
+          }
        }
        
        

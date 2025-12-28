@@ -1,12 +1,15 @@
 import { checkFilePath, env } from "../utils";
-import { DBMap } from "../core/DBMap";
+import { SQLiteMap } from "../core/SQLiteCollections";
 
 
 type BlacklistCommand = Set<string>;
 type BlacklistUser = Map<string, BlacklistCommand>;
 
 class Blacklist {
-   private static list: DBMap<string, BlacklistUser> = new DBMap<string, BlacklistUser>(checkFilePath("data", `${env("BOT_NAME")}-blacklist.sql`), "contexts", false);
+   private static list: SQLiteMap<string, BlacklistUser> = new SQLiteMap<string, BlacklistUser>({
+      filename: checkFilePath("data", `${env("BOT_NAME")}-blacklist.sqlite`),
+      table: "contexts"
+   });
 
 /* DEPRECATED
    public static load(filename = BLACKLIST_FILE): boolean | Error {

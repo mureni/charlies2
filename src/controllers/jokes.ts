@@ -1,7 +1,6 @@
 import { checkFilePath, randFrom } from "../utils";
 import { createInterface } from "readline";
 import { createReadStream, existsSync } from "fs";
-import fetch from "node-fetch";
 
 const API = "https://v2.jokeapi.dev/joke/Any?format=txt";
 const DATA_FILE = checkFilePath("resources", "jokes.txt");
@@ -24,7 +23,7 @@ class Joke {
             const loadResults = Joke.load();
             if (loadResults instanceof Error) throw loadResults; 
          }
-        return randFrom(Joke.dadjokes);
+        return randFrom(Joke.dadjokes ?? ["why did the chicken cross the road? to get to the other side!"]);
     }
 
     public static async retrieve(topic: string): Promise<string> {
@@ -51,6 +50,5 @@ class Joke {
 }
 
 export { Joke }
-
 
 

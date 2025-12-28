@@ -14,6 +14,10 @@ const WORD_SEPARATOR = "│";
 const STACK_MAX = 192;
 const EMPTY_BRAIN = "huh";
 const MAX_RECURSION = 5;
+const TRACE_BRAIN = /^(1|true|yes|on)$/i.test(env("TRACE_BRAIN") ?? "");
+const traceBrain = (message: string): void => {
+   if (TRACE_BRAIN) log(`Brain: ${message}`, "debug");
+};
 
 interface BrainSettings {      
    outburstThreshold: number,          /* 0..1 chance of speaking without being spoken to */
@@ -77,16 +81,18 @@ class Brain {
    }
    */
    public static lexicon: SQLiteMap<string, Set<string>> = new SQLiteMap<string, Set<string>>({
-      filename: checkFilePath("data", env("BOT_NAME") + ".sql"),
+      filename: checkFilePath("data", env("BOT_NAME") + ".sqlite"),
       table: "lexicon",
       cacheSize: 128,
-      allowSchemaMigration: env("NODE_ENV") !== "production"
+      allowSchemaMigration: env("NODE_ENV") !== "production",
+      debug: /^(1|true|yes|on)$/i.test(env("TRACE_SQL") ?? "")
    });
    public static nGrams: SQLiteMap<string, nGram> = new SQLiteMap<string, nGram>({
-      filename: checkFilePath("data", env("BOT_NAME") + ".sql"),
+      filename: checkFilePath("data", env("BOT_NAME") + ".sqlite"),
       table: "ngrams",
       cacheSize: 64,
-      allowSchemaMigration: env("NODE_ENV") !== "production"
+      allowSchemaMigration: env("NODE_ENV") !== "production",
+      debug: /^(1|true|yes|on)$/i.test(env("TRACE_SQL") ?? "")
    });
    public static chainLength: number = 3;
    public static botName: string = env("BOT_NAME") ?? "chatbot";
@@ -108,13 +114,17 @@ class Brain {
       try {
          const trainerFile = resolve(checkFilePath("resources", `${trainerName}-trainer.${filetype}`));
          if (!existsSync(trainerFile)) throw new Error(`Unable to load brain data from file '${trainerFile}': file does not exist.`);
+         traceBrain(`trainFromFile start: file=${trainerFile} type=${filetype} lexicon=${Brain.lexicon.size} ngrams=${Brain.nGrams.size}`);
          
          if (filetype === "json") {
             const data = readFileSync(trainerFile, "utf8");
-            return await Brain.fromJSON(JSON.parse(data));
+            const result = await Brain.fromJSON(JSON.parse(data));
+            traceBrain(`trainFromFile done: file=${trainerFile} lexicon=${Brain.lexicon.size} ngrams=${Brain.nGrams.size}`);
+            return result;
          } else if (filetype === "txt") {            
             
             const size = statSync(trainerFile).size;            
+            traceBrain(`trainFromFile size: bytes=${size}`);
             
 
             const readInterface = readline.createInterface({
@@ -125,13 +135,15 @@ class Brain {
             let counter = 0;
 
             readInterface.on("line", async line => {
-               await Brain.learn(line);               
+               const normalized = line.trim().toLowerCase();
+               if (normalized) await Brain.learn(normalized);               
                counter += line.length;
                if (verbose && ((counter % percentMark) === 0 || counter < percentMark)) log(`Learned ${counter} of ${size} bytes`);
             });
 
             readInterface.on("close", () => {               
                log(`Finished learning!`);               
+               traceBrain(`trainFromFile done: file=${trainerFile} lexicon=${Brain.lexicon.size} ngrams=${Brain.nGrams.size}`);
             });
          
             return true;
@@ -146,11 +158,13 @@ class Brain {
 
    public static loadSettings(brainName: string = "default"): boolean | Error {
       try {
-         const settingsFile = resolve(checkFilePath("resources", `${brainName}-settings.json`));
+         const settingsFile = resolve(checkFilePath("data", `${brainName}-settings.json`));
+         traceBrain(`loadSettings: settings=${settingsFile}`);
          if (!existsSync(settingsFile)) throw new Error(`Unable to load settings from file ${settingsFile}: file does not exist.`);
 
          const json = readFileSync(settingsFile, "utf8");
          Brain.settings = JSON.parse(json) as BrainSettings;         
+         traceBrain(`loadSettings done: lexicon=${Brain.lexicon.size} ngrams=${Brain.nGrams.size}`);
 
          return true;
       } catch (error: unknown) {
@@ -171,6 +185,7 @@ class Brain {
       if (hasLexicon) {         
 
          const lexiconData = Reflect.get(json, "Lexicon") as { [word: string]: string[] };
+         traceBrain(`fromJSON lexicon start: entries=${Object.keys(lexiconData).length}`);
          const size = Object.keys(lexiconData).length;
          const percentMark = Math.floor(size / 100);
          const progress = new SingleBar({
@@ -193,6 +208,7 @@ class Brain {
       if (hasNGrams) {
          const ngramData = Reflect.get(json, "nGrams") as nGramJSON;
 
+         traceBrain(`fromJSON ngrams start: entries=${Object.keys(ngramData).length}`);
          const size = Object.keys(ngramData).length;
          const percentMark = Math.floor(size / 100);
          const progress = new SingleBar({
@@ -276,6 +292,7 @@ class Brain {
          if (verbose) progress.stop();
       }
 
+      traceBrain(`fromJSON done: lexicon=${Brain.lexicon.size} ngrams=${Brain.nGrams.size}`);
       return true;
    }
 
@@ -324,28 +341,39 @@ class Brain {
          }
          learned = true;
       }      
+      if (learned) traceBrain(`learn: chars=${text.length} lexicon=${Brain.lexicon.size} ngrams=${Brain.nGrams.size}`);
       return learned;
    }
 
    public static async getResponse(seed: string): Promise<string> {
+      log(`Generating response with seed '${seed}'`, "debug");
       let response = EMPTY_BRAIN;
       if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) return "my brain is empty";
       for (let recursiveThought = 0; recursiveThought < clamp(Brain.settings.recursion, 1, MAX_RECURSION); recursiveThought++) {
          
          let hashes: string[] = [];
+         let initialNGram: nGram | null = null;
          for (let seedAttempt = 0; seedAttempt < 3; seedAttempt++) {
             if (!Brain.lexicon.has(seed)) seed = await Brain.getRandomSeed();
             let hashset = Brain.lexicon.get(seed);
+            log(`Seed attempt ${seedAttempt + 1}: seed='${seed}' hashes=${hashset?.size ?? 0}`, "debug");
                         
             hashes = Array.from(hashset ?? new Set<string>());
             if (hashes.length === 0) seed = await Brain.getRandomSeed();
+            while (hashes.length > 0 && initialNGram === null) {
+               const seedHash = randFrom<string>(hashes);
+               const candidate = Brain.nGrams.get(seedHash);
+               log(`Inspecting hash candidate:\n\t${JSON.stringify(candidate, null, 2)}`, "debug");
+               if (candidate && candidate.tokens) {
+                  initialNGram = candidate;
+                  break;
+               }
+               hashes = hashes.filter(hash => hash !== seedHash);
+            }
+            if (initialNGram !== null) break;
          }
          
-         if (hashes.length === 0) return "couldn't find a seed";
-
-         const seedHash = randFrom<string>(hashes);
-         const initialNGram = Brain.nGrams.get(seedHash);
-         if (!initialNGram || !initialNGram.tokens) return "I do not know enough information";
+         if (initialNGram === null) return "I do not know enough information";
 
          const reply: string[] = initialNGram.tokens.slice(0);
          let stack = 0;

@@ -3,29 +3,30 @@
    "version": "2.2.0",
    "main": "./dist/index.js",
    "author": "mureni <mureni.leijona@gmail.com>",
-   "license": "MIT",      
+   "license": "MIT",
    "files": [
       "./dist",
       "./resources"
    ],
    "dependencies": {
       "app-root-path": "3.0.0",
-      "better-sqlite3": "7.5.0",
-      "canvas": "2.9.1",
+      "better-sqlite3": "12.5.0",
+      "canvas": "3.2.0",
       "cli-progress": "3.10.0",
-      "discord.js": "13.6.0",
-      "dotenv": "16.0.0",
-      "winston": "3.6.0",
-      "winston-daily-rotate-file": "4.5.0"
+      "discord.js": "14.25.1",
+      "dotenv": "17.2.3",
+      "rimraf": "^6.1.2",
+      "source-map-support": "0.5.21",
+      "winston": "3.19.0",
+      "winston-daily-rotate-file": "5.0.0"
    },
    "devDependencies": {
-      "@types/app-root-path": "1.2.4",
-      "@types/better-sqlite3": "7.5.0",
+      "@types/better-sqlite3": "7.6.13",
       "@types/cli-progress": "3.9.2",
-      "@types/node": "17.0.23",
-      "@types/ws": "8.5.3",
-      "ts-node": "10.7.0",
-      "typescript": "4.6.3"
+      "@types/node": "25.0.3",
+      "@types/ws": "8.18.1",
+      "ts-node": "10.9.2",
+      "typescript": "5.9.3"
    },
    "scripts": {
       "clean": "rimraf dist",

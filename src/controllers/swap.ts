@@ -1,9 +1,12 @@
-import { DBMap } from "../core/DBMap";
+import { SQLiteMap } from "../core/SQLiteCollections";
 import { checkFilePath, env, escapeRegExp } from "../utils";
 
 class Swap {
    
-   private static list: DBMap<string, Map<string, string>> = new DBMap<string, Map<string, string>>(checkFilePath("data", `${env("BOT_NAME")}-swaps.sql`), "swaps", false);
+   private static list: SQLiteMap<string, Map<string, string>> = new SQLiteMap<string, Map<string, string>>({
+      filename: checkFilePath("data", `${env("BOT_NAME")}-swaps.sqlite`),
+      table: "swaps"
+   });
    
    public static process (guildID: string, text: string): string {
       text = text.trim();
