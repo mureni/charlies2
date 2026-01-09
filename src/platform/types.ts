@@ -28,6 +28,8 @@ export interface CoreChannel {
    supportsVoice: boolean;
    supportsTyping: boolean;
    supportsHistory: boolean;
+   isGroupDm?: boolean;
+   memberCount?: number;
 }
 
 export interface CoreMember {
@@ -59,6 +61,9 @@ export interface PlatformAdapter {
    fetchHistory(channelId: string, options: PlatformHistoryQuery): Promise<CoreMessage[]>;
    canSend?(channelId: string, guildId?: string): Promise<boolean>;
    hasPermission?(channelId: string, permission: PlatformPermission, guildId?: string): Promise<boolean>;
+   supportsCommands?: boolean;
+   registerCommands?(commands: PlatformCommand[]): Promise<void>;
+   onCommand?(handler: (interaction: PlatformCommandInteraction) => Promise<void>): Promise<void> | void;
 }
 
 export interface OutgoingEmbedField {
@@ -91,6 +96,47 @@ export interface OutgoingMessage {
    error?: {
       message: string;
    };
+}
+
+export type PlatformCommandOptionType = "string" | "number" | "boolean" | "user" | "channel";
+
+export interface PlatformCommandOption {
+   name: string;
+   description: string;
+   type: PlatformCommandOptionType;
+   required?: boolean;
+}
+
+export interface PlatformCommandFormField {
+   name: string;
+   label: string;
+   type: PlatformCommandOptionType;
+   required?: boolean;
+   placeholder?: string;
+   multiline?: boolean;
+}
+
+export interface PlatformCommandForm {
+   title: string;
+   submitLabel?: string;
+   fields: PlatformCommandFormField[];
+}
+
+export interface PlatformCommand {
+   name: string;
+   description: string;
+   options?: PlatformCommandOption[];
+   permissions?: PlatformPermission[];
+   form?: PlatformCommandForm;
+}
+
+export interface PlatformCommandInteraction {
+   command: string;
+   options: Record<string, unknown>;
+   userId: string;
+   channelId: string;
+   guildId?: string;
+   reply: (message: OutgoingMessage) => Promise<void>;
 }
 
 export interface CoreMessage {

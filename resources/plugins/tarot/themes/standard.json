@@ -1,0 +1,63 @@
+{
+  "id": "standard",
+  "name": "Standard",
+  "labelsByLayout": {
+    "standard": {
+      "pos1": { "name": "Past", "description": "This card represents your past leading up to this moment." },
+      "pos2": { "name": "Present", "description": "This card represents you in the present." },
+      "pos3": { "name": "Future", "description": "This card represents a future encounter." }
+    },
+    "horseshoe": {
+      "pos1": {
+        "name": "You in the Present",
+        "description": "This card represents you in your present position. That which is the here and now as a culmination of all that has led you to this point."
+      },
+      "pos2": {
+        "name": "Expectations",
+        "description": "This card represents your present expectations; that which you believe is in your present or future. Your current and future outlook."
+      },
+      "pos3": {
+        "name": "The Unexpected",
+        "description": "This card represents the unexpected. That which is hidden from you, but may come to pass."
+      },
+      "pos4": {
+        "name": "Coming Soon",
+        "description": "This card represents your immediate future; those persons, ideas or circumstances which lie just out of reach, but are approaching and will be arriving shortly."
+      },
+      "pos5": {
+        "name": "The Future",
+        "description": "This card represents your long-term future."
+      }
+    },
+    "star": {
+      "pos1": {
+        "name": "Self [Root]",
+        "description": "This card represents you in your present position; the root of the matter."
+      },
+      "pos2": {
+        "name": "Feelings",
+        "description": "This card represents your feelings, emotions and relationships, as they have a direct bearing on the root of the matter."
+      },
+      "pos3": {
+        "name": "Mind/Status",
+        "description": "This card represents your mind, thoughts, and concerns of career or social standing, as relates to the root of the matter"
+      },
+      "pos4": {
+        "name": "Heart",
+        "description": "This card represents the central force that plays upon your concerns; the heart of the matter."
+      },
+      "pos5": {
+        "name": "Surfacing",
+        "description": "This card represents that which is surfacing and soon to be come known; your near-future."
+      },
+      "pos6": {
+        "name": "Desires",
+        "description": "This card represnts your desires and wants/needs."
+      },
+      "pos7": {
+        "name": "Outcome",
+        "description": "This card represents the final outcome; the top of the matter."
+      }
+    }
+  }
+}

@@ -28,6 +28,17 @@ The following are the required values for the bot settings:
 | conversationTimeLimit | 0 - 100000       | 7000          | Number of milliseconds the bot will wait for a additional input without requiring its name to be said |
 | learnFromBots         | true / false     | false         | Whether the bot will learn from other bots, or ignore them                                            |
 
+# Testing
+
+- `npm test` runs the Vitest suite in watch mode.
+- `npm run test:run` runs all tests once.
+- `npm run test:types` type-checks tests and sources.
+- `npm run test:sqlite` runs the SQLite collections test directly with `ts-node`.
+
+Optional test flags (use as needed):
+- `TEST_KEEP_DB=1` keeps SQLite test databases on disk and prints their temp folder.
+- `TEST_DUMP_DB=1` prints detailed SQLite table dumps.
+
 # Steps to deploy initially (no pretrained brain) without git
 1. Copy the following files and directories:
     - `./resources/*`
@@ -99,4 +110,3 @@ docker-compose up -d
 ```
 
 This will pull the most recent code from the remote git repo
-

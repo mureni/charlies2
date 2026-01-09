@@ -3,7 +3,7 @@ import { createInterface } from "readline";
 import { createReadStream, existsSync } from "fs";
 
 const API = "https://v2.jokeapi.dev/joke/Any?format=txt";
-const DATA_FILE = checkFilePath("resources", "jokes.txt");
+const DATA_FILE = checkFilePath("resources", "plugins/quotes/jokes.txt");
 
 class Joke {
     public static dadjokes: Array<string> = new Array<string>();
@@ -50,5 +50,4 @@ class Joke {
 }
 
 export { Joke }
-
 

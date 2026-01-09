@@ -26,7 +26,8 @@
       "@types/node": "25.0.3",
       "@types/ws": "8.18.1",
       "ts-node": "10.9.2",
-      "typescript": "5.9.3"
+      "typescript": "5.9.3",
+      "vitest": "3.2.4"
    },
    "scripts": {
       "clean": "rimraf dist",
@@ -34,9 +35,13 @@
       "build": "tsc",
       "build:watch": "tsc --watch",
       "dev": "npm run build && npm run start",
+      "admin:portal": "ts-node --transpile-only src/admin-portal/index.ts",
       "start": "node ./dist/index.js",
-      "test:sqlite": "ts-node --transpile-only tools/sqlite-collections.test.ts",
-      "test:sqlite:check": "tsc -p tools/tsconfig.sqlite-test.json --noEmit"
+      "test": "vitest",
+      "test:run": "vitest run",
+      "test:types": "tsc -p tsconfig.test.json --noEmit",
+      "test:sqlite": "ts-node --transpile-only tests/sqlite-collections.test.ts",
+      "test:sqlite:check": "tsc -p tests/tsconfig.sqlite-test.json --noEmit"
    },
    "repository": {
       "type": "git",

@@ -18,6 +18,7 @@ const TRACE_BRAIN = /^(1|true|yes|on)$/i.test(env("TRACE_BRAIN") ?? "");
 const traceBrain = (message: string): void => {
    if (TRACE_BRAIN) log(`Brain: ${message}`, "debug");
 };
+const BOT_NAME = (env("BOT_NAME") ?? "").trim() || "chatbot";
 
 interface BrainSettings {      
    outburstThreshold: number,          /* 0..1 chance of speaking without being spoken to */
@@ -81,21 +82,21 @@ class Brain {
    }
    */
    public static lexicon: SQLiteMap<string, Set<string>> = new SQLiteMap<string, Set<string>>({
-      filename: checkFilePath("data", env("BOT_NAME") + ".sqlite"),
+      filename: checkFilePath("data", `${BOT_NAME}.sqlite`),
       table: "lexicon",
       cacheSize: 128,
       allowSchemaMigration: env("NODE_ENV") !== "production",
       debug: /^(1|true|yes|on)$/i.test(env("TRACE_SQL") ?? "")
    });
    public static nGrams: SQLiteMap<string, nGram> = new SQLiteMap<string, nGram>({
-      filename: checkFilePath("data", env("BOT_NAME") + ".sqlite"),
+      filename: checkFilePath("data", `${BOT_NAME}.sqlite`),
       table: "ngrams",
       cacheSize: 64,
       allowSchemaMigration: env("NODE_ENV") !== "production",
       debug: /^(1|true|yes|on)$/i.test(env("TRACE_SQL") ?? "")
    });
    public static chainLength: number = 3;
-   public static botName: string = env("BOT_NAME") ?? "chatbot";
+   public static botName: string = BOT_NAME;
    public static settings: BrainSettings;
 
    public static saveSettings(brainName: string = "default"): boolean | Error {
@@ -159,10 +160,12 @@ class Brain {
    public static loadSettings(brainName: string = "default"): boolean | Error {
       try {
          const settingsFile = resolve(checkFilePath("data", `${brainName}-settings.json`));
-         traceBrain(`loadSettings: settings=${settingsFile}`);
-         if (!existsSync(settingsFile)) throw new Error(`Unable to load settings from file ${settingsFile}: file does not exist.`);
+         const fallbackFile = resolve(checkFilePath("resources", `${brainName}-settings.json`));
+         const resolvedFile = existsSync(settingsFile) ? settingsFile : fallbackFile;
+         traceBrain(`loadSettings: settings=${resolvedFile}`);
+         if (!existsSync(resolvedFile)) throw new Error(`Unable to load settings from file ${settingsFile}: file does not exist.`);
 
-         const json = readFileSync(settingsFile, "utf8");
+         const json = readFileSync(resolvedFile, "utf8");
          Brain.settings = JSON.parse(json) as BrainSettings;         
          traceBrain(`loadSettings done: lexicon=${Brain.lexicon.size} ngrams=${Brain.nGrams.size}`);
 

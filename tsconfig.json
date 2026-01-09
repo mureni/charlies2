@@ -1,10 +1,19 @@
 {
   "compilerOptions": {
-    "target": "ES2018",      
+    "target": "ES2022",      
     "module": "commonjs",
     "lib": [ "ESNext" ],
     "outDir": "./dist",   
     "rootDir": "./src",   
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["src/core/*"],
+      "@platform/*": ["src/platform/*"],
+      "@plugins/*": ["src/plugins/*"],
+      "@triggers/*": ["src/triggers/*"],
+      "@controllers/*": ["src/controllers/*"],
+      "@utils": ["src/utils.ts"]
+    },
     "strict": true,       
     "noImplicitAny": true,
     "strictNullChecks": true,            

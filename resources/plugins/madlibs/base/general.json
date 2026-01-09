@@ -1,0 +1,89 @@
+{
+   "meta": {
+      "id": "general",
+      "name": "General",
+      "description": "A flexible base category with broad vocab."
+   },
+   "vocab": {
+      "[noun]": [
+         "lantern",
+         "river",
+         "bridge",
+         "clock",
+         "forest",
+         "storm",
+         "pocket",
+         "castle",
+         "mirror",
+         "engine"
+      ],
+      "[adj]": [
+         "quiet",
+         "brisk",
+         "ancient",
+         "electric",
+         "gentle",
+         "golden",
+         "restless",
+         "crisp",
+         "lopsided",
+         "mysterious"
+      ],
+      "[verb]": [
+         "wander",
+         "drift",
+         "hum",
+         "glow",
+         "linger",
+         "spark",
+         "tumble",
+         "gather",
+         "scatter",
+         "spiral"
+      ],
+      "[adverb]": [
+         "quietly",
+         "bravely",
+         "strangely",
+         "patiently",
+         "softly",
+         "boldly"
+      ],
+      "[place]": [
+         "the harbor",
+         "the hillside",
+         "the workshop",
+         "the alley",
+         "the meadow",
+         "the attic"
+      ],
+      "[emotion]": [
+         "wonder",
+         "curiosity",
+         "grit",
+         "delight",
+         "focus",
+         "nostalgia"
+      ],
+      "[animal]": [
+         "fox",
+         "owl",
+         "whale",
+         "heron",
+         "wolf",
+         "cat"
+      ]
+   },
+   "patterns": [
+      "The [adj] [noun] likes to [verb] in [place].",
+      "We [adverb] [verb] toward the [adj] [noun].",
+      "A [animal] of [emotion] guards the [noun].",
+      "The [noun] begins to [verb] when the [adj] lights arrive.",
+      "Our [emotion] is a [adj] [noun] that refuses to [verb].",
+      "In [place], the [animal] will [verb] [adverb].",
+      "Every [noun] carries a trace of [emotion].",
+      "The [adj] path will [verb] if we listen.",
+      "A [noun] and a [noun] [verb] together.",
+      "The [animal] keeps a [adj] [noun] in its pocket."
+   ]
+}

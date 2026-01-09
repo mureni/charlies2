@@ -1,4 +1,5 @@
-FROM node:16-buster AS base
+ARG NODE_VERSION=22-bullseye
+FROM node:${NODE_VERSION} AS base
 
 ## Install build toolchain, install node deps and compile native add-ons
 #RUN apk add --no-cache make g++ sudo curl jq build-base libpng libpng-dev jpeg-dev pango-dev cairo-dev giflib-dev

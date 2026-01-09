@@ -2,7 +2,8 @@ import { getEndearment, interpolateUsers, KnownUsers } from "./user";
 import { Brain } from "./brain";
 import { log } from "./log";
 import { Swap } from "../controllers/swap";
-import { TriggerResult, Triggers } from "./triggerProcessor";
+import { Triggers } from "./triggerProcessor";
+import { ModificationType, TriggerResult } from "./triggerTypes";
 import { env, escapeRegExp, newRX } from "../utils";
 import { CoreMessage, OutgoingMessage, OutgoingMessage as PlatformOutgoingMessage } from "../platform";
 
@@ -18,15 +19,6 @@ interface ProcessResults {
    directedTo?: string;
 }
 
-type ModificationType = {
-   Case?: "upper" | "lower" | "unchanged",
-   KeepOriginal?: boolean,
-   ProcessSwaps?: boolean,
-   UseEndearments?: boolean,
-   TTS?: boolean,
-   Balance?: boolean,
-   StripFormatting?: boolean
-}
 type MemberContext = Parameters<typeof interpolateUsers>[1];
 
 
@@ -83,6 +75,7 @@ const processMessage = async (message: CoreMessage): Promise<ProcessResults> => 
    cleanText = cleanText.replace(newRX(`^\\s*\\b${escapeRegExp(Brain.botName)}\\b[:,]?\\s*`, "uig"), "");
 
    const processed: TriggerResult = await Triggers.process(message);
+   await Triggers.registerCommands(platform);
    log(`Trigger results: ${JSON.stringify(processed)}`, "debug");
 
    if (processed.error) {
@@ -92,14 +85,32 @@ const processMessage = async (message: CoreMessage): Promise<ProcessResults> => 
    if (!processed.triggered) {      
       // NOTE: The below is strictly for charlies-based responses. 
       // TODO: Move charlies response functionality to a separate processor than the generic message processor 
-      /* Detect whether a conversation with the person is ongoing or if a response is appropriate */
-      let shouldRespond: boolean = Boolean(message.mentionsBot) || Brain.shouldRespond(Brain.botName, message.content);
-      trace("shouldRespond seed", { mentionsBot: Boolean(message.mentionsBot), shouldRespond });
+      const mentionsBot = Boolean(message.mentionsBot);
+      const matchesBotName = (text: string): boolean => {
+         if (!Brain.botName) return false;
+         return Boolean(text.match(new RegExp(escapeRegExp(Brain.botName), "giu")));
+      };
+      const isDirectMessage = message.channel?.scope === "dm";
+      const isGroupDm = Boolean(message.channel?.isGroupDm)
+         || (isDirectMessage && typeof message.channel?.memberCount === "number" && message.channel.memberCount > 1);
+      let shouldRespond = false;
+      if (isDirectMessage && !isGroupDm) {
+         shouldRespond = true;
+      } else if (isDirectMessage && isGroupDm) {
+         const groupSize = Math.max(2, message.channel?.memberCount ?? 2);
+         const baseOutburst = Brain.settings.outburstThreshold;
+         const groupOutburst = Math.min(1, baseOutburst * groupSize);
+         shouldRespond = Math.random() < groupOutburst || mentionsBot || matchesBotName(message.content);
+      } else {
+         shouldRespond = mentionsBot || Brain.shouldRespond(Brain.botName, message.content);
+      }      
 
       /* If the message is a reference (reply) then check if the referenced message should be responded to */
       if (message.referencedContent) {
-         if (message.referencedMentionsBot || Brain.shouldRespond(Brain.botName, message.referencedContent)) shouldRespond = true;
+         if (message.referencedMentionsBot || matchesBotName(message.referencedContent)) shouldRespond = true;
       }
+      
+      trace("shouldRespond", { mentionsBot, shouldRespond, isDirectMessage, isGroupDm });
 
       let seed: string = "";
       let conversationActive = false;
@@ -508,7 +519,5 @@ const balanceText = (text: string): string => {
 }
 
 
-export { ProcessResults, processMessage, cleanMessage, ModificationType }
-
-
-
+export { ProcessResults, processMessage, cleanMessage }
+export type { ModificationType }

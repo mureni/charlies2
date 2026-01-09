@@ -1,0 +1,13 @@
+{
+  "id": "horseshoe",
+  "name": "Horseshoe",
+  "forcedCols": 5,
+  "forcedRows": 2,
+  "slots": [
+    { "slotId": "pos1", "order": 1, "grid": { "row": 2, "col": 0 } },
+    { "slotId": "pos2", "order": 2, "grid": { "row": 1, "col": 1 } },
+    { "slotId": "pos3", "order": 3, "grid": { "row": 0, "col": 2 } },
+    { "slotId": "pos4", "order": 4, "grid": { "row": 1, "col": 3 } },
+    { "slotId": "pos5", "order": 5, "grid": { "row": 2, "col": 4 } }
+  ]
+}

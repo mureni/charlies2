@@ -1,7 +1,10 @@
 version: "3.9"
 services:
   charlies:
-    build: .    
+    build:
+      context: .
+      args:
+        NODE_VERSION: 22-bullseye
     env_file: .env
     container_name: charlies
     restart: 'on-failure:3'

@@ -1,6 +1,8 @@
 import {
    AttachmentBuilder,
    APIEmbed,
+   ApplicationCommandOptionType,
+   ApplicationCommandDataResolvable,
    ColorResolvable,
    Message,
    GuildTextBasedChannel,
@@ -8,6 +10,7 @@ import {
    ChannelType,
    PartialDMChannel,
    PermissionFlagsBits,
+   PermissionsBitField,
    resolveColor
 } from "discord.js";
 import { getDisplayName } from "../core/user";
@@ -18,6 +21,7 @@ import {
    OutgoingAttachment,
    OutgoingEmbed,
    OutgoingMessage as PlatformOutgoingMessage,
+   PlatformCommand,
    PlatformAdapter,
    PlatformMemberQuery,
    CoreChannel,
@@ -68,12 +72,25 @@ const mapChannelType = (channel: DiscordChannel): CoreChannelType => {
 };
 
 const toCoreChannel = (channel: DiscordChannel): CoreChannel => {
+   const channelType = (channel as { type?: ChannelType }).type;
    const type = mapChannelType(channel);
    const scope: CoreChannelScope = type === "dm" ? "dm" : "server";
    const supportsText = type === "text" || type === "dm" || type === "thread" || type === "forum" || type === "media";
    const supportsVoice = type === "voice" || type === "stage";
    const supportsTyping = supportsText;
    const supportsHistory = supportsText;
+   const isGroupDm = channelType === ChannelType.GroupDM;
+   let memberCount: number | undefined;
+   if (isGroupDm && "recipients" in channel) {
+      const recipients = (channel as { recipients?: { size?: number; length?: number } | unknown[] }).recipients;
+      if (Array.isArray(recipients)) {
+         memberCount = recipients.length;
+      } else if (typeof recipients?.size === "number") {
+         memberCount = recipients.size;
+      }
+   } else if (type === "dm") {
+      memberCount = 1;
+   }
    return {
       id: channel.id,
       name: "name" in channel ? String(channel.name) : channel.id,
@@ -83,7 +100,9 @@ const toCoreChannel = (channel: DiscordChannel): CoreChannel => {
       supportsText,
       supportsVoice,
       supportsTyping,
-      supportsHistory
+      supportsHistory,
+      isGroupDm,
+      memberCount
    };
 };
 
@@ -110,6 +129,37 @@ const toDiscordEmbed = (embed: OutgoingEmbed): APIEmbed => {
 
 const toDiscordAttachment = (attachment: OutgoingAttachment): AttachmentBuilder =>
    new AttachmentBuilder(attachment.data, { name: attachment.name });
+
+const permissionMap = {
+   ADMINISTRATOR: PermissionFlagsBits.Administrator,
+   MANAGE_GUILD: PermissionFlagsBits.ManageGuild,
+   READ_MESSAGE_HISTORY: PermissionFlagsBits.ReadMessageHistory
+} as const;
+
+const toDiscordCommands = (commands: PlatformCommand[]): ApplicationCommandDataResolvable[] =>
+   commands.map(command => {
+      const options = command.options?.map(option => ({
+         name: option.name,
+         description: option.description,
+         type: {
+            string: ApplicationCommandOptionType.String,
+            number: ApplicationCommandOptionType.Number,
+            boolean: ApplicationCommandOptionType.Boolean,
+            user: ApplicationCommandOptionType.User,
+            channel: ApplicationCommandOptionType.Channel
+         }[option.type],
+         required: Boolean(option.required)
+      }));
+      const permissions = command.permissions && command.permissions.length > 0
+         ? new PermissionsBitField(command.permissions.map(permission => permissionMap[permission])).bitfield.toString()
+         : undefined;
+      return {
+         name: command.name,
+         description: command.description,
+         options,
+         default_member_permissions: permissions
+      } as ApplicationCommandDataResolvable;
+   });
 
 type SendableChannel = {
    send: (options: {
@@ -271,12 +321,22 @@ const createDiscordAdapter = (message: Message): PlatformAdapter => ({
          : message.client.channels.cache.get(channelId);
       if (!channel || !message.client.user || !("permissionsFor" in channel) || !("guild" in channel)) return false;
       const perms = (channel as GuildTextBasedChannel).permissionsFor(message.client.user);
-      const permissionMap = {
-         ADMINISTRATOR: PermissionFlagsBits.Administrator,
-         MANAGE_GUILD: PermissionFlagsBits.ManageGuild,
-         READ_MESSAGE_HISTORY: PermissionFlagsBits.ReadMessageHistory
-      } as const;
       return Boolean(perms && perms.has(permissionMap[permission]));
+   },
+   supportsCommands: true,
+   registerCommands: async (commands: PlatformCommand[]): Promise<void> => {
+      if (commands.length === 0) return;
+      const application = message.client.application;
+      if (!application) {
+         log(`Discord registerCommands skipped: application unavailable`, "warn");
+         return;
+      }
+      try {
+         await application.commands.set(toDiscordCommands(commands));
+      } catch (error: unknown) {
+         const messageText = error instanceof Error ? error.message : String(error);
+         log(`Discord registerCommands error: ${messageText}`, "error");
+      }
    }
 });
 

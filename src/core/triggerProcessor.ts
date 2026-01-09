@@ -1,47 +1,30 @@
 import { readdirSync, readFileSync } from "fs";
-import { ModificationType } from "./messageProcessor";
+import { Trigger, TriggerResult } from "./triggerTypes";
 import { log } from "./log";
 import { Blacklist } from "../controllers";
+import { PluginManager } from "../plugins";
 import { checkFilePath, env } from "../utils";
 import {
    CoreMessage,
    OutgoingAttachment,
    OutgoingEmbed,
-   OutgoingEmbedField,
-   OutgoingMessage
+   OutgoingEmbedField
 } from "../platform";
-interface TriggerResult {
-   results: OutgoingMessage[];
-   modifications: ModificationType;
-   directedTo?: string;
-   triggered?: boolean;
-   triggeredBy?: string;
-   error?: { 
-      message: string;      
-   }
-}
+import type { PlatformAdapter } from "../platform";
 
 // TODO: Add "resources" field to allow a trigger to have static resources it can pull from (i.e. dictionaries, image folders, etc.)
 // TODO: Add "data" field to allow a trigger to load and save data -- should also have option to specify whether data applies to server, channel, user, or self
 
-interface Trigger {
-   id: string;
-   name: string;
-   description: string;
-   usage: string;
-   command: RegExp;
-   action(context?: CoreMessage, matches?: RegExpMatchArray): TriggerResult | Promise<TriggerResult>;
-   ownerOnly?: boolean;
-   adminOnly?: boolean;
-   example?: string;
-   icon?: string;  // For now, 'icon' refers to a file relative to the "resources" folder
-}
-
 class Triggers {
    public static list: Trigger[] = [];
+   private static pluginManager = new PluginManager();
+   private static commandsRegistered = false;
+   private static commandsRegistering = false;
+   private static watching = false;
    
    public static async initialize(): Promise<Trigger[]> {
       const triggers: Trigger[] = [];
+      Triggers.pluginManager.clear();
       const triggerFiles = readdirSync(checkFilePath("code", "triggers/"));
       for (const file of triggerFiles) {
          const fullPath = checkFilePath("code", `triggers/${file}`);
@@ -55,8 +38,49 @@ class Triggers {
             log(`Error loading trigger file ${file}: ${error}`, 'error');
          });
       }
-      Triggers.list = triggers;
-      return triggers;
+      Triggers.pluginManager.registerLegacyTriggers(triggers);
+      await Triggers.pluginManager.loadFromDist();
+      Triggers.list = Triggers.pluginManager.getLegacyTriggers();
+      Triggers.startWatching();
+      return Triggers.list;
+   }
+
+   public static async registerCommands(platform?: PlatformAdapter): Promise<void> {
+      if (Triggers.commandsRegistered || Triggers.commandsRegistering) return;
+      if (!platform || !platform.supportsCommands || !platform.registerCommands) return;
+      if (Triggers.list.length === 0) await Triggers.initialize();
+      const commands = Triggers.pluginManager.getCommands();
+      if (commands.length === 0) {
+         Triggers.commandsRegistered = true;
+         return;
+      }
+      Triggers.commandsRegistering = true;
+      try {
+         await platform.registerCommands(commands);
+         Triggers.commandsRegistered = true;
+      } catch (error: unknown) {
+         const message = error instanceof Error ? error.message : String(error);
+         log(`Error registering commands: ${message}`, "error");
+      } finally {
+         Triggers.commandsRegistering = false;
+      }
+   }
+
+   public static async reload(): Promise<Trigger[]> {
+      await Triggers.pluginManager.unloadAll();
+      Triggers.commandsRegistered = false;
+      Triggers.commandsRegistering = false;
+      Triggers.list = [];
+      return Triggers.initialize();
+   }
+
+   public static startWatching(): void {
+      if (Triggers.watching) return;
+      if (env("PLUGINS_WATCH", "false") !== "true") return;
+      Triggers.watching = true;
+      Triggers.pluginManager.startWatching(() => {
+         void Triggers.reload();
+      });
    }
 
    public static async process(message: CoreMessage): Promise<TriggerResult> {
@@ -113,13 +137,19 @@ class Triggers {
 
       if (command === "commands") {
          const list: string[] = [];
-         Triggers.list.forEach(trigger => list.push(trigger.id));
+         Triggers.list.forEach(trigger => {
+            if (trigger.hidden) return;
+            list.push(trigger.id);
+         });
          output.results = [
             { contents: `Available commands: \`${list.join(", ")}\`` },
             { contents: `Type !help <command> for more information` }
          ];
       } else {
-         const found = Triggers.list.find(trigger => (command.match(trigger.command) !== null || command.match(trigger.id) !== null));
+         const found = Triggers.list.find(trigger => {
+            if (trigger.hidden) return false;
+            return command.match(trigger.command) !== null || command.match(trigger.id) !== null;
+         });
       
          if (!found) {
             output.results = [{ contents: "no such command exists" }];
@@ -137,7 +167,7 @@ class Triggers {
             imageAttachmentName: "help.png"
          };
          const attachmentPath = found.icon
-            ? checkFilePath("resources", `icons/${found.icon}`)
+            ? checkFilePath("resources", found.icon)
             : checkFilePath("resources", "icons/help.png");
          const attachment: OutgoingAttachment = {
             name: "help.png",

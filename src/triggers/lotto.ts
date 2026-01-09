@@ -52,7 +52,7 @@ const checkem: Trigger = {
    description: "Returns a random number between 1 and 9999 to check if the chaos gods are smiling",
    usage: "checkem",
    command: /checkem|dubs|trips|quads/ui,
-   icon: "checkem.png",
+   icon: "icons/checkem.png",
    action: (context: CoreMessage) => {
       const output: TriggerResult = { results: [], modifications: { Case: 'unchanged' } };            
       const isDubs = (str: string) => /(.)\1{1}$/.test(str);

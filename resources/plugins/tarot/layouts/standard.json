@@ -1,0 +1,9 @@
+{
+  "id": "standard",
+  "name": "Standard",
+  "slots": [
+    { "slotId": "pos1", "order": 1, "grid": { "row": 0, "col": 0 } },
+    { "slotId": "pos2", "order": 2, "grid": { "row": 0, "col": 1 } },
+    { "slotId": "pos3", "order": 3, "grid": { "row": 0, "col": 2 } }
+  ]
+}

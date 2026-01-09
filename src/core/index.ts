@@ -1,7 +1,8 @@
 import { Brain } from "./brain";
 import { log } from "./log";
-import { ModificationType, ProcessResults, processMessage, cleanMessage } from "./messageProcessor";
-import { Trigger, Triggers, TriggerResult } from "./triggerProcessor";
+import { ProcessResults, processMessage, cleanMessage } from "./messageProcessor";
+import { Trigger, TriggerResult, ModificationType } from "./triggerTypes";
+import { Triggers } from "./triggerProcessor";
 import { Conversation, KnownUsers, getDisplayName, interpolateUsers, getEndearment } from "./user";
 import {
    CoreMessage,
