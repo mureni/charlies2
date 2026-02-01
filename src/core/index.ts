@@ -2,8 +2,8 @@ import { Brain } from "./brain";
 import { log } from "./log";
 import { ProcessResults, processMessage, cleanMessage } from "./messageProcessor";
 import { Trigger, TriggerResult, ModificationType } from "./triggerTypes";
-import { Triggers } from "./triggerProcessor";
-import { Conversation, KnownUsers, getDisplayName, interpolateUsers, getEndearment } from "./user";
+import { InteractionRouter } from "./interactionRouter";
+import { Conversation, KnownUsers, interpolateUsers, getEndearment } from "./user";
 import {
    CoreMessage,
    OutgoingAttachment,
@@ -14,7 +14,7 @@ import {
    PlatformHistoryQuery,
    PlatformMemberQuery,
    PlatformPermission
-} from "../platform";
+} from "@/platform";
 
 export {
    Conversation,
@@ -26,9 +26,8 @@ export {
    processMessage,
    cleanMessage,
    Trigger,
-   Triggers,
+   InteractionRouter,
    TriggerResult,
-   getDisplayName,
    interpolateUsers,
    getEndearment,
    CoreMessage,

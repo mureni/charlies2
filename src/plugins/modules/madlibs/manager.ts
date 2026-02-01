@@ -1,28 +1,28 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import { basename, extname, resolve } from "path";
-import { SQLiteMap } from "../../../core/SQLiteCollections";
-import { log } from "../../../core/log";
-import { checkFilePath, env } from "../../../utils";
-import { resolvePluginPaths } from "../../paths";
-import type { CoreMessage } from "../../../platform";
+import { SQLiteMap } from "@/core/SQLiteCollections";
+import { log } from "@/core/log";
+import { checkFilePath, env } from "@/utils";
+import { resolvePluginPaths } from "@/plugins/paths";
+import type { CoreMessage } from "@/platform";
 
 type MadlibPatterns = Set<string>;
 type MadlibVocab = Map<string, Set<string>>;
-type MadlibCategory = {
+interface MadlibCategory {
    patterns: MadlibPatterns;
    vocab: MadlibVocab;
-};
+}
 
-type MadlibTombstones = {
+interface MadlibTombstones {
    patterns: Set<string>;
    vocab: Map<string, Set<string>>;
-};
+}
 
 type MadlibOverlay = MadlibCategory & {
    tombstones?: MadlibTombstones;
 };
 
-type MadlibMeta = {
+interface MadlibMeta {
    id?: string;
    name?: string;
    description?: string;
@@ -30,21 +30,21 @@ type MadlibMeta = {
    example?: string;
    matcher?: string;
    matcherFlags?: string;
-};
+}
 
-type MadlibCategoryJSON = {
+interface MadlibCategoryJSON {
    meta?: MadlibMeta;
    vocab: Record<string, string[]>;
    patterns: string[];
-};
+}
 
-type MadlibBuiltin = {
+interface MadlibBuiltin {
    id: string;
    meta: MadlibMeta;
    category: MadlibCategory;
-};
+}
 
-export type MadlibBuiltinInfo = {
+export interface MadlibBuiltinInfo {
    id: string;
    name: string;
    description?: string;
@@ -52,35 +52,35 @@ export type MadlibBuiltinInfo = {
    example?: string;
    matcher?: string;
    matcherFlags?: string;
-};
+}
 
-export type MadlibCategoryInfo = {
+export interface MadlibCategoryInfo {
    id: string;
    source: "builtin" | "base" | "overlay" | "overlay-only";
    readOnly: boolean;
    patterns: number;
    vocabTypes: number;
-};
+}
 
-type MadlibAccessRule = {
+interface MadlibAccessRule {
    allow?: string[];
    deny?: string[];
-};
+}
 
-type MadlibAccessConfig = {
+interface MadlibAccessConfig {
    default?: MadlibAccessRule;
    guilds?: Record<string, MadlibAccessRule>;
    channels?: Record<string, MadlibAccessRule>;
-};
+}
 
-type MadlibCategorySnapshot = {
+interface MadlibCategorySnapshot {
    id: string;
    readOnly: boolean;
    meta?: MadlibMeta;
    base?: { patterns: string[]; vocab: Record<string, string[]> };
    overlay?: { patterns: string[]; vocab: Record<string, string[]>; tombstones: { patterns: string[]; vocab: Record<string, string[]> } };
    merged?: { patterns: string[]; vocab: Record<string, string[]> };
-};
+}
 
 const normalizeCategoryId = (value: string): string => value.trim().toLowerCase();
 const BOT_NAME = (env("BOT_NAME") ?? "").trim() || "chatbot";

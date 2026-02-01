@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Brain } from "../src/core";
-import { plugins } from "../src/plugins/modules/story";
+import { Brain } from "@/core";
+import { plugins } from "@/plugins/modules/story";
 import { createMessage } from "./pluginHarness";
 
 const storyPlugin = plugins.find(plugin => plugin.id === "story");

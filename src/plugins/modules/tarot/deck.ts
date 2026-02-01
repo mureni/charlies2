@@ -1,7 +1,7 @@
 import Canvas from "canvas";
 import { readdirSync, readFileSync } from "fs";
 import { join, parse } from "path";
-import { log } from "../../../core/log";
+import { log } from "@/core/log";
 import type { TarotCard, TarotDeck } from "./types";
 
 const registeredFonts = new Set<string>();

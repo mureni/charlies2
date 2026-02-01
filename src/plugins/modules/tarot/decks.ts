@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "fs";
 import { resolve } from "path";
-import { resolvePluginPaths } from "../../paths";
+import { resolvePluginPaths } from "@/plugins/paths";
 
 const { resourcesDir } = resolvePluginPaths("tarot");
 const decksDir = resolve(resourcesDir, "decks");

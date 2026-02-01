@@ -1,6 +1,6 @@
 import winston from "winston";
 const { createLogger, format, transports } = winston;
-import { DEBUG, env } from "../utils";
+import { DEBUG, env } from "@/utils";
 import util from "util";
 const { combine, colorize, timestamp, printf } = format;
 
@@ -11,12 +11,12 @@ winston.addColors({
    trace: "cyan"
 });
 
-const outputFormat = combine(   
+const outputFormat = combine(
    timestamp(),
    printf(info => `[${info.timestamp} - ${info.level}] ${info.message}`)
-)   
+)
 
-export type LogType = 'trace' | 'debug' | 'error' | 'warn' | 'general';
+export type LogType = "trace" | "debug" | "error" | "warn" | "general";
 const TRACE_FLOW = /^(1|true|yes|on)$/i.test(env("TRACE_FLOW") ?? "");
 const TRACE_CALLSITE = /^(1|true|yes|on)$/i.test(env("TRACE_CALLSITE") ?? "");
 const LOG_LEVEL = env("LOG_LEVEL", (TRACE_FLOW ? "trace" : (DEBUG ? "debug" : "info")));
@@ -60,37 +60,37 @@ class Logger {
          })
       ]
    });
-   public static log(message: unknown = '', type: LogType = (DEBUG ? 'debug' : 'general')) {
-      if (message === '') return;   
+   public static log(message: unknown = "", type: LogType = (DEBUG ? "debug" : "general")) {
+      if (message === "") return;
       let outputMessage = formatMessage(message).normalize();
-      switch (type) {      
-         case 'error': 
-            Logger.output.error(outputMessage);            
+      switch (type) {
+         case "error":
+            Logger.output.error(outputMessage);
             break;
-         case 'warn': 
+         case "warn":
             Logger.output.warn(outputMessage);
             break;
-         case 'debug':
+         case "debug":
             if (TRACE_CALLSITE) {
                const callsite = getCallsite();
                if (callsite) outputMessage = `${outputMessage} [${callsite}]`;
             }
             Logger.output.debug(outputMessage);
             break;
-         case 'trace':
+         case "trace":
             if (TRACE_CALLSITE) {
                const callsite = getCallsite();
                if (callsite) outputMessage = `${outputMessage} [${callsite}]`;
             }
             Logger.output.log("trace", outputMessage);
             break;
-         case 'general':                  
-         default:            
+         case "general":
+         default:
             Logger.output.info(outputMessage);
-            break;                
-      }     
+            break;
+      }
       return;
-   } 
+   }
 }
 
 const log = Logger.log;

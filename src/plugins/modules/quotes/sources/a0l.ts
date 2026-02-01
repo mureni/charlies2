@@ -1,4 +1,4 @@
-import type { QuoteSource } from "../types";
+import type { QuoteSource } from "@/plugins/modules/quotes/types";
 
 const a0lSource: QuoteSource = {
    id: "a0l",

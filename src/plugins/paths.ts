@@ -1,13 +1,13 @@
 import { mkdirSync } from "fs";
 import { resolve } from "path";
-import { checkFilePath } from "../utils";
+import { checkFilePath } from "@/utils";
 
-type PluginPaths = {
+interface PluginPaths {
    resourcesDir: string;
    dataDir: string;
    sharedResourcesDir: string;
    sharedDataDir: string;
-};
+}
 
 const resolvePluginPaths = (pluginId: string): PluginPaths => {
    const resourcesRoot = checkFilePath("resources");

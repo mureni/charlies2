@@ -1,21 +1,21 @@
-import type { CoreMessage } from "../../../platform";
-import type { ModificationType, TriggerResult } from "../../../core/triggerTypes";
-import type { PluginCommand } from "../../types";
+import type { CoreMessage } from "@/platform";
+import type { ModificationType, TriggerResult } from "@/core/triggerTypes";
+import type { PluginCommand } from "@/plugins/types";
 
-export type QuoteStyle = {
+export interface QuoteStyle {
    prefix?: string;
    suffix?: string;
    wrap?: string;
-};
+}
 
-export type QuoteHelpers = {
+export interface QuoteHelpers {
    getQuotes: (fileName: string) => string[];
    randomQuote: (quotes: string[]) => string;
    applyStyle: (quote: string, style?: QuoteStyle) => string;
    defaultModifications: ModificationType;
-};
+}
 
-export type QuoteSource = {
+export interface QuoteSource {
    id: string;
    name: string;
    description: string;
@@ -26,4 +26,4 @@ export type QuoteSource = {
    modifications?: ModificationType;
    command?: PluginCommand;
    resolveQuote?: (context: CoreMessage, match: RegExpMatchArray | undefined, helpers: QuoteHelpers) => Promise<TriggerResult> | TriggerResult;
-};
+}

@@ -1,23 +1,23 @@
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import type { CoreMessage } from "../../../../platform";
-import type { TriggerResult } from "../../../../core/triggerTypes";
-import { resolvePluginPaths } from "../../../paths";
-import type { QuoteHelpers, QuoteSource } from "../types";
+import type { CoreMessage } from "@/platform";
+import type { TriggerResult } from "@/core/triggerTypes";
+import { resolvePluginPaths } from "@/plugins/paths";
+import type { QuoteHelpers, QuoteSource } from "@/plugins/modules/quotes/types";
 
-type BibleVerse = {
+interface BibleVerse {
    ref: string;
    text: string;
-};
+}
 
-type BibleBook = {
+interface BibleBook {
    book: string;
    verses: BibleVerse[];
-};
+}
 
-type BibleIndex = {
+interface BibleIndex {
    books: Map<string, { name: string; chapters: Map<number, BibleVerse[]> }>;
-};
+}
 
 const MAX_VERSES_AT_ONCE = 5;
 const bibleMatcher = /^!?bible\s+(?<book>.+?)(?:\s+(?<chapter>\d+)(?::(?<verse>\d+)(?:\s*-\s*(?<verseRange>\d+))?)?)?\s*$/ui;

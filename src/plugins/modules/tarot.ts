@@ -1,7 +1,7 @@
-import { log } from "../../core/log";
-import type { CoreMessage } from "../../platform";
-import type { TriggerResult } from "../../core/triggerTypes";
-import type { PluginCommand, TriggerPlugin } from "../types";
+import { log } from "@/core/log";
+import type { CoreMessage } from "@/platform";
+import type { TriggerResult } from "@/core/triggerTypes";
+import type { PluginCommand, TriggerPlugin } from "@/plugins/types";
 import { loadDeck } from "./tarot/deck";
 import { listDecks, resolveDeckPaths } from "./tarot/decks";
 import { normalizeDeckId, normalizeSpreadId, normalizeThemeId } from "./tarot/defaults";

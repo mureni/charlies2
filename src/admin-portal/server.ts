@@ -1,27 +1,28 @@
 import http from "node:http";
-import { AddressInfo } from "node:net";
+import type { AddressInfo } from "node:net";
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { extname, resolve } from "node:path";
 import { createGzip } from "node:zlib";
-import { Brain } from "../core/brain";
-import { BrainOverlays } from "../core/brainOverlays";
-import { log } from "../core/log";
-import { env } from "../utils";
-import { Madlibs } from "../plugins/modules/madlibs/manager";
+import { Brain } from "@/core/brain";
+import { BrainOverlays } from "@/core/brainOverlays";
+import { log } from "@/core/log";
+import { env } from "@/utils";
+import { Madlibs } from "@/plugins/modules/madlibs/manager";
+import { Swaps } from "@/filters/swaps/manager";
 
 const DEFAULT_PORT = Number(env("ADMIN_PORTAL_PORT", "3140"));
 const DEFAULT_HOST = env("ADMIN_PORTAL_HOST", "127.0.0.1");
 const DEFAULT_PUBLIC_DIR = resolve(env("BOT_ROOT") ?? process.cwd(), "resources", "admin-portal");
 
-type PluginInfo = { id: string; name: string; script: string };
+interface PluginInfo { id: string; name: string; script: string }
 
-type AdminServerOptions = {
+interface AdminServerOptions {
    port?: number;
    host?: string;
    publicDir?: string;
    quiet?: boolean;
    plugins?: PluginInfo[];
-};
+}
 
 const contentTypeByExt: Record<string, string> = {
    ".html": "text/html; charset=utf-8",
@@ -30,33 +31,33 @@ const contentTypeByExt: Record<string, string> = {
    ".json": "application/json; charset=utf-8"
 };
 
-type BrainLexiconItem = {
+interface BrainLexiconItem {
    word: string;
    ngramCount: number;
-};
+}
 
-type BrainLexiconPage = {
+interface BrainLexiconPage {
    total: number;
    offset: number;
    limit: number;
    items: BrainLexiconItem[];
-};
+}
 
-type BrainTokenCount = {
+interface BrainTokenCount {
    token: string;
    count: number;
-};
+}
 
-type BrainNgramDetail = {
+interface BrainNgramDetail {
    hash: string;
    tokens: string[];
    canStart: boolean;
    canEnd: boolean;
    nextTokens: BrainTokenCount[];
    previousTokens: BrainTokenCount[];
-};
+}
 
-type BrainNgramListItem = {
+interface BrainNgramListItem {
    hash: string;
    tokens: string;
    canStart: boolean;
@@ -66,9 +67,9 @@ type BrainNgramListItem = {
    tokenCount: number;
    minTokenLength: number;
    maxTokenLength: number;
-};
+}
 
-type BrainNgramPage = {
+interface BrainNgramPage {
    total: number;
    offset: number;
    limit: number;
@@ -80,13 +81,13 @@ type BrainNgramPage = {
       builtAt: string | null;
       stale: boolean;
    };
-};
+}
 
-type BrainWordDetail = {
+interface BrainWordDetail {
    word: string;
    ngramCount: number;
    ngrams: BrainNgramDetail[];
-};
+}
 
 const sendJson = (res: http.ServerResponse, status: number, payload: unknown): void => {
    const body = JSON.stringify(payload, null, 2);
@@ -122,7 +123,8 @@ const getBrainDbPath = (): string => resolve(env("BOT_ROOT") ?? process.cwd(), "
 
 const getDefaultPlugins = (): PluginInfo[] => ([
    { id: "brain", name: "Brain", script: "/plugins/brain/index.js" },
-   { id: "madlibs", name: "Madlibs", script: "/plugins/madlibs/index.js" }
+   { id: "madlibs", name: "Madlibs", script: "/plugins/madlibs/index.js" },
+   { id: "swaps", name: "Swaps", script: "/plugins/swaps/index.js" }
 ]);
 
 const buildBrainStats = () => {
@@ -200,7 +202,7 @@ const sortTokenCounts = (map: Map<string, number>, limit: number): BrainTokenCou
 
 type NgramIndexItem = BrainNgramListItem;
 
-type NgramIndexCache = {
+interface NgramIndexCache {
    items: NgramIndexItem[];
    state: "idle" | "building" | "ready";
    scanned: number;
@@ -211,7 +213,7 @@ type NgramIndexCache = {
    stale: boolean;
    buildId: number;
    viewCache?: { key: string; items: NgramIndexItem[] };
-};
+}
 
 const ngramIndex: NgramIndexCache = {
    items: [],
@@ -425,7 +427,7 @@ const getTopTokens = (limit: number = DEFAULT_TOP_TOKENS): BrainTokenCount[] => 
    return items.slice(0, clampedLimit);
 };
 
-type NgramQueryOptions = {
+interface NgramQueryOptions {
    contains?: string;
    notContains?: string;
    canStart?: boolean | null;
@@ -440,7 +442,7 @@ type NgramQueryOptions = {
    sortDir?: "asc" | "desc";
    offset: number;
    limit: number;
-};
+}
 
 const getNgramPage = (options: NgramQueryOptions): BrainNgramPage => {
    ensureNgramIndex();
@@ -484,7 +486,7 @@ const getNgramPage = (options: NgramQueryOptions): BrainNgramPage => {
    if (canCacheView && ngramIndex.viewCache?.key === viewKey) {
       viewItems = ngramIndex.viewCache.items;
    } else {
-      let baseItems = ngramIndex.items;
+      const baseItems = ngramIndex.items;
       let filteredItems: NgramIndexItem[];
       if (!hasFilters) {
          filteredItems = baseItems;
@@ -776,6 +778,142 @@ const createAdminServer = (options: AdminServerOptions = {}) => {
       return false;
    };
 
+   const handleSwapsApi = async (req: http.IncomingMessage, res: http.ServerResponse, pathname: string): Promise<boolean> => {
+      if (pathname === "/api/swaps/rules" && req.method === "GET") {
+         const url = new URL(req.url ?? "", "http://localhost");
+         const query = url.searchParams.get("q") ?? undefined;
+         const scopeRaw = url.searchParams.get("scope") ?? "";
+         const scope = scopeRaw ? Swaps.normalizeScope(scopeRaw) : null;
+         const scopeId = url.searchParams.get("scopeId") ?? undefined;
+         const rules = Swaps.listRules({
+            scope: scope ?? undefined,
+            scopeId,
+            query
+         });
+         sendJson(res, 200, { rules });
+         return true;
+      }
+      if (pathname === "/api/swaps/rule" && req.method === "POST") {
+         const raw = await readBody(req);
+         const parsed = JSON.parse(raw || "{}") as {
+            action?: string;
+            id?: string;
+            scope?: string;
+            scopeId?: string;
+            pattern?: string;
+            replacement?: string;
+            mode?: string;
+            caseSensitive?: boolean;
+            applyLearn?: boolean;
+            applyRespond?: boolean;
+            enabled?: boolean;
+         };
+         const scope = Swaps.normalizeScope(parsed.scope ?? "");
+         const scopeId = parsed.scopeId?.trim() ?? "";
+         if (!scope || !scopeId) {
+            sendJson(res, 400, { error: "missing or invalid scope/scopeId" });
+            return true;
+         }
+         if (parsed.action === "delete") {
+            if (!parsed.id) {
+               sendJson(res, 400, { error: "missing rule id" });
+               return true;
+            }
+            const removed = Swaps.deleteRule(scope, scopeId, parsed.id);
+            sendJson(res, 200, { success: removed });
+            return true;
+         }
+         const result = Swaps.saveRule({
+            id: parsed.id,
+            scope,
+            scopeId,
+            pattern: parsed.pattern ?? "",
+            replacement: parsed.replacement ?? "",
+            mode: parsed.mode === "regex" ? "regex" : "word",
+            caseSensitive: Boolean(parsed.caseSensitive),
+            applyLearn: parsed.applyLearn ?? true,
+            applyRespond: parsed.applyRespond ?? true,
+            enabled: parsed.enabled ?? true
+         });
+         if (result instanceof Error) {
+            sendJson(res, 400, { error: result.message });
+            return true;
+         }
+         sendJson(res, 200, { rule: result });
+         return true;
+      }
+      if (pathname === "/api/swaps/groups" && req.method === "GET") {
+         sendJson(res, 200, { groups: Swaps.listGroups() });
+         return true;
+      }
+      if (pathname === "/api/swaps/group" && req.method === "POST") {
+         const raw = await readBody(req);
+         const parsed = JSON.parse(raw || "{}") as { action?: string; id?: string; name?: string; notes?: string };
+         if (parsed.action === "delete") {
+            if (!parsed.id) {
+               sendJson(res, 400, { error: "missing group id" });
+               return true;
+            }
+            const removed = Swaps.deleteGroup(parsed.id);
+            sendJson(res, 200, { success: removed });
+            return true;
+         }
+         if (!parsed.id || !parsed.name) {
+            sendJson(res, 400, { error: "missing group id or name" });
+            return true;
+         }
+         const group = Swaps.saveGroup({
+            id: parsed.id,
+            name: parsed.name,
+            notes: parsed.notes
+         });
+         sendJson(res, 200, { group });
+         return true;
+      }
+      if (pathname === "/api/swaps/group/member" && req.method === "POST") {
+         const raw = await readBody(req);
+         const parsed = JSON.parse(raw || "{}") as { action?: string; groupId?: string; memberId?: string };
+         const groupId = parsed.groupId?.trim() ?? "";
+         const memberId = parsed.memberId?.trim() ?? "";
+         if (!groupId || !memberId) {
+            sendJson(res, 400, { error: "missing groupId or memberId" });
+            return true;
+         }
+         const success = parsed.action === "remove"
+            ? Swaps.removeGroupMember(groupId, memberId)
+            : Swaps.addGroupMember(groupId, memberId);
+         sendJson(res, 200, { success });
+         return true;
+      }
+      return false;
+   };
+
+   const handleSettingsApi = async (req: http.IncomingMessage, res: http.ServerResponse, pathname: string): Promise<boolean> => {
+      if (pathname !== "/api/settings/brain") return false;
+      ensureBrainSettings();
+      if (req.method === "GET") {
+         sendJson(res, 200, { settings: { learnFromBots: Brain.settings.learnFromBots } });
+         return true;
+      }
+      if (req.method === "POST") {
+         const raw = await readBody(req);
+         const parsed = JSON.parse(raw || "{}") as { learnFromBots?: boolean };
+         if (typeof parsed.learnFromBots !== "boolean") {
+            sendJson(res, 400, { error: "learnFromBots must be a boolean" });
+            return true;
+         }
+         Brain.settings.learnFromBots = parsed.learnFromBots;
+         const saved = Brain.saveSettings(Brain.botName || "default");
+         if (saved instanceof Error) {
+            sendJson(res, 500, { error: saved.message });
+            return true;
+         }
+         sendJson(res, 200, { settings: { learnFromBots: Brain.settings.learnFromBots } });
+         return true;
+      }
+      return false;
+   };
+
    const server = http.createServer(async (req, res) => {
       const url = new URL(req.url ?? "/", "http://localhost");
       const pathname = url.pathname;
@@ -790,6 +928,14 @@ const createAdminServer = (options: AdminServerOptions = {}) => {
          }
          if (pathname.startsWith("/api/brain/")) {
             const handled = await handleBrainApi(req, res, pathname);
+            if (handled) return;
+         }
+         if (pathname.startsWith("/api/swaps/")) {
+            const handled = await handleSwapsApi(req, res, pathname);
+            if (handled) return;
+         }
+         if (pathname.startsWith("/api/settings/")) {
+            const handled = await handleSettingsApi(req, res, pathname);
             if (handled) return;
          }
          return serveStatic(req, res);

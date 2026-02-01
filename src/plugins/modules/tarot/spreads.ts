@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "fs";
 import { resolve } from "path";
-import { log } from "../../../core/log";
-import { resolvePluginPaths } from "../../paths";
+import { log } from "@/core/log";
+import { resolvePluginPaths } from "@/plugins/paths";
 import { normalizeThemeId } from "./defaults";
 import type {
    SpreadDefinition,

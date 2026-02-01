@@ -1,20 +1,20 @@
 import { SQLiteMap } from "./SQLiteCollections";
-import { checkFilePath, env } from "../utils";
+import { checkFilePath, env } from "@/utils";
 
 const BOT_NAME = (env("BOT_NAME") ?? "").trim() || "chatbot";
 
 export type BrainOverlayScope = "global" | "community" | "conversation";
 
-export type BrainOverlayContext = {
+export interface BrainOverlayContext {
    scope: BrainOverlayScope;
    id?: string;
-};
+}
 
-export type BrainOverlay = {
+export interface BrainOverlay {
    context: BrainOverlayContext;
    weights: Map<string, number>;
    updatedAt: string;
-};
+}
 
 const overlayKey = (context: BrainOverlayContext): string => {
    if (context.scope === "global") return "global";

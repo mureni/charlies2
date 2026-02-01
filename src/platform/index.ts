@@ -21,6 +21,7 @@ export type {
 
 export {
    createDiscordAdapter,
+   toCommandInteraction,
    toCoreMessage,
    toDiscordAttachment,
    toDiscordEmbed

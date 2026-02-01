@@ -1,13 +1,14 @@
+import "tsconfig-paths/register";
 import Database from "better-sqlite3";
-import { JSONReplacer, JSONReviver } from "../src/core/SQLiteCollections";
+import { JSONReplacer, JSONReviver } from "@/core/SQLiteCollections";
 
-type NGram = {
+interface NGram {
    tokens: string[];
    canStart: boolean;
    canEnd: boolean;
    nextTokens: Map<string, number>;
    previousTokens: Map<string, number>;
-};
+}
 
 const WORD_SEPARATOR = "\u2502";
 

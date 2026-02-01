@@ -3,6 +3,10 @@
 .devcontainer
 .github
 .review
+charlies2.zip
+
+# Documentation (hide for now - far too incomplete to publish)
+docs/
 
 # Data directory (should contain information at runtime only)
 data

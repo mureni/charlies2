@@ -41,20 +41,48 @@ const env = (envVar: string, defaultValue: string = "") => {
 
 const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
 function randFrom<T>(array: T[]): T { return array[Math.floor(Math.random() * array.length)] };
+interface WeightedValue<T> { value: T; weight: number }
+const weightedRandFrom = <T>(weights: Map<T, number> | WeightedValue<T>[], rng: () => number = Math.random): T | undefined => {
+   if (weights instanceof Map) {
+      let total = 0;
+      for (const weight of weights.values()) {
+         if (weight > 0) total += weight;
+      }
+      if (total <= 0) return undefined;
+      let target = rng() * total;
+      for (const [value, weight] of weights.entries()) {
+         if (weight <= 0) continue;
+         target -= weight;
+         if (target <= 0) return value;
+      }
+      return Array.from(weights.keys())[0];
+   }
+   let total = 0;
+   for (const entry of weights) {
+      if (entry.weight > 0) total += entry.weight;
+   }
+   if (total <= 0) return weights[0]?.value;
+   let target = rng() * total;
+   for (const entry of weights) {
+      if (entry.weight <= 0) continue;
+      target -= entry.weight;
+      if (target <= 0) return entry.value;
+   }
+   return weights[0]?.value;
+};
 
-// Note: the second .replace() is necessary to handle the dash/hyphen (-) in unicode strings 
-const escapeRegExp = (rxString: string) => rxString.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&').replace(/-/g, '\\x2d');
+const escapeRegExp = (rxString: string): string => RegExp.escape(rxString);
 
 const memoizedRX: Map<string, RegExp> = new Map<string, RegExp>();
 
 const newRX = (expr: string, flags?: string) => {
-   if (!memoizedRX.has(expr)) {
+   const key = `${flags ?? ""}::${expr}`;
+   if (!memoizedRX.has(key)) {
       const rx = flags ? new RegExp(expr, flags) : new RegExp(expr);
-      memoizedRX.set(expr, rx);
+      memoizedRX.set(key, rx);
       return rx;
-   } else {
-      return memoizedRX.get(expr) as RegExp;
-   }   
+   }
+   return memoizedRX.get(key) as RegExp;
 }
 
 const isTruthyEnv = (value: string | undefined) => Boolean(value && /^(1|true|yes|on)$/i.test(value));
@@ -65,4 +93,4 @@ const DEBUG =
    || isTruthyEnv(env("DISCORD_DEBUG"))
    || isTruthyEnv(env("TRACE_CALLSITE"));
 
-export { env, checkFilePath, escapeRegExp, newRX, clamp, randFrom, DEBUG };
+export { env, checkFilePath, escapeRegExp, newRX, clamp, randFrom, weightedRandFrom, DEBUG };

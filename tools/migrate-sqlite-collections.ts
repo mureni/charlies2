@@ -1,10 +1,11 @@
+import "tsconfig-paths/register";
 import Database from "better-sqlite3";
-import { JSONReviver } from "../src/core/SQLiteCollections";
+import { JSONReviver } from "@/core/SQLiteCollections";
 
-type MigrationConfig = {
+interface MigrationConfig {
    filename: string;
    tables: string[];
-};
+}
 
 const config: MigrationConfig = {
    filename: process.env.DB_PATH ?? "",

@@ -1,6 +1,6 @@
-import type { CoreMessage, OutgoingMessage } from "../platform";
+import type { CoreMessage, OutgoingMessage } from "@/platform";
 
-export type ModificationType = {
+export interface ModificationType {
    Case?: "upper" | "lower" | "unchanged";
    KeepOriginal?: boolean;
    ProcessSwaps?: boolean;
@@ -8,7 +8,22 @@ export type ModificationType = {
    TTS?: boolean;
    Balance?: boolean;
    StripFormatting?: boolean;
-};
+}
+
+export type TriggerDataScope = "global" | "server" | "channel" | "user" | "self";
+
+export interface TriggerResource {
+   id: string;
+   description?: string;
+   path?: string;
+   type?: "file" | "dir";
+}
+
+export interface TriggerData {
+   id: string;
+   description?: string;
+   scope?: TriggerDataScope;
+}
 
 export interface TriggerResult {
    results: OutgoingMessage[];
@@ -33,4 +48,6 @@ export interface Trigger {
    example?: string;
    icon?: string; // For now, 'icon' refers to a file relative to the "resources" folder.
    hidden?: boolean;
+   resources?: TriggerResource[];
+   data?: TriggerData[];
 }

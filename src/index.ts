@@ -1,13 +1,16 @@
+import "tsconfig-paths/register";
 import "source-map-support/register";
 import "dotenv/config";
 
-import { GatewayIntentBits, Partials, Message, Client, MessageType } from "discord.js";
-import { log, Brain, ProcessResults, processMessage, KnownUsers, Conversation, Triggers } from "./core";
-import { toCoreMessage } from "./platform";
+import type { Message } from "discord.js";
+import { GatewayIntentBits, Partials, Client, MessageType } from "discord.js";
+import type { ProcessResults } from "@/core";
+import { log, Brain, processMessage, InteractionRouter } from "@/core";
+import { KnownUsers, upsertKnownUser } from "@/platform/knownUsers";
+import { toCommandInteraction, toCoreMessage } from "@/platform";
 
-import { env } from "./utils";
+import { env } from "@/utils";
 
-// TODO: Refactor everything for cleaner code 
 const traceFlow = env("TRACE_FLOW") === "true";
 const trace = (message: string, data?: unknown): void => {
    if (traceFlow) log(data ? { message: `Flow: ${message}`, data } : `Flow: ${message}`, "trace");
@@ -24,17 +27,9 @@ const preflightEnv = () => {
    }
 };
 
-const initialize = async () => {
-   log(`Initializing...`);
-   let loadResults: boolean | Error;
-
-   log(`Loading environment variables...`);
-   for (const envVar of mandatoryEnvVars) {
-      if (env(envVar) === "") throw new Error(`Environment variable ${envVar} not found in environment. This value must be set to continue. Exiting...`);      
-   }
-   
+const initBrainSettings = (): void => {
    log (`Loading brain settings for "${Brain.botName}" ...`);
-   loadResults = Brain.loadSettings(Brain.botName);
+   let loadResults: boolean | Error = Brain.loadSettings(Brain.botName);
    if (loadResults instanceof Error) {
       log(`Unable to load brain settings: ${loadResults.message}. Trying with default settings.`, "warn");
       loadResults = Brain.loadSettings();
@@ -43,27 +38,37 @@ const initialize = async () => {
          process.exit();
       }
    }
-
    log(`Brain settings: ${JSON.stringify(Brain.settings, null, 2)}`, "debug");
+};
 
+const initBrainData = async (): Promise<void> => {
    if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) {
       log(`Brain is apparently empty. Loading from trainer file '../resources/${Brain.botName}-trainer.txt'. This may take a very long time, be patient.`);
-      loadResults = await Brain.trainFromFile(Brain.botName, "txt");
+      let loadResults: boolean | Error = await Brain.trainFromFile(Brain.botName, "txt");
       if (loadResults instanceof Error) {
          log(`Unable to load trainer file: ${loadResults.message}. Attempting to load default trainer file '../resources/default-trainer.txt'.`, "warn");
          loadResults = await Brain.trainFromFile("default", "txt");
          if (loadResults instanceof Error) log(`Error loading trainer file: ${loadResults.message}. Going to have a broken brain.`, "error");
       }
    }
- 
    if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) {
       log(`Error initializing brain: no data was found.`, "error");
    }
+};
 
-   await Triggers.initialize();
+const initInteractionRouter = async (): Promise<void> => {
+   await InteractionRouter.initialize();
+};
 
+const initialize = async () => {
+   log(`Initializing...`);
+   log(`Loading environment variables...`);
+   preflightEnv();
+   initBrainSettings();
+   await initBrainData();
+   await initInteractionRouter();
    initialized = true;
-}
+};
 
 const startInitialization = async () => {
    if (initialized || initializing) return;
@@ -99,42 +104,14 @@ const dirty = {
 
 
 const saveData = (): void => {
-   let saveResults: boolean | Error;
-
-   saveResults = dirty.brain ? Brain.saveSettings(Brain.botName) : false;   
+   const saveResults: boolean | Error = dirty.brain ? Brain.saveSettings(Brain.botName) : false;
    if (saveResults instanceof Error) {
       log(`Error saving brain settings: ${saveResults.message}`, "error");
-   } else if (saveResults) { 
+   } else if (saveResults) {
       log(`Brain settings saved.`);
       dirty.brain = false;
    }
    
-   /* DEPRECATED 
-   saveResults = dirty.swaps ? Swap.save() : false;
-   if (saveResults instanceof Error) {
-      log(`Error saving swap data: ${saveResults.message}`, "error");
-   } else if (saveResults) {
-      log(`Swap data saved.`);
-      dirty.swaps = false;
-   } 
-
-   saveResults = dirty.madlibs ? Madlibs.save() : false;
-   if (saveResults instanceof Error) {
-      log(`Error saving madlibs data: ${saveResults.message}`, "error");
-   } else if (saveResults) {
-      log(`Madlibs data saved.`);
-      dirty.madlibs = false;
-   } 
-
-   saveResults = dirty.blacklist ? Blacklist.save() : false;
-   if (saveResults instanceof Error) {
-      log(`Error saving blacklist data: ${saveResults.message}`, "error");
-   } else if (saveResults) {
-      log(`Blacklist data saved.`);
-      dirty.blacklist = false;
-   } 
-      */
-
 }
 
 /* Define exit handler and exit events */
@@ -152,10 +129,10 @@ const exitHandler = async (signal?: NodeJS.Signals) => {
    }
 };
 
-/* BAD IDEA: 
+/* BAD IDEA:
 
 if (process.env.NODE_ENV === "production") {
-   process.stdin.resume(); 
+   process.stdin.resume();
    process.on('uncaughtException', (error: Error, origin: string) => {
       log(`Uncaught exception.\nError: ${error}\n\nOrigin: ${origin}`);
       exitHandler();
@@ -190,7 +167,7 @@ const login = (): Promise<any> => client.login(env("DISCORD_AUTH"))
 
 /* General client events */
 client.on("error", error => {
-   log(`Error occurred: ${error.message}`, "error");      
+   log(`Error occurred: ${error.message}`, "error");
 });
 if (env("DISCORD_DEBUG") === "true") {
    client.on("debug", info => {
@@ -207,7 +184,7 @@ if (env("DISCORD_DEBUG") === "true") {
    });
 }
 client.on("clientReady", async () => {
-   log(`Connected to Discord server.`);      
+   log(`Connected to Discord server.`);
    //setInterval(saveData, 7200000); // Save data every 2 hours if it is dirty
    setImmediate(() => {
       void startInitialization();
@@ -225,7 +202,7 @@ client.on("clientReady", async () => {
 });
 client.on("disconnect", event => {
    if (event.reason && /Authentication/gui.test(event.reason)) process.exitCode = 1;
-   log(`Disconnected from Discord server. Reason: ${event.reason ? event.reason : 'None provided'}. Code: ${event.code ? event.code : 'None provided'}.`);
+   log(`Disconnected from Discord server. Reason: ${event.reason ? event.reason : "None provided"}. Code: ${event.code ? event.code : "None provided"}.`);
    if (reconnectAttempts++ >= 10) {
       log(`Exceeded maximum of 10 reconnection attempts. Exiting to prevent bot disabling.`, "error");
       process.exitCode = 2;
@@ -254,17 +231,7 @@ client.on("clientUserSettingsUpdate", _userSettings => {});
 client.on("userNoteUpdate", (_user, _oldNote, _newNote) => {});
 client.on("userUpdate", (oldUser, newUser) => {
    if (oldUser.username !== newUser.username) {
-      if (KnownUsers.has(oldUser.id)) {
-         const user = KnownUsers.get(oldUser.id)!;
-         user.aliases.add(newUser.username);
-         user.name = newUser.username
-      } else {
-         KnownUsers.set(newUser.id, {
-            name: newUser.username,
-            aliases: new Set<string>([newUser.username]),
-            conversations: new Map<string, Conversation>()
-         })
-      }
+      upsertKnownUser(oldUser.id, newUser.username);
    }
 });
 client.on("rateLimit", _rateLimit => {});
@@ -287,39 +254,18 @@ client.on("guildBanAdd", (_guildBan) => {});
 client.on("guildBanRemove", (_guildBan) => {});
 
 /* Guild member handling */
-client.on("guildMemberAdd", member => {      
-   KnownUsers.set(member.id, {         
-      name: member.user.username,
-      aliases: new Set<string>([member.user.username, member.displayName]),
-      conversations: new Map<string, Conversation>()
-   });
+client.on("guildMemberAdd", member => {
+   upsertKnownUser(member.id, member.user.username, [member.user.username, member.displayName]);
 });
 client.on("guildMemberRemove", _member => {});
 client.on("guildMemberUpdate", (oldMember, newMember) => {
    if (oldMember.nickname !== newMember.nickname) {
-      if (KnownUsers.has(oldMember.id)) {
-         KnownUsers.get(oldMember.id)?.aliases.add(newMember.displayName);            
-      } else {
-         KnownUsers.set(newMember.id, { 
-            name: newMember.user.username,
-            aliases: new Set<string>([newMember.user.username, newMember.displayName]),
-            conversations: new Map<string, Conversation>()
-         });
-      }
+      upsertKnownUser(newMember.id, newMember.user.username, [newMember.user.username, newMember.displayName]);
    }
 });
 client.on("guildMembersChunk", (members, _guild) => {
    members.forEach(member => {
-      if (KnownUsers.has(member.id)) {
-         const user = KnownUsers.get(member.id)!;
-         user.aliases.add(member.user.username);
-         user.aliases.add(member.displayName);            
-      }
-      KnownUsers.set(member.id, {               
-         name: member.user.username,
-         aliases: new Set<string>([member.user.username, member.displayName]),
-         conversations: new Map<string, Conversation>()
-      });            
+      upsertKnownUser(member.id, member.user.username, [member.user.username, member.displayName]);
    });
 });
 client.on("guildMemberAvailable", _member => {});
@@ -347,11 +293,22 @@ client.on("messageReactionAdd", (_reaction, _user) => {});
 client.on("messageReactionRemove", (_reaction, _user) => {});
 client.on("messageReactionRemoveAll", _message => {});
 
-client.on("messageCreate", async (message: Message): Promise<void> => {
-   if (!message.inGuild()) {
-      // TODO: Remove after DM flow is verified.
-      log(`DM received: "${message.content}" (len=${message.content.length})`, "debug");
+client.on("interactionCreate", async (interaction) => {
+   if (!interaction.isChatInputCommand()) return;
+   if (!initialized) {
+      log(`Bot not yet initialized, cannot process command`, "warn");
+      return;
    }
+   try {
+      const commandInteraction = toCommandInteraction(interaction);
+      await InteractionRouter.handleCommand(commandInteraction);
+   } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      log(`Command handling error: ${message}`, "error");
+   }
+});
+
+client.on("messageCreate", async (message: Message): Promise<void> => {
    if (!initialized) {
       log(`Bot not yet initialized, cannot process incoming message`, "warn");
       return;
@@ -374,16 +331,13 @@ client.on("messageCreate", async (message: Message): Promise<void> => {
    }
 
    if (!KnownUsers.has(message.author.id)) {
-      KnownUsers.set(message.author.id, {
-         name: message.author.username,
-         aliases: new Set<string>([message.author.username, message.member?.displayName ?? message.author.username]),
-         conversations: new Map<string, Conversation>()
-      });
+      const displayName = message.member?.displayName ?? message.author.username;
+      upsertKnownUser(message.author.id, message.author.username, [displayName]);
    }
 
    const channelName = "name" in message.channel ? String(message.channel.name) : "DM";
    const coreMessage = await toCoreMessage(message);
-   const messageSource: string = `${message.guild?.name ?? 'Private'}:#${channelName}:${coreMessage.authorName}`;
+   const messageSource: string = `${message.guild?.name ?? "Private"}:#${channelName}:${coreMessage.authorName}`;
 
    // Logging
    let content: string = message.content;
@@ -397,7 +351,7 @@ client.on("messageCreate", async (message: Message): Promise<void> => {
    log(`Message content (after embeds): "${content}" (len=${content.length})`, "debug");
    if (message.attachments) {
       for (const [_attachmentSnowflake, attachmentData] of message.attachments) {
-         const url = attachmentData.url ?? 'no URL';
+         const url = attachmentData.url ?? "no URL";
          content += `[Attached content: ${url}]\n`;
       }
    }
@@ -409,17 +363,17 @@ client.on("messageCreate", async (message: Message): Promise<void> => {
    if (results.learned) {
       log(`Learned: ${results.processedText}`, "debug");
       dirty.brain = true;
-   }      
-   if (results.triggeredBy) {      
+   }
+   if (results.triggeredBy) {
       log(`Processing trigger: ${results.triggeredBy}`, "debug");
    }
 
    // Log the bot response, if any
    const botChannelName = "name" in message.channel ? String(message.channel.name) : "DM";
-   const botSource: string = `${message.guild?.name ?? 'Private'}:#${botChannelName}:${Brain.botName}`;
+   const botSource: string = `${message.guild?.name ?? "Private"}:#${botChannelName}:${Brain.botName}`;
    const botResponse: string | undefined = (results.directedTo ? `${results.directedTo}: ${results.response}` : results.response);
    
-   if (botResponse) log(`<${botSource}> ${botResponse}`);  
+   if (botResponse) log(`<${botSource}> ${botResponse}`);
           
          
 });

@@ -1,4 +1,4 @@
-ARG NODE_VERSION=22-bullseye
+ARG NODE_VERSION=24-bullseye
 FROM node:${NODE_VERSION} AS base
 
 ## Install build toolchain, install node deps and compile native add-ons

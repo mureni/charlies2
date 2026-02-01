@@ -1,19 +1,7 @@
-import { GuildMemberManager, User } from "discord.js";
-import { newRX, escapeRegExp } from "../utils";
-
-interface Conversation {   
-   lastSpokeAt: number;
-   lastTopic: string;
-}
-
-interface KnownUser {
-   name: string;
-   aliases: Set<string>;
-   conversations: Map<string, Conversation>;
-}
-
-// TODO: Convert KnownUsers to DBMap for persistence?
-const KnownUsers: Map<string, KnownUser> = new Map<string, KnownUser>();
+import { newRX, escapeRegExp } from "@/utils";
+import { isCommonWord } from "@/core/dictionary";
+import type { CoreMessage, PlatformAdapter, PlatformMemberQuery } from "@/platform";
+import { KnownUsers, KnownUser, Conversation, getKnownUsersSnapshot } from "@/platform/knownUsers";
 
 const getEndearment = (plural: boolean = false): string => {
    const synonyms = ["pal", plural ? "buddie" : "buddy", "chum", "compadre", "comrade", "friend", "my friend", "mate", "amigo", "fella", "bro", "broseph", "darling", "sweetheart", "sweetpea", plural ? "honie" : "honey", "sweetie"];
@@ -21,75 +9,110 @@ const getEndearment = (plural: boolean = false): string => {
    return `${endearment}${plural ? "s" : ""}`;
 }
 
-const getDisplayName = async (member: User, memberManager?: GuildMemberManager) => {
-   let displayName: string = "";
-   
-   displayName = member.username;
-   try {
-      if (memberManager) {
-         const resolvedUser = await memberManager.resolve(member);
-         if (resolvedUser) displayName = resolvedUser.displayName;
-      }
-   } catch (e) {
-      // GUILD_MEMBERS_TIMEOUT is trash and throws errors that shouldn't be process-ending
-      displayName = member.username;
-   }
-   
-   if (displayName === "") displayName = "<UNKNOWN USER>";
+const MENTION_RX = newRX(`<@!?\\s*(\\d+)>`, "uig");
 
-   return displayName;
+const lookupMember = async (platform: PlatformAdapter | undefined, guildId: string | undefined, query: PlatformMemberQuery) => {
+   if (!platform || !platform.fetchMember || !guildId) return undefined;
+   return platform.fetchMember(guildId, query);
+};
+
+const isKnownAlias = (candidate: string, aliases: Set<string>): boolean => {
+   const normalized = candidate.trim().toLowerCase();
+   if (!normalized) return false;
+   if (aliases.has(normalized)) return true;
+   if (normalized.startsWith("@") && aliases.has(normalized.slice(1))) return true;
+   return false;
+};
+
+interface AliasCache {
+   version: number;
+   aliasLookup: Set<string>;
+   skipAliases: Set<string>;
 }
 
-// TODO: Change user interpolation from getting discord info to internal KnownUsers
+let aliasCache: AliasCache = { version: -1, aliasLookup: new Set<string>(), skipAliases: new Set<string>() };
 
-const interpolateUsers = async (text: string, members: GuildMemberManager | undefined = undefined, useEndearments: boolean = false): Promise<string> => {   
-   // TODO: Find better way to prevent 'directed to' (where first part of text is 'person:') from being interpolated
-   /* Capture the 'directed to' part and save it until the end
-    - Possible issue with this is if there is no 'directed to' but there is a colon, then this 'captured' data 
-      will not be interpolated properly.
-   */
-   const [ directedTo ] = text.match(/^(.+?:)/gui) ?? [ "" ];
-   // Remove anything it found for directed to
-   if (directedTo !== "") text = text.replace(newRX(`^${escapeRegExp(directedTo)}`, "uig"), "");
+const buildAliasCache = (entries: Array<[string, KnownUser]>, version: number): AliasCache => {
+   const aliasLookup = new Set<string>();
+   const skipAliases = new Set<string>();
+   for (const [, user] of entries) {
+      if (user.name) aliasLookup.add(user.name.toLowerCase());
+      for (const alias of user.aliases.values()) {
+         if (!alias) continue;
+         const normalized = alias.toLowerCase();
+         aliasLookup.add(normalized);
+         if (!alias.includes(" ") && isCommonWord(normalized)) skipAliases.add(normalized);
+      }
+   }
+   aliasCache = { version, aliasLookup, skipAliases };
+   return aliasCache;
+};
+
+const getAliasCache = (): AliasCache => {
+   const snapshot = getKnownUsersSnapshot();
+   if (aliasCache.version === snapshot.version) return aliasCache;
+   return buildAliasCache(snapshot.entries, snapshot.version);
+};
+
+const interpolateUsers = async (text: string, context: CoreMessage | undefined = undefined, useEndearments: boolean = false): Promise<string> => {
+   const snapshot = getKnownUsersSnapshot();
+   const { aliasLookup, skipAliases } = getAliasCache();
+
+   const directedMatch = text.match(/^([^:]+):/u);
+   let directedTo = "";
+   if (directedMatch) {
+      const candidate = directedMatch[1].trim();
+      const isMention = Boolean(candidate.match(/^<@!?\\s*\\d+>$/u));
+      if (isMention || isKnownAlias(candidate, aliasLookup)) {
+         directedTo = directedMatch[0];
+         text = text.replace(newRX(`^${escapeRegExp(directedTo)}`, "uig"), "");
+      }
+   }
    const backupName = useEndearments ? getEndearment : () => "<UNKNOWN USER>";
 
    /* Replace raw @!UserID messages based on internal database of known users (whether they are still active or not) */
-   // TODO: Save KnownUsers between program runs
-   for (let id of KnownUsers.keys()) {
-      const displayName = KnownUsers.get(id)?.name ?? backupName();
+   for (const [id, user] of snapshot.entries) {
+      const displayName = user?.name ?? backupName();
       /* Replace all known aliases for each user with the user's known name */
-      // TODO: Do not replace words that are also in the lexicon as actual words 
-      for (let alias of KnownUsers.get(id)?.aliases.values() ?? []) {         
+      for (const alias of user?.aliases.values() ?? []) {
+         if (!alias) continue;
+         const normalizedAlias = alias.toLowerCase();
+         if (skipAliases.has(normalizedAlias)) continue;
          text = text.replace(newRX(`\\b${escapeRegExp(alias)}\\b`, "uig"), displayName);
       }
       text = text.replace(newRX(`<@!?\\s*${escapeRegExp(id)}>`, "uig"), displayName);
-      if (useEndearments) text = text.replace(newRX(`\\b${escapeRegExp(displayName)}\\b`, "uig"), getEndearment());      
+      if (useEndearments) text = text.replace(newRX(`\\b${escapeRegExp(displayName)}\\b`, "uig"), getEndearment());
    }
+
+   const platform = context?.platform;
+   const guildId = context?.guildId;
+   if (platform && guildId) {
+      const mentionMatches = Array.from(text.matchAll(MENTION_RX));
+      const unresolved = new Set<string>();
+      for (const match of mentionMatches) {
+         const id = match[1];
+         if (!id) continue;
+         if (KnownUsers.has(id)) continue;
+         unresolved.add(id);
+      }
+      for (const id of unresolved) {
+         const member = await lookupMember(platform, guildId, { userId: id });
+         if (!member) continue;
+         text = text.replace(newRX(`<@!?\\s*${escapeRegExp(id)}>`, "uig"), member.displayName);
+         if (useEndearments) {
+            text = text.replace(newRX(`\\b${escapeRegExp(member.displayName)}\\b`, "uig"), getEndearment());
+         }
+      }
+   }
+
    /* Replace any leftover user mentions with endearments, if appropriate */
    if (useEndearments) text = text.replace(/<@!?\s*\d+>/uig, getEndearment());
 
-   /* Swap @roles, @everyone, @here references with plural endearment ('useEndearments' flag does not apply to these) */   
+   /* Swap @roles, @everyone, @here references with plural endearment ('useEndearments' flag does not apply to these) */
    text = text.replace(/<@&\d+>/uig, getEndearment(true));
    text = text.replace(/@everyone|@here|@room/uig, getEndearment(true));
-   
-   if (members) {
-      /* Replace @User or raw @!UserID messages with display name or an endearment if useEndearments is true */
-      try {
-         const fetchedMembers = await members.fetch();
-         
-         for (const member of fetchedMembers.values()) {
-            const displayName = await getDisplayName(member.user, members);
-            text = text.replace(newRX(`<@!?\\s*${escapeRegExp(member.id)}>`, "uig"), displayName);
-            if (useEndearments) text = text.replace(newRX(`\\b${escapeRegExp(displayName)}\\b`, "uig"), getEndearment());
-         }
-         
-      } catch (e) {         
-         // NOOP - most likely GUILD_MEMBERS_TIMEOUT, irrelevant if it works really. 
-         // TODO: Don't rely on GuildMemberManager to work consistently, build the list of KnownUsers otherwise
-      }
-   }
 
    return (directedTo !== "") ? `${directedTo}` + text : text;
 }
 
-export { getDisplayName, interpolateUsers, getEndearment, KnownUser, KnownUsers, Conversation }
+export { interpolateUsers, getEndearment, KnownUser, KnownUsers, Conversation }

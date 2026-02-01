@@ -7,12 +7,7 @@
     "rootDir": "./src",   
     "baseUrl": ".",
     "paths": {
-      "@core/*": ["src/core/*"],
-      "@platform/*": ["src/platform/*"],
-      "@plugins/*": ["src/plugins/*"],
-      "@triggers/*": ["src/triggers/*"],
-      "@controllers/*": ["src/controllers/*"],
-      "@utils": ["src/utils.ts"]
+      "@/*": ["src/*"]
     },
     "strict": true,       
     "noImplicitAny": true,
@@ -36,7 +31,8 @@
      "./src"
   ],
   "exclude": [
-     "./dev-only",
+     "./.*/**",
+     "./dist",     
      "./data",
      "./logs",
      "./resources",

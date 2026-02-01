@@ -5,7 +5,7 @@ import path from "node:path";
 import util from "node:util";
 
 import Database from "better-sqlite3";
-import { JSONReviver, SQLiteMap, SQLiteSet } from "../src/core/SQLiteCollections";
+import { JSONReviver, SQLiteMap, SQLiteSet } from "@/core/SQLiteCollections";
 import { it } from "vitest";
 
 const keepDb = process.env.TEST_KEEP_DB === "1";

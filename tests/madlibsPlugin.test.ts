@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Madlibs } from "../src/plugins/modules/madlibs/manager";
-import { plugins } from "../src/plugins/modules/madlibs";
+import { Madlibs } from "@/plugins/modules/madlibs/manager";
+import { plugins } from "@/plugins/modules/madlibs";
 import { createMessage } from "./pluginHarness";
 
 const madlibsPlugin = plugins.find(plugin => plugin.id === "madlibs");

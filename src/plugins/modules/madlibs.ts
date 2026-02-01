@@ -1,12 +1,13 @@
-import { FSWatcher, watch } from "fs";
+import type { FSWatcher } from "fs";
+import { watch } from "fs";
 import { resolve } from "path";
-import { cleanMessage } from "../../core";
-import { log } from "../../core/log";
-import type { TriggerResult } from "../../core/triggerTypes";
-import type { CoreMessage } from "../../platform";
-import { escapeRegExp } from "../../utils";
-import { resolvePluginPaths } from "../paths";
-import type { PluginCommand, TriggerPlugin } from "../types";
+import { cleanMessage } from "@/core";
+import { log } from "@/core/log";
+import type { TriggerResult } from "@/core/triggerTypes";
+import type { CoreMessage } from "@/platform";
+import { escapeRegExp } from "@/utils";
+import { resolvePluginPaths } from "@/plugins/paths";
+import type { PluginCommand, TriggerPlugin } from "@/plugins/types";
 import { Madlibs } from "./madlibs/manager";
 
 const madlibMatcher = /^madlib(?<category>\s+.+)?$/ui;
@@ -26,13 +27,13 @@ type SessionStage =
    | "add-pattern"
    | "remove-pattern";
 
-type MadlibSession = {
+interface MadlibSession {
    channelId: string;
    userId: string;
    category: string;
    stage: SessionStage;
    pendingType?: string;
-};
+}
 
 const sessions = new Map<string, MadlibSession>();
 const sessionKey = (context: CoreMessage) => `${context.channelId}:${context.authorId}`;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { toDiscordEmbed, OutgoingEmbed } from "../src/platform";
+import type { OutgoingEmbed } from "@/platform";
+import { toDiscordEmbed } from "@/platform";
 
 describe("platform adapter helpers", () => {
    it("builds a Discord embed from core embed input", () => {

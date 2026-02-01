@@ -1,9 +1,10 @@
-import { FSWatcher, existsSync, readdirSync, statSync, watch } from "fs";
+import type { FSWatcher } from "fs";
+import { existsSync, readdirSync, statSync, watch } from "fs";
 import { extname, resolve } from "path";
-import { log } from "../core/log";
-import { checkFilePath } from "../utils";
-import type { Trigger } from "../core/triggerTypes";
-import type { PlatformCommand } from "../platform";
+import { log } from "@/core/log";
+import { checkFilePath } from "@/utils";
+import type { Trigger, TriggerResult } from "@/core/triggerTypes";
+import type { CoreMessage, PlatformCommand, PlatformCommandInteraction } from "@/platform";
 import type { PluginCommand, PluginModule, TriggerPlugin } from "./types";
 
 const legacyTriggerToPlugin = (trigger: Trigger): TriggerPlugin => ({
@@ -18,7 +19,9 @@ const legacyTriggerToPlugin = (trigger: Trigger): TriggerPlugin => ({
       adminOnly: trigger.adminOnly
    },
    example: trigger.example,
-   icon: trigger.icon
+   icon: trigger.icon,
+   resources: trigger.resources,
+   data: trigger.data
 });
 
 const pluginToLegacyTrigger = (plugin: TriggerPlugin): Trigger | undefined => {
@@ -33,7 +36,9 @@ const pluginToLegacyTrigger = (plugin: TriggerPlugin): Trigger | undefined => {
       ownerOnly: plugin.permissions?.ownerOnly,
       adminOnly: plugin.permissions?.adminOnly,
       example: plugin.example,
-      icon: plugin.icon
+      icon: plugin.icon,
+      resources: plugin.resources,
+      data: plugin.data
    };
 };
 
@@ -61,11 +66,13 @@ const commandToLegacyTrigger = (plugin: TriggerPlugin, command: PluginCommand): 
       adminOnly: plugin.permissions?.adminOnly,
       example: command.example ?? plugin.example,
       icon: command.icon ?? plugin.icon,
-      hidden: command.hidden
+      hidden: command.hidden,
+      resources: plugin.resources,
+      data: plugin.data
    };
 };
 
-class PluginManager {
+class PluginRegistry {
    private plugins: TriggerPlugin[] = [];
    private pluginIds = new Set<string>();
    private watchers: FSWatcher[] = [];
@@ -142,6 +149,26 @@ class PluginManager {
          }
       }
       return commands;
+   }
+
+   public async handleCommand(interaction: PlatformCommandInteraction): Promise<TriggerResult | null> {
+      for (const plugin of this.plugins) {
+         if (!plugin.commands || plugin.commands.length === 0) continue;
+         for (const command of plugin.commands) {
+            if (command.hidden || command.name !== interaction.command) continue;
+            if (plugin.onCommand) {
+               await plugin.onCommand(interaction);
+               return null;
+            }
+            if (plugin.execute && command.fallbackMatcher) {
+               const synthetic = buildCommandContent(command, interaction.options);
+               const matches = synthetic.match(command.fallbackMatcher) ?? undefined;
+               const context = buildCommandContext(interaction, synthetic);
+               return await plugin.execute(context, matches);
+            }
+         }
+      }
+      return null;
    }
 
    public async loadFromDist(): Promise<void> {
@@ -244,4 +271,26 @@ class PluginManager {
    }
 }
 
-export { PluginManager };
+export { PluginRegistry };
+
+const buildCommandContent = (command: PluginCommand, options: Record<string, unknown>): string => {
+   const parts: string[] = [command.name];
+   if (!command.options || command.options.length === 0) return parts.join(" ");
+   for (const option of command.options) {
+      const value = options[option.name];
+      if (value === undefined || value === null) continue;
+      parts.push(String(value));
+   }
+   return parts.join(" ");
+};
+
+const buildCommandContext = (interaction: PlatformCommandInteraction, content: string): CoreMessage => ({
+   id: `command:${interaction.command}:${Date.now()}`,
+   content,
+   authorId: interaction.userId,
+   authorName: interaction.userId,
+   isBot: false,
+   isSelf: false,
+   channelId: interaction.channelId,
+   guildId: interaction.guildId
+});

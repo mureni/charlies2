@@ -1,10 +1,10 @@
-import type { CoreMessage, PlatformCommand, PlatformCommandInteraction } from "../platform";
-import type { TriggerResult } from "../core/triggerTypes";
+import type { CoreMessage, PlatformCommand, PlatformCommandInteraction } from "@/platform";
+import type { TriggerResult, TriggerData, TriggerResource } from "@/core/triggerTypes";
 
-export type PluginPermissions = {
+export interface PluginPermissions {
    ownerOnly?: boolean;
    adminOnly?: boolean;
-};
+}
 
 export interface PluginCommand extends PlatformCommand {
    fallbackMatcher?: RegExp;
@@ -28,6 +28,8 @@ export interface TriggerPlugin {
    onUnload?: () => Promise<void> | void;
    example?: string;
    icon?: string;
+   resources?: TriggerResource[];
+   data?: TriggerData[];
 }
 
 export interface PluginModule {

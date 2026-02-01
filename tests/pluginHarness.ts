@@ -2,19 +2,19 @@ import type {
    CoreMessage,
    OutgoingMessage,
    PlatformAdapter
-} from "../src/platform";
+} from "@/platform";
 
-type SentMessage = {
+interface SentMessage {
    channelId: string;
    message: OutgoingMessage;
-};
+}
 
-type MockAdapterResult = {
+interface MockAdapterResult {
    adapter: PlatformAdapter;
    sent: SentMessage[];
    replies: Array<{ messageId: string; content: string }>;
    typings: string[];
-};
+}
 
 const createMockAdapter = (overrides: Partial<PlatformAdapter> = {}): MockAdapterResult => {
    const sent: SentMessage[] = [];

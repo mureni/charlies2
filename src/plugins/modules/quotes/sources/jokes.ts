@@ -1,6 +1,6 @@
-import type { CoreMessage } from "../../../../platform";
-import type { TriggerResult } from "../../../../core/triggerTypes";
-import type { QuoteHelpers, QuoteSource } from "../types";
+import type { CoreMessage } from "@/platform";
+import type { TriggerResult } from "@/core/triggerTypes";
+import type { QuoteHelpers, QuoteSource } from "@/plugins/modules/quotes/types";
 
 const API = "https://v2.jokeapi.dev/joke/Any?format=txt";
 const defaultFallback = "why did the chicken cross the road? to get to the other side!";

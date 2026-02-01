@@ -2,12 +2,12 @@ import type Canvas from "canvas";
 
 export type CardOrientation = "upright" | "reversed";
 
-export type CardMeaning = {
+export interface CardMeaning {
    upright: string;
    reversed: string;
-};
+}
 
-export type TarotCard = {
+export interface TarotCard {
    id: string;
    name: string;
    filename: string;
@@ -18,15 +18,15 @@ export type TarotCard = {
    };
    meaning?: CardMeaning;
    orientation: CardOrientation;
-};
+}
 
-export type TarotDeck = {
+export interface TarotDeck {
    cards: TarotCard[];
    cardWidth: number;
    cardHeight: number;
-};
+}
 
-export type SpreadSlot = {
+export interface SpreadSlot {
    slotId: string;
    order: number;
    grid?: {
@@ -40,9 +40,9 @@ export type SpreadSlot = {
    rotation?: number;
    scale?: number;
    zIndex?: number;
-};
+}
 
-export type SpreadLayoutDefinition = {
+export interface SpreadLayoutDefinition {
    id: string;
    name: string;
    slots: SpreadSlot[];
@@ -51,57 +51,57 @@ export type SpreadLayoutDefinition = {
    renderHints?: {
       aspect?: number;
    };
-};
+}
 
-export type SpreadThemeDefinition = {
+export interface SpreadThemeDefinition {
    id: string;
    name: string;
    labelsByLayout: Record<string, Record<string, { name: string; description: string }>>;
-};
+}
 
-export type TarotDefaults = {
+export interface TarotDefaults {
    spread?: string;
    theme?: string;
    deck?: string;
-};
+}
 
-export type SpreadLayoutDetails = {
+export interface SpreadLayoutDetails {
    [cardNumber: number]: {
       name: string;
       description: string;
    };
-};
+}
 
-export type SpreadDefinition = {
+export interface SpreadDefinition {
    id: string;
    name: string;
    layout: number[][];
    details?: SpreadLayoutDetails;
    forcedCols?: number;
    forcedRows?: number;
-};
+}
 
-export type SpreadLayout = {
+export interface SpreadLayout {
    data: number[][];
    rows: number;
    cols: number;
    details?: SpreadLayoutDetails;
-};
+}
 
-export type TarotExplanation = {
+export interface TarotExplanation {
    name: string;
    description: string;
    meaning: string;
-};
+}
 
-export type TarotExplanations = {
+export interface TarotExplanations {
    [cardNumber: number]: TarotExplanation;
-};
+}
 
-export type TarotReading = {
+export interface TarotReading {
    image: Buffer;
    explanation: TarotExplanations;
-};
+}
 
 export type TarotReadingResult =
    | { ok: true; reading: TarotReading }

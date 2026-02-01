@@ -16,16 +16,16 @@ export type SQLiteIndexExpression =
    | { jsonType: string }
    | { jsonArrayLength: string }
    | { jsonValid: true };
-export type SQLiteIndexDefinition = {
+export interface SQLiteIndexDefinition {
    name?: string;
    expression: SQLiteIndexExpression | SQLiteIndexExpression[];
-};
+}
 
-type ReadonlySetLikeCompat<T> = {
+interface ReadonlySetLikeCompat<T> {
    has(value: T): boolean;
    forEach?: (callbackfn: (value: T, value2: T, set: ReadonlySetLikeCompat<T>) => void, thisArg?: unknown) => void;
    [Symbol.iterator]?: () => Iterator<T>;
-};
+}
 
 export interface SQLiteCollectionOptions {
    filename?: string;
@@ -199,6 +199,7 @@ const validateJsonPath = (pathValue: string): string => {
    if (!pathValue.startsWith("$.") && pathValue !== "$") {
       throw new TypeError(`Invalid JSON path: ${pathValue}`);
    }
+   // eslint-disable-next-line no-useless-escape
    if (/[^A-Za-z0-9_\$\.\[\]\*]/.test(pathValue)) {
       throw new TypeError(`Invalid JSON path: ${pathValue}`);
    }
@@ -219,7 +220,7 @@ const forEachReadonlySetLike = <U>(setLike: ReadonlySetLikeCompat<U>, fn: (value
       (maybeForEach as (this: ReadonlySetLikeCompat<U>, cb: (value: U, value2: U, set: ReadonlySetLikeCompat<U>) => void) => void).call(
          setLike,
          (value) => {
-         fn(value);
+            fn(value);
          }
       );
       return;

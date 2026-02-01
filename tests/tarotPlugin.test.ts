@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildReading } from "../src/plugins/modules/tarot/reader";
-import { drawCards, loadDeck } from "../src/plugins/modules/tarot/deck";
-import { resolveDeckPaths } from "../src/plugins/modules/tarot/decks";
-import { normalizeDeckId, normalizeSpreadId } from "../src/plugins/modules/tarot/defaults";
-import { buildLayout, countCardsInLayout, getSpread } from "../src/plugins/modules/tarot/spreads";
+import { buildReading } from "@/plugins/modules/tarot/reader";
+import { drawCards, loadDeck } from "@/plugins/modules/tarot/deck";
+import { resolveDeckPaths } from "@/plugins/modules/tarot/decks";
+import { normalizeDeckId, normalizeSpreadId } from "@/plugins/modules/tarot/defaults";
+import { buildLayout, countCardsInLayout, getSpread } from "@/plugins/modules/tarot/spreads";
 
 const deckPaths = resolveDeckPaths(normalizeDeckId());
 if (!deckPaths) {

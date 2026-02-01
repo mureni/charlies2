@@ -138,6 +138,19 @@ const renderSettings = () => {
                </select>
             </label>
          </section>
+         <section class="card">
+            <div class="card-header">
+               <div>
+                  <h3>Bot configuration</h3>
+                  <p class="muted">Update runtime settings stored in the brain config.</p>
+               </div>
+            </div>
+            <label class="field">
+               <span>Allow learning from other bots</span>
+               <input id="learn-from-bots-toggle" type="checkbox" />
+               <span class="muted">When enabled, bot-authored messages can be used for learning.</span>
+            </label>
+         </section>
       </div>
    `;
    const select = panel.querySelector("#theme-select");
@@ -153,6 +166,30 @@ const renderSettings = () => {
       select.value = stored || current || "default";
       select.addEventListener("change", () => {
          applyTheme(select.value);
+      });
+   }
+   const botToggle = panel.querySelector("#learn-from-bots-toggle");
+   if (botToggle instanceof HTMLInputElement) {
+      botToggle.disabled = true;
+      api.get("/api/settings/brain")
+         .then(result => {
+            botToggle.checked = Boolean(result?.settings?.learnFromBots);
+            botToggle.disabled = false;
+         })
+         .catch(error => {
+            showToast(error instanceof Error ? error.message : String(error), "error");
+         });
+      botToggle.addEventListener("change", async () => {
+         botToggle.disabled = true;
+         try {
+            const result = await api.post("/api/settings/brain", { learnFromBots: botToggle.checked });
+            botToggle.checked = Boolean(result?.settings?.learnFromBots);
+            showToast("Saved bot learning preference.", "success");
+         } catch (error) {
+            showToast(error instanceof Error ? error.message : String(error), "error");
+         } finally {
+            botToggle.disabled = false;
+         }
       });
    }
 };

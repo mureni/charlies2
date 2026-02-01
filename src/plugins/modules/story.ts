@@ -1,7 +1,7 @@
-import { Brain } from "../../core";
-import type { TriggerResult } from "../../core/triggerTypes";
-import type { CoreMessage } from "../../platform";
-import type { TriggerPlugin } from "../types";
+import { Brain } from "@/core";
+import type { TriggerResult } from "@/core/triggerTypes";
+import type { CoreMessage } from "@/platform";
+import type { TriggerPlugin } from "@/plugins/types";
 
 const storyMatcher = /tell (?<person>.+)? ?(?:a(?:nother)?) (?<long>long)? ?story(?: about (?<topic>.+))?/ui;
 

@@ -1,12 +1,12 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { resolve, extname } from "path";
-import { log } from "../../core/log";
-import type { CoreMessage } from "../../platform";
-import type { TriggerResult } from "../../core/triggerTypes";
-import { checkFilePath } from "../../utils";
-import { resolvePluginPaths } from "../paths";
-import type { PluginCommand, TriggerPlugin } from "../types";
-import type { QuoteHelpers, QuoteSource, QuoteStyle } from "./quotes/types";
+import { log } from "@/core/log";
+import type { CoreMessage } from "@/platform";
+import type { TriggerResult } from "@/core/triggerTypes";
+import { checkFilePath } from "@/utils";
+import { resolvePluginPaths } from "@/plugins/paths";
+import type { PluginCommand, TriggerPlugin } from "@/plugins/types";
+import type { QuoteHelpers, QuoteSource, QuoteStyle } from "@/plugins/modules/quotes/types";
 
 const pluginId = "quotes";
 const { resourcesDir } = resolvePluginPaths(pluginId);

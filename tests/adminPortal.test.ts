@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBrainStats, getBrainDbPath, getDefaultPlugins, getLexiconPage, getWordDetail, getNgramDetail, getNgramPage, getTopTokens } from "../src/admin-portal/server";
+import { buildBrainStats, getBrainDbPath, getDefaultPlugins, getLexiconPage, getWordDetail, getNgramDetail, getNgramPage, getTopTokens } from "@/admin-portal/server";
 
 describe("admin portal api helpers", () => {
    it("includes the brain panel in plugin list", () => {

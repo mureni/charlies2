@@ -1,28 +1,33 @@
-import {
-   AttachmentBuilder,
+import type {
    APIEmbed,
-   ApplicationCommandOptionType,
    ApplicationCommandDataResolvable,
    ColorResolvable,
    Message,
+   User,
+   ChatInputCommandInteraction,
    GuildTextBasedChannel,
+   GuildMemberManager,
    Channel,
+   PartialDMChannel } from "discord.js";
+import {
+   AttachmentBuilder,
+   ApplicationCommandOptionType,
    ChannelType,
-   PartialDMChannel,
    PermissionFlagsBits,
    PermissionsBitField,
    resolveColor
 } from "discord.js";
-import { getDisplayName } from "../core/user";
-import { log } from "../core/log";
-import { env } from "../utils";
-import {
+import { log } from "@/core/log";
+import { env } from "@/utils";
+import type {
    CoreMessage,
    OutgoingAttachment,
    OutgoingEmbed,
    OutgoingMessage as PlatformOutgoingMessage,
+   OutgoingMessage,
    PlatformCommand,
    PlatformAdapter,
+   PlatformCommandInteraction,
    PlatformMemberQuery,
    CoreChannel,
    CoreChannelType,
@@ -33,6 +38,20 @@ type DiscordChannel = Channel | PartialDMChannel;
 const traceFlow = env("TRACE_FLOW") === "true";
 const trace = (message: string, data?: unknown): void => {
    if (traceFlow) log(data ? { message: `Discord adapter: ${message}`, data } : `Discord adapter: ${message}`, "trace");
+};
+
+const getDisplayName = async (member: User, memberManager?: GuildMemberManager) => {
+   let displayName: string = member.username;
+   try {
+      if (memberManager) {
+         const resolvedUser = await memberManager.resolve(member);
+         if (resolvedUser) displayName = resolvedUser.displayName;
+      }
+   } catch {
+      displayName = member.username;
+   }
+   if (displayName === "") displayName = "<UNKNOWN USER>";
+   return displayName;
 };
 
 const toDiscordColor = (color: string | number): number | undefined => {
@@ -161,7 +180,7 @@ const toDiscordCommands = (commands: PlatformCommand[]): ApplicationCommandDataR
       } as ApplicationCommandDataResolvable;
    });
 
-type SendableChannel = {
+interface SendableChannel {
    send: (options: {
       content?: string;
       embeds?: APIEmbed[];
@@ -169,7 +188,7 @@ type SendableChannel = {
       tts?: boolean;
    }) => Promise<unknown>;
    sendTyping?: () => Promise<unknown>;
-};
+}
 
 const isSendableChannel = (channel: unknown): channel is SendableChannel =>
    Boolean(channel && typeof (channel as { send?: unknown }).send === "function");
@@ -340,6 +359,46 @@ const createDiscordAdapter = (message: Message): PlatformAdapter => ({
    }
 });
 
+const toCommandInteraction = (interaction: ChatInputCommandInteraction): PlatformCommandInteraction => {
+   const options: Record<string, unknown> = {};
+   for (const option of interaction.options.data) {
+      if (option.options && option.options.length > 0) {
+         for (const nested of option.options) {
+            options[nested.name] = nested.value;
+         }
+         continue;
+      }
+      options[option.name] = option.value;
+   }
+
+   const reply = async (message: OutgoingMessage): Promise<void> => {
+      const embeds = message.embeds ? message.embeds.map(toDiscordEmbed) : undefined;
+      const files = message.attachments ? message.attachments.map(toDiscordAttachment) : undefined;
+      let content = message.contents;
+      if ((embeds?.length || files?.length) && content === "") content = " ";
+      const payload = {
+         content,
+         embeds,
+         files,
+         tts: Boolean(message.tts)
+      };
+      if (interaction.replied || interaction.deferred) {
+         await interaction.followUp(payload);
+      } else {
+         await interaction.reply(payload);
+      }
+   };
+
+   return {
+      command: interaction.commandName,
+      options,
+      userId: interaction.user.id,
+      channelId: interaction.channelId,
+      guildId: interaction.guildId ?? undefined,
+      reply
+   };
+};
+
 const toCoreMessage = async (message: Message): Promise<CoreMessage> => {
    const botUser = message.client.user ?? undefined;
    const authorName = await getDisplayName(message.member?.user ?? message.author, message.guild?.members);
@@ -378,12 +437,13 @@ const toCoreMessage = async (message: Message): Promise<CoreMessage> => {
       isSelf: botUser ? message.author.id === botUser.id : false,
       tts: message.tts,
       platform: createDiscordAdapter(message),
-      memberContext: message.guild?.members
+      memberContext: undefined
    };
 };
 
 export {
    createDiscordAdapter,
+   toCommandInteraction,
    toCoreMessage,
    toDiscordAttachment,
    toDiscordEmbed
