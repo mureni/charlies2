@@ -3,77 +3,12 @@ import { existsSync, readdirSync, statSync, watch } from "fs";
 import { extname, resolve } from "path";
 import { log } from "@/core/log";
 import { checkFilePath } from "@/utils";
-import type { Trigger, TriggerResult } from "@/core/triggerTypes";
-import type { CoreMessage, PlatformCommand, PlatformCommandInteraction } from "@/platform";
-import type { PluginCommand, PluginModule, TriggerPlugin } from "./types";
-
-const legacyTriggerToPlugin = (trigger: Trigger): TriggerPlugin => ({
-   id: trigger.id,
-   name: trigger.name,
-   description: trigger.description,
-   usage: trigger.usage,
-   matcher: trigger.command,
-   execute: trigger.action,
-   permissions: {
-      ownerOnly: trigger.ownerOnly,
-      adminOnly: trigger.adminOnly
-   },
-   example: trigger.example,
-   icon: trigger.icon,
-   resources: trigger.resources,
-   data: trigger.data
-});
-
-const pluginToLegacyTrigger = (plugin: TriggerPlugin): Trigger | undefined => {
-   if (!plugin.matcher || !plugin.execute) return undefined;
-   return {
-      id: plugin.id,
-      name: plugin.name,
-      description: plugin.description,
-      usage: plugin.usage,
-      command: plugin.matcher,
-      action: plugin.execute,
-      ownerOnly: plugin.permissions?.ownerOnly,
-      adminOnly: plugin.permissions?.adminOnly,
-      example: plugin.example,
-      icon: plugin.icon,
-      resources: plugin.resources,
-      data: plugin.data
-   };
-};
-
-const commandUsage = (command: PluginCommand): string => {
-   if (command.usage) return command.usage;
-   if (!command.options || command.options.length === 0) return command.name;
-   const rendered = command.options.map(option => {
-      const label = option.name;
-      return option.required ? `<${label}>` : `[${label}]`;
-   });
-   return [command.name, ...rendered].join(" ");
-};
-
-const commandToLegacyTrigger = (plugin: TriggerPlugin, command: PluginCommand): Trigger | undefined => {
-   if (!plugin.execute || !command.fallbackMatcher) return undefined;
-   const { fallbackMatcher } = command;
-   return {
-      id: command.name,
-      name: command.name,
-      description: command.description,
-      usage: commandUsage(command),
-      command: fallbackMatcher,
-      action: plugin.execute,
-      ownerOnly: plugin.permissions?.ownerOnly,
-      adminOnly: plugin.permissions?.adminOnly,
-      example: command.example ?? plugin.example,
-      icon: command.icon ?? plugin.icon,
-      hidden: command.hidden,
-      resources: plugin.resources,
-      data: plugin.data
-   };
-};
+import type { InteractionResult } from "@/core/interactionTypes";
+import type { StandardMessage, StandardCommand, StandardCommandInteraction } from "@/contracts";
+import type { PluginCommand, PluginModule, InteractionPlugin } from "./types";
 
 class PluginRegistry {
-   private plugins: TriggerPlugin[] = [];
+   private plugins: InteractionPlugin[] = [];
    private pluginIds = new Set<string>();
    private watchers: FSWatcher[] = [];
    private watching = false;
@@ -90,7 +25,7 @@ class PluginRegistry {
       }
    }
 
-   public register(plugin: TriggerPlugin): void {
+   public register(plugin: InteractionPlugin): void {
       if (!plugin.id) {
          log(`Skipping plugin with missing id`, "warn");
          return;
@@ -103,43 +38,18 @@ class PluginRegistry {
       this.pluginIds.add(plugin.id);
    }
 
-   public registerAll(plugins: TriggerPlugin[]): void {
+   public registerAll(plugins: InteractionPlugin[]): void {
       for (const plugin of plugins) {
          this.register(plugin);
       }
    }
 
-   public registerLegacyTrigger(trigger: Trigger): void {
-      this.register(legacyTriggerToPlugin(trigger));
-   }
-
-   public registerLegacyTriggers(triggers: Trigger[]): void {
-      for (const trigger of triggers) {
-         this.registerLegacyTrigger(trigger);
-      }
-   }
-
-   public getPlugins(): TriggerPlugin[] {
+   public getPlugins(): InteractionPlugin[] {
       return [...this.plugins];
    }
 
-   public getLegacyTriggers(): Trigger[] {
-      const converted: Trigger[] = [];
-      for (const plugin of this.plugins) {
-         const legacy = pluginToLegacyTrigger(plugin);
-         if (legacy) converted.push(legacy);
-         if (plugin.commands) {
-            for (const command of plugin.commands) {
-               const fallback = commandToLegacyTrigger(plugin, command);
-               if (fallback) converted.push(fallback);
-            }
-         }
-      }
-      return converted;
-   }
-
-   public getCommands(): PlatformCommand[] {
-      const commands: PlatformCommand[] = [];
+   public getCommands(): StandardCommand[] {
+      const commands: StandardCommand[] = [];
       for (const plugin of this.plugins) {
          if (!plugin.commands) continue;
          for (const command of plugin.commands) {
@@ -151,7 +61,7 @@ class PluginRegistry {
       return commands;
    }
 
-   public async handleCommand(interaction: PlatformCommandInteraction): Promise<TriggerResult | null> {
+   public async handleCommand(interaction: StandardCommandInteraction): Promise<InteractionResult | null> {
       for (const plugin of this.plugins) {
          if (!plugin.commands || plugin.commands.length === 0) continue;
          for (const command of plugin.commands) {
@@ -284,7 +194,7 @@ const buildCommandContent = (command: PluginCommand, options: Record<string, unk
    return parts.join(" ");
 };
 
-const buildCommandContext = (interaction: PlatformCommandInteraction, content: string): CoreMessage => ({
+const buildCommandContext = (interaction: StandardCommandInteraction, content: string): StandardMessage => ({
    id: `command:${interaction.command}:${Date.now()}`,
    content,
    authorId: interaction.userId,

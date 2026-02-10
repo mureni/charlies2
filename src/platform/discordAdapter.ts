@@ -3,10 +3,30 @@ import type {
    ApplicationCommandDataResolvable,
    ColorResolvable,
    Message,
+   PartialMessage,
    User,
+   PartialUser,
    ChatInputCommandInteraction,
    GuildTextBasedChannel,
+   GuildMember,
+   PartialGuildMember,
    GuildMemberManager,
+   Role,
+   Presence,
+   Typing,
+   MessageReaction,
+   PartialMessageReaction,
+   ThreadChannel,
+   VoiceState,
+   StageInstance,
+   Invite,
+   Sticker,
+   GuildScheduledEvent,
+   PartialGuildScheduledEvent,
+   SoundboardSound,
+   PartialSoundboardSound,
+   Entitlement,
+   Subscription,
    Channel,
    PartialDMChannel } from "discord.js";
 import {
@@ -18,29 +38,46 @@ import {
    resolveColor
 } from "discord.js";
 import { log } from "@/core/log";
-import { env } from "@/utils";
+import { env, envFlag } from "@/utils";
 import type {
-   CoreMessage,
-   OutgoingAttachment,
-   OutgoingEmbed,
-   OutgoingMessage as PlatformOutgoingMessage,
-   OutgoingMessage,
-   PlatformCommand,
+   StandardMessage,
+   StandardOutgoingAttachment,
+   StandardOutgoingEmbed,
+   StandardOutgoingMessage as PlatformOutgoingMessage,
+   StandardOutgoingMessage,
+   StandardCommand,
    PlatformAdapter,
-   PlatformCommandInteraction,
-   PlatformMemberQuery,
-   CoreChannel,
-   CoreChannelType,
-   CoreChannelScope
+   StandardCommandInteraction,
+   StandardMember,
+   StandardMemberQuery,
+   StandardChannel,
+   StandardChannelType,
+   StandardChannelScope,
+   StandardUserProfile,
+   StandardRole,
+   StandardEmoji,
+   StandardSticker,
+   StandardPresence,
+   StandardTyping,
+   StandardReaction,
+   StandardMessageChange,
+   StandardThread,
+   StandardVoiceState,
+   StandardStageInstance,
+   StandardInvite,
+   StandardSoundboardSound,
+   StandardEntitlement,
+   StandardSubscription,
+   StandardScheduledEvent
 } from "./types";
 
-type DiscordChannel = Channel | PartialDMChannel;
-const traceFlow = env("TRACE_FLOW") === "true";
+type DiscordChannel = Channel | PartialDMChannel | ThreadChannel;
+const traceFlow = envFlag("TRACE_FLOW");
 const trace = (message: string, data?: unknown): void => {
    if (traceFlow) log(data ? { message: `Discord adapter: ${message}`, data } : `Discord adapter: ${message}`, "trace");
 };
 
-const getDisplayName = async (member: User, memberManager?: GuildMemberManager) => {
+const getDisplayName = async (member: User, memberManager?: GuildMemberManager): Promise<string> => {
    let displayName: string = member.username;
    try {
       if (memberManager) {
@@ -62,7 +99,7 @@ const toDiscordColor = (color: string | number): number | undefined => {
    }
 };
 
-const mapChannelType = (channel: DiscordChannel): CoreChannelType => {
+const mapChannelType = (channel: DiscordChannel): StandardChannelType => {
    const channelType = (channel as { type?: ChannelType }).type;
    switch (channelType) {
       case ChannelType.DM:
@@ -90,10 +127,10 @@ const mapChannelType = (channel: DiscordChannel): CoreChannelType => {
    }
 };
 
-const toCoreChannel = (channel: DiscordChannel): CoreChannel => {
+const toStandardChannel = (channel: DiscordChannel): StandardChannel => {
    const channelType = (channel as { type?: ChannelType }).type;
    const type = mapChannelType(channel);
-   const scope: CoreChannelScope = type === "dm" ? "dm" : "server";
+   const scope: StandardChannelScope = type === "dm" ? "dm" : "server";
    const supportsText = type === "text" || type === "dm" || type === "thread" || type === "forum" || type === "media";
    const supportsVoice = type === "voice" || type === "stage";
    const supportsTyping = supportsText;
@@ -125,7 +162,155 @@ const toCoreChannel = (channel: DiscordChannel): CoreChannel => {
    };
 };
 
-const toDiscordEmbed = (embed: OutgoingEmbed): APIEmbed => {
+interface DiscordEmojiSource {
+   id?: string | null;
+   name?: string | null;
+   animated?: boolean | null;
+}
+
+const toStandardUserProfile = (user: User, displayName?: string): StandardUserProfile => ({
+   id: user.id,
+   username: user.username || "<UNKNOWN USER>",
+   displayName,
+   isBot: user.bot
+});
+
+const toStandardMember = (member: GuildMember | PartialGuildMember): StandardMember => ({
+   id: member.id,
+   userId: member.user?.id ?? member.id,
+   displayName: member.displayName ?? member.user?.username ?? "<UNKNOWN USER>",
+   username: member.user?.username ?? undefined
+});
+
+const toStandardRole = (role: Role): StandardRole => ({
+   id: role.id,
+   name: role.name,
+   color: role.color,
+   permissions: role.permissions?.toArray ? role.permissions.toArray() : undefined,
+   position: role.position,
+   mentionable: role.mentionable,
+   managed: role.managed
+});
+
+const toStandardEmoji = (emoji: DiscordEmojiSource): StandardEmoji => ({
+   id: emoji.id ?? undefined,
+   name: emoji.name ?? "<UNKNOWN EMOJI>",
+   animated: emoji.animated ?? undefined
+});
+
+const toStandardSticker = (sticker: Sticker): StandardSticker => ({
+   id: sticker.id,
+   name: sticker.name,
+   description: sticker.description ?? undefined,
+   format: sticker.format ? String(sticker.format) : undefined
+});
+
+const toStandardPresence = (presence: Presence): StandardPresence => ({
+   userId: presence.userId,
+   status: presence.status,
+   activities: presence.activities && presence.activities.length > 0
+      ? presence.activities.map(activity => ({
+         name: activity.name,
+         type: String(activity.type),
+         state: activity.state ?? undefined
+      }))
+      : undefined,
+   clientStatus: presence.clientStatus
+      ? Object.fromEntries(Object.entries(presence.clientStatus).map(([key, value]) => [key, String(value)]))
+      : undefined
+});
+
+const toStandardTyping = (typing: Typing): StandardTyping => ({
+   channelId: typing.channel.id,
+   userId: typing.user.id,
+   startedAt: typeof typing.startedTimestamp === "number" ? typing.startedTimestamp : undefined
+});
+
+const toStandardReaction = (reaction: MessageReaction | PartialMessageReaction, user?: User | PartialUser | null): StandardReaction => ({
+   messageId: reaction.message.id,
+   channelId: reaction.message.channelId,
+   guildId: reaction.message.guildId ?? undefined,
+   emoji: toStandardEmoji(reaction.emoji),
+   userId: user?.id ?? undefined,
+   count: reaction.count ?? undefined
+});
+
+const toStandardMessageChange = (message: Message | PartialMessage): StandardMessageChange => ({
+   messageId: message.id,
+   channelId: message.channelId ?? message.channel?.id ?? "unknown",
+   guildId: message.guildId ?? undefined,
+   authorId: message.author?.id ?? undefined,
+   content: message.content ?? undefined
+});
+
+const toStandardThread = (thread: ThreadChannel): StandardThread => ({
+   id: thread.id,
+   name: thread.name,
+   parentId: thread.parentId ?? undefined,
+   guildId: thread.guildId,
+   ownerId: thread.ownerId ?? undefined,
+   archived: thread.archived ?? undefined,
+   locked: thread.locked ?? undefined,
+   channel: toStandardChannel(thread)
+});
+
+const toStandardVoiceState = (state: VoiceState): StandardVoiceState => ({
+   userId: state.id,
+   channelId: state.channelId ?? undefined,
+   guildId: state.guild?.id ?? undefined,
+   muted: state.mute ?? undefined,
+   deafened: state.deaf ?? undefined,
+   serverMuted: state.serverMute ?? undefined,
+   serverDeafened: state.serverDeaf ?? undefined,
+   selfMuted: state.selfMute ?? undefined,
+   selfDeafened: state.selfDeaf ?? undefined,
+   streaming: state.streaming ?? undefined,
+   suppress: state.suppress ?? undefined
+});
+
+const toStandardStageInstance = (stage: StageInstance): StandardStageInstance => ({
+   id: stage.id,
+   channelId: stage.channelId,
+   guildId: stage.guildId ?? undefined,
+   topic: stage.topic ?? undefined,
+   privacyLevel: stage.privacyLevel
+});
+
+const toStandardInvite = (invite: Invite): StandardInvite => ({
+   code: invite.code,
+   channelId: invite.channelId ?? invite.channel?.id ?? undefined,
+   guildId: invite.guild?.id ?? undefined,
+   inviterId: invite.inviter?.id ?? invite.inviterId ?? undefined
+});
+
+const toStandardSoundboardSound = (sound: SoundboardSound | PartialSoundboardSound): StandardSoundboardSound => {
+   const emoji = sound.emoji ? toStandardEmoji(sound.emoji as DiscordEmojiSource) : undefined;
+   return {
+      id: String(sound.soundId),
+      name: sound.name ?? "<UNKNOWN SOUND>",
+      emoji
+   };
+};
+
+const toStandardEntitlement = (entitlement: Entitlement): StandardEntitlement => ({
+   id: entitlement.id,
+   userId: entitlement.userId ?? undefined,
+   guildId: entitlement.guildId ?? undefined,
+   skuId: entitlement.skuId
+});
+
+const toStandardSubscription = (subscription: Subscription): StandardSubscription => ({
+   id: subscription.id,
+   userId: subscription.userId ?? undefined
+});
+
+const toStandardScheduledEvent = (event: GuildScheduledEvent | PartialGuildScheduledEvent): StandardScheduledEvent => ({
+   id: event.id,
+   name: event.name ?? undefined,
+   guildId: event.guildId ?? event.guild?.id ?? undefined
+});
+
+const toDiscordEmbed = (embed: StandardOutgoingEmbed): APIEmbed => {
    const result: APIEmbed = {};
    if (embed.color !== undefined) {
       const resolved = toDiscordColor(embed.color);
@@ -146,7 +331,7 @@ const toDiscordEmbed = (embed: OutgoingEmbed): APIEmbed => {
    return result;
 };
 
-const toDiscordAttachment = (attachment: OutgoingAttachment): AttachmentBuilder =>
+const toDiscordAttachment = (attachment: StandardOutgoingAttachment): AttachmentBuilder =>
    new AttachmentBuilder(attachment.data, { name: attachment.name });
 
 const permissionMap = {
@@ -155,7 +340,7 @@ const permissionMap = {
    READ_MESSAGE_HISTORY: PermissionFlagsBits.ReadMessageHistory
 } as const;
 
-const toDiscordCommands = (commands: PlatformCommand[]): ApplicationCommandDataResolvable[] =>
+const toDiscordCommands = (commands: StandardCommand[]): ApplicationCommandDataResolvable[] =>
    commands.map(command => {
       const options = command.options?.map(option => ({
          name: option.name,
@@ -259,37 +444,37 @@ const createDiscordAdapter = (message: Message): PlatformAdapter => ({
       const guild = message.client.guilds.cache.get(guildId);
       return guild ? { id: guild.id, name: guild.name } : undefined;
    },
-   fetchChannels: async (guildId: string): Promise<CoreChannel[]> => {
+   fetchChannels: async (guildId: string): Promise<StandardChannel[]> => {
       const guild = message.client.guilds.cache.get(guildId);
       if (!guild) return [];
-      return guild.channels.cache.map(channel => toCoreChannel(channel));
+      return guild.channels.cache.map(channel => toStandardChannel(channel));
    },
-   fetchChannel: async (guildId: string | undefined, channelId: string): Promise<CoreChannel | undefined> => {
+   fetchChannel: async (guildId: string | undefined, channelId: string): Promise<StandardChannel | undefined> => {
       const guild = guildId ? message.client.guilds.cache.get(guildId) : undefined;
       const channel = guild
          ? guild.channels.cache.get(channelId)
          : message.client.channels.cache.get(channelId);
-      return channel ? toCoreChannel(channel) : undefined;
+      return channel ? toStandardChannel(channel) : undefined;
    },
-   fetchMember: async (guildId: string, query: PlatformMemberQuery) => {
+   fetchMember: async (guildId: string, query: StandardMemberQuery) => {
       const guild = message.client.guilds.cache.get(guildId);
       if (!guild) return undefined;
       try {
          if (query.userId) {
             const member = await guild.members.fetch(query.userId);
-            return member ? { id: member.id, userId: member.user.id, displayName: member.displayName } : undefined;
+            return member ? { id: member.id, userId: member.user.id, displayName: member.displayName, username: member.user.username } : undefined;
          }
          if (query.query) {
             const members = await guild.members.fetch({ query: query.query, limit: query.limit ?? 1 });
             const member = members.first();
-            return member ? { id: member.id, userId: member.user.id, displayName: member.displayName } : undefined;
+            return member ? { id: member.id, userId: member.user.id, displayName: member.displayName, username: member.user.username } : undefined;
          }
       } catch {
          return undefined;
       }
       return undefined;
    },
-   fetchHistory: async (channelId: string, options): Promise<CoreMessage[]> => {
+   fetchHistory: async (channelId: string, options): Promise<StandardMessage[]> => {
       const channel = message.client.channels.cache.get(channelId);
       if (!channel) {
          trace(`fetchHistory skipped`, { channelId });
@@ -308,7 +493,7 @@ const createDiscordAdapter = (message: Message): PlatformAdapter => ({
          trace(`fetchHistory invalid payload`, { channelId });
          return [];
       }
-      return (fetched as { map: (fn: (msg: Message) => CoreMessage) => CoreMessage[] }).map(msg => ({
+      return (fetched as { map: (fn: (msg: Message) => StandardMessage) => StandardMessage[] }).map(msg => ({
          id: msg.id,
          content: msg.content,
          authorId: msg.author.id,
@@ -318,7 +503,7 @@ const createDiscordAdapter = (message: Message): PlatformAdapter => ({
          channelName: "name" in msg.channel ? String(msg.channel.name) : msg.channelId,
          guildId: msg.guild?.id,
          guildName: msg.guild?.name,
-         channel: toCoreChannel(msg.channel as DiscordChannel)
+         channel: toStandardChannel(msg.channel as DiscordChannel)
       }));
    },
    canSend: async (channelId: string, guildId?: string): Promise<boolean> => {
@@ -327,7 +512,7 @@ const createDiscordAdapter = (message: Message): PlatformAdapter => ({
          ? guild.channels.cache.get(channelId)
          : message.client.channels.cache.get(channelId);
       if (!channel) return false;
-      const coreChannel = toCoreChannel(channel as DiscordChannel);
+      const coreChannel = toStandardChannel(channel as DiscordChannel);
       if (!coreChannel.supportsText) return false;
       if (!("permissionsFor" in channel) || !message.client.user) return true;
       const perms = (channel as GuildTextBasedChannel).permissionsFor(message.client.user);
@@ -343,7 +528,7 @@ const createDiscordAdapter = (message: Message): PlatformAdapter => ({
       return Boolean(perms && perms.has(permissionMap[permission]));
    },
    supportsCommands: true,
-   registerCommands: async (commands: PlatformCommand[]): Promise<void> => {
+   registerCommands: async (commands: StandardCommand[]): Promise<void> => {
       if (commands.length === 0) return;
       const application = message.client.application;
       if (!application) {
@@ -359,7 +544,7 @@ const createDiscordAdapter = (message: Message): PlatformAdapter => ({
    }
 });
 
-const toCommandInteraction = (interaction: ChatInputCommandInteraction): PlatformCommandInteraction => {
+const toStandardCommandInteraction = (interaction: ChatInputCommandInteraction): StandardCommandInteraction => {
    const options: Record<string, unknown> = {};
    for (const option of interaction.options.data) {
       if (option.options && option.options.length > 0) {
@@ -371,7 +556,7 @@ const toCommandInteraction = (interaction: ChatInputCommandInteraction): Platfor
       options[option.name] = option.value;
    }
 
-   const reply = async (message: OutgoingMessage): Promise<void> => {
+   const reply = async (message: StandardOutgoingMessage): Promise<void> => {
       const embeds = message.embeds ? message.embeds.map(toDiscordEmbed) : undefined;
       const files = message.attachments ? message.attachments.map(toDiscordAttachment) : undefined;
       let content = message.contents;
@@ -399,7 +584,7 @@ const toCommandInteraction = (interaction: ChatInputCommandInteraction): Platfor
    };
 };
 
-const toCoreMessage = async (message: Message): Promise<CoreMessage> => {
+const toStandardMessage = async (message: Message): Promise<StandardMessage> => {
    const botUser = message.client.user ?? undefined;
    const authorName = await getDisplayName(message.member?.user ?? message.author, message.guild?.members);
    const mentionsBot = botUser ? message.mentions.has(botUser) : false;
@@ -426,14 +611,14 @@ const toCoreMessage = async (message: Message): Promise<CoreMessage> => {
       isBot: message.author.bot,
       channelId: message.channelId,
       channelName: "name" in message.channel ? String(message.channel.name) : message.channelId,
-      channel: toCoreChannel(message.channel as DiscordChannel),
+      channel: toStandardChannel(message.channel as DiscordChannel),
       guildId: message.guild?.id,
       guildName: message.guild?.name,
       mentionsBot,
       referencedContent,
       referencedMentionsBot,
       isAdmin,
-      isBotOwner: message.author.id === process.env.BOT_OWNER_DISCORD_ID,
+      isBotOwner: message.author.id === env("BOT_OWNER_DISCORD_ID"),
       isSelf: botUser ? message.author.id === botUser.id : false,
       tts: message.tts,
       platform: createDiscordAdapter(message),
@@ -443,8 +628,26 @@ const toCoreMessage = async (message: Message): Promise<CoreMessage> => {
 
 export {
    createDiscordAdapter,
-   toCommandInteraction,
-   toCoreMessage,
+   toStandardCommandInteraction,
+   toStandardMessage,
+   toStandardChannel,
+   toStandardUserProfile,
+   toStandardMember,
+   toStandardRole,
+   toStandardEmoji,
+   toStandardSticker,
+   toStandardPresence,
+   toStandardTyping,
+   toStandardReaction,
+   toStandardMessageChange,
+   toStandardThread,
+   toStandardVoiceState,
+   toStandardStageInstance,
+   toStandardInvite,
+   toStandardSoundboardSound,
+   toStandardEntitlement,
+   toStandardSubscription,
+   toStandardScheduledEvent,
    toDiscordAttachment,
    toDiscordEmbed
 };

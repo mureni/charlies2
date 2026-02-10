@@ -1,6 +1,7 @@
 import "tsconfig-paths/register";
 import Database from "better-sqlite3";
 import { JSONReplacer, JSONReviver } from "@/core/SQLiteCollections";
+import { env, requireEnv, initEnvConfig } from "@/utils";
 
 interface NGram {
    tokens: string[];
@@ -12,10 +13,7 @@ interface NGram {
 
 const WORD_SEPARATOR = "\u2502";
 
-const requireEnv = (value: string | undefined, name: string): string => {
-   if (!value) throw new Error(`Missing env var: ${name}`);
-   return value;
-};
+initEnvConfig();
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
    typeof value === "object" && value !== null && !Array.isArray(value);
@@ -121,9 +119,9 @@ const resolveKeyColumn = (columns: string[]): string => {
 };
 
 const main = (): void => {
-   const dbPath = requireEnv(process.env.DB_PATH, "DB_PATH");
-   const lexiconTable = process.env.LEXICON_TABLE ?? "lexicon";
-   const ngramsTable = process.env.NGRAMS_TABLE ?? "ngrams";
+   const dbPath = requireEnv("DB_PATH");
+   const lexiconTable = env("LEXICON_TABLE", "lexicon") ?? "lexicon";
+   const ngramsTable = env("NGRAMS_TABLE", "ngrams") ?? "ngrams";
    const timestamp = Date.now();
    const lexiconBackup = `${lexiconTable}_legacy_${timestamp}`;
    const ngramsBackup = `${ngramsTable}_legacy_${timestamp}`;

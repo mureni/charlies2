@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { OutgoingEmbed } from "@/platform";
+import type { StandardOutgoingEmbed } from "@/platform";
 import { toDiscordEmbed } from "@/platform";
 
 describe("platform adapter helpers", () => {
    it("builds a Discord embed from core embed input", () => {
-      const input: OutgoingEmbed = {
+      const input: StandardOutgoingEmbed = {
          title: "Hello",
          description: "World",
          color: "#ffffff",

@@ -1,5 +1,7 @@
-import type { CoreMessage } from "@/platform";
-import type { TriggerResult } from "@/core/triggerTypes";
+import type { StandardMessage } from "@/contracts";
+import type { InteractionResult } from "@/core/interactionTypes";
+import { log } from "@/core/log";
+import { envFlag } from "@/utils";
 import type { QuoteHelpers, QuoteSource } from "@/plugins/modules/quotes/types";
 
 const API = "https://v2.jokeapi.dev/joke/Any?format=txt";
@@ -8,6 +10,8 @@ const defaultFallback = "why did the chicken cross the road? to get to the other
 const jokeMatcher = /tell (?<person>.+)? ?(?:a(?:nother)?) ?joke(?: about (?<topic>.+))?/ui;
 const jokeCommandMatcher = /^!?joke(?:\s+(?<topic>.+))?$/ui;
 const jokeFallbackMatcher = /^(?:!?joke(?:\s+.+)?$)|(?:tell .+?joke(?: about .+)?)$/ui;
+const TRACE_FLOW = envFlag("TRACE_FLOW");
+const DEBUG_JOKE = envFlag("DEBUG") || envFlag("DISCORD_DEBUG");
 
 const getFallbackJoke = (helpers: QuoteHelpers): string => {
    const jokes = helpers.getQuotes("jokes.txt");
@@ -30,17 +34,23 @@ const fetchJoke = async (topic: string | undefined, fallback: string): Promise<s
 };
 
 const resolveJoke = async (
-   context: CoreMessage,
+   context: StandardMessage,
    _match: RegExpMatchArray | undefined,
    helpers: QuoteHelpers
-): Promise<TriggerResult> => {
+): Promise<InteractionResult> => {
    const ambientMatch = context.content.match(jokeMatcher);
    const commandMatch = context.content.match(jokeCommandMatcher);
    const topic = (ambientMatch?.groups?.topic ?? commandMatch?.groups?.topic ?? "").trim();
+   if (context.id.startsWith("command:") && (DEBUG_JOKE || TRACE_FLOW)) {
+      log(
+         `Joke command debug: content="${context.content}" topic="${topic || ""}"`,
+         TRACE_FLOW ? "trace" : "debug"
+      );
+   }
    const directedRaw = (ambientMatch?.groups?.person ?? "").trim();
    const fallback = getFallbackJoke(helpers);
    let joke = await fetchJoke(topic || undefined, fallback);
-   const result: TriggerResult = {
+   const result: InteractionResult = {
       results: [{ contents: joke }],
       modifications: { ProcessSwaps: true }
    };

@@ -3,7 +3,7 @@ import { createReadStream, existsSync, statSync } from "fs";
 import { log } from "./log";
 import readline from "readline";
 import { resolve } from "path";
-import { env, checkFilePath, newRX, escapeRegExp, clamp, randFrom, weightedRandFrom } from "@/utils";
+import { env, envFlag, getBotName, checkFilePath, clamp, randFrom, weightedRandFrom } from "@/utils";
 import type { BrainSettings } from "./botSettings";
 import { loadSettings, saveSettings, getSettings, setSettings } from "./botSettings";
 
@@ -15,11 +15,11 @@ const WORD_SEPARATOR = "│";
 const STACK_MAX = 192;
 const EMPTY_BRAIN = "huh";
 const MAX_RECURSION = 5;
-const TRACE_BRAIN = /^(1|true|yes|on)$/i.test(env("TRACE_BRAIN") ?? "");
+const TRACE_BRAIN = envFlag("TRACE_BRAIN");
 const traceBrain = (message: string): void => {
    if (TRACE_BRAIN) log(`Brain: ${message}`, "debug");
 };
-const BOT_NAME = (env("BOT_NAME") ?? "").trim() || "chatbot";
+const BOT_NAME = getBotName();
 
 interface nGram {
    tokens: string[];
@@ -65,14 +65,14 @@ class Brain {
       table: "lexicon",
       cacheSize: 128,
       allowSchemaMigration: env("NODE_ENV") !== "production",
-      debug: /^(1|true|yes|on)$/i.test(env("TRACE_SQL") ?? "")
+      debug: envFlag("TRACE_SQL")
    });
    public static nGrams: SQLiteMap<string, nGram> = new SQLiteMap<string, nGram>({
       filename: checkFilePath("data", `${BOT_NAME}.sqlite`),
       table: "ngrams",
       cacheSize: 64,
       allowSchemaMigration: env("NODE_ENV") !== "production",
-      debug: /^(1|true|yes|on)$/i.test(env("TRACE_SQL") ?? "")
+      debug: envFlag("TRACE_SQL")
    });
    public static chainLength: number = 3;
    public static botName: string = BOT_NAME;
@@ -82,12 +82,17 @@ class Brain {
    public static set settings(value: BrainSettings) {
       setSettings(value);
    }
+   // TODO: Global consciousness project — periodically set Brain.settings.surprise based on GCP dot index (normalize so 0/1 -> 0, 0.5 -> 1).
 
    public static saveSettings(brainName: string = "default"): boolean | Error {
       return saveSettings(brainName);
    }
 
-   public static async trainFromFile(trainerName: string = "default", filetype: "txt" = "txt", verbose: boolean = Boolean(env("NODE_ENV") === "development")): Promise<boolean | Error> {
+   public static async trainFromFile(
+      trainerName: string = "default",
+      filetype: "txt" = "txt",
+      verbose: boolean = Boolean(env("NODE_ENV") === "development")
+   ): Promise<boolean | Error> {
       try {
          const trainerFile = resolve(checkFilePath("resources", `${trainerName}-trainer.${filetype}`));
          if (!existsSync(trainerFile)) throw new Error(`Unable to load brain data from file '${trainerFile}': file does not exist.`);
@@ -100,24 +105,22 @@ class Brain {
             
 
             const readInterface = readline.createInterface({
-               input: createReadStream(trainerFile, { encoding: "utf8" })
+               input: createReadStream(trainerFile, { encoding: "utf8" }),
+               crlfDelay: Infinity
             });
-            
-            const percentMark = Math.floor(size / 100);
+
+            const percentMark = Math.max(1, Math.floor(size / 100));
             let counter = 0;
 
-            readInterface.on("line", async line => {
-               const normalized = line.trim().toLowerCase();
-               if (normalized) await Brain.learn(normalized);
-               counter += line.length;
+            for await (const line of readInterface) {
+               const normalized = String(line).trim().toLowerCase();
+               if (normalized) await Brain.learn(normalized, { silent: true });
+               counter += String(line).length;
                if (verbose && ((counter % percentMark) === 0 || counter < percentMark)) log(`Learned ${counter} of ${size} bytes`);
-            });
+            }
 
-            readInterface.on("close", () => {
-               log(`Finished learning!`);
-               traceBrain(`trainFromFile done: file=${trainerFile} lexicon=${Brain.lexicon.size} ngrams=${Brain.nGrams.size}`);
-            });
-         
+            log(`Finished learning!`);
+            traceBrain(`trainFromFile done: file=${trainerFile} lexicon=${Brain.lexicon.size} ngrams=${Brain.nGrams.size}`);
             return true;
          } else {
             throw new Error(`Unable to load brain data from file '${trainerFile}': unknown file type. Must be plain text.`);
@@ -132,7 +135,7 @@ class Brain {
       return loadSettings(brainName);
    }
 
-   public static async learn(text: string = ""): Promise<boolean> {
+   public static async learn(text: string = "", options: { silent?: boolean } = {}): Promise<boolean> {
       /* Learn a line */
       let learned: boolean = false;
       if (!text) return learned;
@@ -177,7 +180,9 @@ class Brain {
          }
          learned = true;
       }
-      if (learned) traceBrain(`learn: chars=${text.length} lexicon=${Brain.lexicon.size} ngrams=${Brain.nGrams.size}`);
+      if (learned && !options.silent) {
+         traceBrain(`learn: chars=${text.length} lexicon=${Brain.lexicon.size} ngrams=${Brain.nGrams.size}`);
+      }
       return learned;
    }
 
@@ -218,7 +223,7 @@ class Brain {
          while (!ngram.canEnd && (stack++ <= STACK_MAX)) {
 
             const nextWords = Array.from(ngram.nextTokens.keys());
-            const nextWord = weightedRandFrom(ngram.nextTokens) ?? randFrom<string>(nextWords);
+            const nextWord = weightedRandFrom(ngram.nextTokens, { surprise: Brain.settings.surprise }) ?? randFrom<string>(nextWords);
             if (!nextWord) break;
 
             reply.push(nextWord);
@@ -233,7 +238,7 @@ class Brain {
          while (!ngram.canStart && (stack++ <= STACK_MAX)) {
 
             const prevWords = Array.from(ngram.previousTokens.keys());
-            const prevWord = weightedRandFrom(ngram.previousTokens) ?? randFrom<string>(prevWords);
+            const prevWord = weightedRandFrom(ngram.previousTokens, { surprise: Brain.settings.surprise }) ?? randFrom<string>(prevWords);
             if (!prevWord) break;
 
             reply.unshift(prevWord);
@@ -262,37 +267,6 @@ class Brain {
       return randFrom<string>(words);
    }
 
-   // TODO: Decouple this from the brain -- the settings should be at the bot level (higher than brain)
-   public static shouldYell(text: string): boolean {
-      
-      let newAngerLevel: number = Brain.settings.angerLevel;
-      
-      // If incoming text is caps, increase anger level; otherwise, decrease it
-      newAngerLevel *= (text === text.toUpperCase()) ? Brain.settings.angerIncrease : Brain.settings.angerDecrease;
-      Brain.settings.angerLevel = clamp(newAngerLevel, 0.01, 10);
-      
-      // If random number between 0 and 1 is less than anger level, then should yell is true
-      return (Math.random() < Brain.settings.angerLevel);
-   }
-
-   // TODO: Decouple this from the brain -- the settings should be at the bot level (higher than brain) and might need to be chat protocol specific
-   public static shouldRespond(respondsTo: string | RegExp, text: string): boolean {
-
-      // Respond if random outburst is true
-      if (Math.random() < Brain.settings.outburstThreshold) return true;
-
-      // Respond if mentioned
-      if (respondsTo instanceof RegExp) {
-         if (text.match(respondsTo)) return true;
-      } else {
-         if (!respondsTo) return false;
-         const rx = newRX(escapeRegExp(respondsTo), "giu");
-         if (text.match(rx)) return true;
-      }
-
-      // Otherwise, do not respond
-      return false;
-   }
 }
 
 export { Brain };

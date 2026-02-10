@@ -1,16 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import type { TriggerPlugin } from "@/plugins/types";
-import type { CoreMessage } from "@/platform";
-import type { TriggerResult } from "@/core/triggerTypes";
+import type { InteractionPlugin } from "@/plugins/types";
+import type { StandardMessage } from "@/platform";
+import type { InteractionResult } from "@/core/interactionTypes";
 import { createMessage } from "./pluginHarness";
 import { plugins } from "@/plugins/modules/random";
+import { initEnvConfig } from "@/utils";
 
-type ExecutablePlugin = TriggerPlugin & {
+type ExecutablePlugin = InteractionPlugin & {
    matcher: RegExp;
-   execute: (context: CoreMessage, matches?: RegExpMatchArray) => Promise<TriggerResult> | TriggerResult;
+   execute: (context: StandardMessage, matches?: RegExpMatchArray) => Promise<InteractionResult> | InteractionResult;
 };
 
-const isExecutablePlugin = (plugin?: TriggerPlugin): plugin is ExecutablePlugin =>
+const isExecutablePlugin = (plugin?: InteractionPlugin): plugin is ExecutablePlugin =>
    Boolean(plugin?.execute && plugin.matcher);
 
 const getPlugin = (id: string): ExecutablePlugin => {
@@ -29,7 +30,7 @@ const makeSeededRandom = (seed: number) => {
    };
 };
 
-const withSeededRandom = async (seed: number, fn: () => Promise<void> | void) => {
+const withSeededRandom = async (seed: number, fn: () => Promise<void> | void): Promise<void> => {
    const random = makeSeededRandom(seed);
    const spy = vi.spyOn(Math, "random").mockImplementation(() => random());
    try {
@@ -113,5 +114,42 @@ describe("random plugin", () => {
          expect(result.results.length).toBe(1);
          expect(result.results[0].contents).toMatch(/\d/);
       });
+   });
+
+   it("checkem highlights quads for the bot owner", async () => {
+      process.env.BOT_OWNER_DISCORD_ID = "owner-1";
+      initEnvConfig();
+      const checkem = getPlugin("checkem");
+      const content = "checkem";
+      const message = createMessage({ content, authorId: "owner-1" });
+      const matches = content.match(checkem.matcher) ?? undefined;
+      const sequence = [0.1111, 0.95, 0.0, 0.0];
+      const spy = vi.spyOn(Math, "random").mockImplementation(() => sequence.shift() ?? 0.1111);
+      try {
+         const result = await checkem.execute(message, matches);
+         expect(result.results[0].contents).toBe("***1111***");
+      } finally {
+         spy.mockRestore();
+         delete process.env.BOT_OWNER_DISCORD_ID;
+         initEnvConfig();
+      }
+   });
+
+   it("returns no results when roll input is invalid", async () => {
+      const roll = getPlugin("roll");
+      const content = "!roll";
+      const message = createMessage({ content });
+      const matches = content.match(roll.matcher) ?? undefined;
+      const result = await roll.execute(message, matches);
+      expect(result.results).toHaveLength(0);
+   });
+
+   it("returns no results when lotto count is zero", async () => {
+      const lotto = getPlugin("lotto");
+      const content = "give me 0 lotto numbers between 1 and 9";
+      const message = createMessage({ content });
+      const matches = content.match(lotto.matcher) ?? undefined;
+      const result = await lotto.execute(message, matches);
+      expect(result.results).toHaveLength(0);
    });
 });

@@ -1,7 +1,7 @@
 import { Brain } from "@/core";
-import type { TriggerResult } from "@/core/triggerTypes";
-import type { CoreMessage } from "@/platform";
-import type { TriggerPlugin } from "@/plugins/types";
+import type { InteractionResult } from "@/core/interactionTypes";
+import type { StandardMessage } from "@/contracts";
+import type { InteractionPlugin } from "@/plugins/types";
 
 const storyMatcher = /tell (?<person>.+)? ?(?:a(?:nother)?) (?<long>long)? ?story(?: about (?<topic>.+))?/ui;
 
@@ -29,8 +29,8 @@ const buildStory = async (seedInput: string, storyLength: number): Promise<strin
    return storyLines;
 };
 
-const execute = async (context: CoreMessage, matches?: RegExpMatchArray): Promise<TriggerResult> => {
-   const output: TriggerResult = { results: [], modifications: { ProcessSwaps: true }, directedTo: undefined };
+const execute = async (context: StandardMessage, matches?: RegExpMatchArray): Promise<InteractionResult> => {
+   const output: InteractionResult = { results: [], modifications: { ProcessSwaps: true }, directedTo: undefined };
    if (!matches?.groups) return output;
 
    const storyLength = (3 + Math.floor(Math.random() * 5)) * (matches.groups.long !== undefined ? 3 : 1);
@@ -64,7 +64,7 @@ const execute = async (context: CoreMessage, matches?: RegExpMatchArray): Promis
    return output;
 };
 
-const storyPlugin: TriggerPlugin = {
+const storyPlugin: InteractionPlugin = {
    id: "story",
    name: "Story mode",
    description: "Tells a story about a topic. Text in < > are optional, text in [] can be changed.",

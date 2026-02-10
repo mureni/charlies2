@@ -1,5 +1,6 @@
 {
    "name": "charlies",
+   "description": "chaotically harmonized archival recursed linguistics interpretative exposition system",
    "version": "2.2.0",
    "main": "./dist/index.js",
    "author": "mureni <mureni.leijona@gmail.com>",
@@ -11,30 +12,35 @@
    "dependencies": {
       "app-root-path": "3.1.0",
       "better-sqlite3": "12.6.2",
-      "canvas": "3.2.0",      
+      "canvas": "3.2.0",
       "discord.js": "14.25.1",
       "dotenv": "17.2.3",
       "rimraf": "^6.1.2",
       "source-map-support": "0.5.21",
       "tsconfig-paths": "4.2.0",
-      "winston": "3.19.0",
-      "winston-daily-rotate-file": "5.0.0"
+      "winston": "3.19.0"
    },
    "overrides": {
       "undici": "^6.23.0"
    },
    "devDependencies": {
-      "@typescript-eslint/eslint-plugin": "8.54.0",
-      "@typescript-eslint/parser": "8.54.0",
-      "@types/better-sqlite3": "7.6.13",      
+      "@types/better-sqlite3": "7.6.13",
       "@types/node": "25.1.0",
       "@types/ws": "8.18.1",
+      "@swc/core": "1.15.11",
+      "@eslint/js": "9.39.0",
+      "@typescript-eslint/eslint-plugin": "8.54.0",
+      "@typescript-eslint/parser": "8.54.0",
+      "@vitest/coverage-v8": "^4.0.18",
+      "dependency-cruiser": "17.3.7",
       "eslint": "9.39.2",
+      "jscpd": "4.0.5",
+      "knip": "5.83.1",
       "ts-node": "10.9.2",
-      "typescript": "5.9.3",
+      "typescript": "^6.0.0-dev.20260131",
       "vitest": "4.0.18"
    },
-  "scripts": {
+   "scripts": {
       "clean": "rimraf dist",
       "prebuild": "rimraf dist",
       "build": "tsc",
@@ -44,14 +50,19 @@
       "start": "node ./dist/index.js",
       "test": "vitest",
       "test:run": "vitest run",
-      "test:types": "tsc -p tsconfig.test.json --noEmit",
-      "test:sqlite": "ts-node -r tsconfig-paths/register --transpile-only tests/sqlite-collections.test.ts",
-      "lint": "eslint \"{src,tests,tools}/**/*.ts\"",
-    "test:sqlite:check": "tsc -p tsconfig.sqlite-test.json --noEmit"
-  },
-  "engines": {
-    "node": ">=24"
-  },
+      "test:types": "vitest run --typecheck.only --typecheck.tsconfig tsconfig.test.json",
+      "test:sqlite": "vitest run tests/sqlite-collections.test.ts",
+      "test:full": "npm run test:run && npm run test:types && npm run test:sqlite:check",
+      "test:coverage": "vitest run --coverage",
+      "lint": "eslint \"{src,tests,tools}/**/*.ts\" && knip",
+      "knip": "knip",
+      "depcruise": "depcruise --config .dependency-cruiser.cjs src",
+      "jscpd": "jscpd --config .jscpd.json",
+      "test:sqlite:check": "vitest run --typecheck.only --typecheck.tsconfig tsconfig.sqlite-test.json"
+   },
+   "engines": {
+      "node": ">=24"
+   },
    "repository": {
       "type": "git",
       "url": "git+https://github.com/mureni/charlies2.git"

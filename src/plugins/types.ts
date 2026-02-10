@@ -1,12 +1,12 @@
-import type { CoreMessage, PlatformCommand, PlatformCommandInteraction } from "@/platform";
-import type { TriggerResult, TriggerData, TriggerResource } from "@/core/triggerTypes";
+import type { StandardMessage, StandardCommand, StandardCommandInteraction } from "@/contracts";
+import type { InteractionResult, InteractionData, InteractionResource } from "@/core/interactionTypes";
 
 export interface PluginPermissions {
    ownerOnly?: boolean;
    adminOnly?: boolean;
 }
 
-export interface PluginCommand extends PlatformCommand {
+export interface PluginCommand extends StandardCommand {
    fallbackMatcher?: RegExp;
    usage?: string;
    example?: string;
@@ -14,24 +14,24 @@ export interface PluginCommand extends PlatformCommand {
    hidden?: boolean;
 }
 
-export interface TriggerPlugin {
+export interface InteractionPlugin {
    id: string;
    name: string;
    description: string;
    usage: string;
    matcher?: RegExp;
-   execute?: (context: CoreMessage, matches?: RegExpMatchArray) => TriggerResult | Promise<TriggerResult>;
+   execute?: (context: StandardMessage, matches?: RegExpMatchArray) => InteractionResult | Promise<InteractionResult>;
    permissions?: PluginPermissions;
    commands?: PluginCommand[];
-   onCommand?: (interaction: PlatformCommandInteraction) => Promise<void>;
+   onCommand?: (interaction: StandardCommandInteraction) => Promise<void>;
    onLoad?: () => Promise<void> | void;
    onUnload?: () => Promise<void> | void;
    example?: string;
    icon?: string;
-   resources?: TriggerResource[];
-   data?: TriggerData[];
+   resources?: InteractionResource[];
+   data?: InteractionData[];
 }
 
 export interface PluginModule {
-   plugins: TriggerPlugin[];
+   plugins: InteractionPlugin[];
 }

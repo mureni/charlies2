@@ -1,13 +1,12 @@
 {
   "compilerOptions": {
-    "target": "ES2022",      
-    "module": "commonjs",
+    "target": "ES2024",
+    "module": "Node16",
     "lib": [ "ESNext" ],
     "outDir": "./dist",   
     "rootDir": "./src",   
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*", "./dist/*"]
     },
     "strict": true,       
     "noImplicitAny": true,
@@ -20,7 +19,7 @@
     "noUnusedParameters": true,         
     "noImplicitReturns": true,          
     "noFallthroughCasesInSwitch": true, 
-    "moduleResolution": "node",     
+    "moduleResolution": "node16",
     "esModuleInterop": true,        
     "inlineSourceMap": true,        
     "downlevelIteration": true,

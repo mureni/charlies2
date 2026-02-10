@@ -1,7 +1,7 @@
 import { log } from "@/core/log";
-import type { CoreMessage } from "@/platform";
-import type { TriggerResult } from "@/core/triggerTypes";
-import type { PluginCommand, TriggerPlugin } from "@/plugins/types";
+import type { StandardMessage } from "@/contracts";
+import type { InteractionResult } from "@/core/interactionTypes";
+import type { PluginCommand, InteractionPlugin } from "@/plugins/types";
 import { loadDeck } from "./tarot/deck";
 import { listDecks, resolveDeckPaths } from "./tarot/decks";
 import { normalizeDeckId, normalizeSpreadId, normalizeThemeId } from "./tarot/defaults";
@@ -43,7 +43,7 @@ const tarotCommand: PluginCommand = {
    fallbackMatcher: tarotMatcher
 };
 
-const getDeck = async (deckId: string, deckDir: string, fontPath: string) => {
+const getDeck = async (deckId: string, deckDir: string, fontPath: string): Promise<Awaited<ReturnType<typeof loadDeck>>> => {
    const cached = deckPromises.get(deckId);
    if (cached) return cached;
    const promise = loadDeck(deckDir, fontPath);
@@ -51,13 +51,13 @@ const getDeck = async (deckId: string, deckDir: string, fontPath: string) => {
    return promise;
 };
 
-const buildEmbedFields = (explanation: Record<number, { name: string; description: string; meaning: string }>) =>
+const buildEmbedFields = (explanation: Record<number, { name: string; description: string; meaning: string }>): Array<{ name: string; value: string }> =>
    Object.values(explanation).map((entry) => ({
       name: entry.name,
       value: `${entry.description}\n*${entry.meaning}*`
    }));
 
-const execute = async (_context: CoreMessage, matches?: RegExpMatchArray): Promise<TriggerResult> => {
+const execute = async (_context: StandardMessage, matches?: RegExpMatchArray): Promise<InteractionResult> => {
    const spreadId = normalizeSpreadId(matches?.groups?.spread);
    const themeId = normalizeThemeId(matches?.groups?.theme);
    const deckId = normalizeDeckId(matches?.groups?.deck);
@@ -124,7 +124,7 @@ const execute = async (_context: CoreMessage, matches?: RegExpMatchArray): Promi
    }
 };
 
-const tarotPlugin: TriggerPlugin = {
+const tarotPlugin: InteractionPlugin = {
    id: pluginId,
    name: "Tarot",
    description: "Draws a tarot spread",

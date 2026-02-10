@@ -1,6 +1,7 @@
 import "tsconfig-paths/register";
 import Database from "better-sqlite3";
 import { JSONReviver } from "@/core/SQLiteCollections";
+import { env, requireEnv, initEnvConfig } from "@/utils";
 
 interface MigrationConfig {
    filename: string;
@@ -8,16 +9,14 @@ interface MigrationConfig {
 }
 
 const config: MigrationConfig = {
-   filename: process.env.DB_PATH ?? "",
-   tables: process.env.DB_TABLES ? process.env.DB_TABLES.split(",") : []
+   filename: env("DB_PATH", "") ?? "",
+   tables: (env("DB_TABLES", "") ?? "")
+      .split(",")
+      .map(value => value.trim())
+      .filter(Boolean)
 };
 
-const requireEnv = (value: string, name: string): string => {
-   if (!value) {
-      throw new Error(`Missing env var: ${name}`);
-   }
-   return value;
-};
+initEnvConfig();
 
 const migrateTable = (dbPath: string, table: string): void => {
    const db = new Database(dbPath);
@@ -104,7 +103,7 @@ const encodeKey = (key: unknown): string => {
 };
 
 const main = (): void => {
-   const filename = requireEnv(config.filename, "DB_PATH");
+   const filename = requireEnv("DB_PATH");
    const tables = config.tables;
    if (!tables.length) {
       throw new Error("No tables provided. Set DB_TABLES=table1,table2");

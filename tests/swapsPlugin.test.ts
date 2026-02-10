@@ -1,19 +1,20 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMessage } from "./pluginHarness";
-import type { CoreChannel } from "@/platform";
+import type { StandardChannel, StandardCommandInteraction } from "@/platform";
 import type { FilterRegistry } from "@/filters";
-import type { TriggerPlugin } from "@/plugins/types";
+import type { InteractionPlugin } from "@/plugins/types";
 import type { RegisterSwapFilters, UnregisterSwapFilters } from "@/filters/swaps";
 import type { SwapsManager } from "@/filters/swaps/manager";
+import { initEnvConfig } from "@/utils";
 
 let Swaps: SwapsManager;
-let plugins: TriggerPlugin[];
+let plugins: InteractionPlugin[];
 let Filters: FilterRegistry;
 let registerSwapFilters: RegisterSwapFilters;
 let unregisterSwapFilters: UnregisterSwapFilters;
 let loadPromise: Promise<void> | undefined;
 
-const createChannel = (overrides: Partial<CoreChannel>): CoreChannel => ({
+const createChannel = (overrides: Partial<StandardChannel>): StandardChannel => ({
    id: overrides.id ?? "channel-1",
    name: overrides.name ?? "channel",
    type: overrides.type ?? "text",
@@ -25,13 +26,28 @@ const createChannel = (overrides: Partial<CoreChannel>): CoreChannel => ({
    ...overrides
 });
 
-const ensureLoaded = async () => {
+const createInteraction = (
+   command: string,
+   options: Record<string, unknown> = {},
+   overrides: Partial<StandardCommandInteraction> = {}
+): StandardCommandInteraction => ({
+   command,
+   options,
+   userId: "user-1",
+   channelId: "channel-1",
+   guildId: "guild-1",
+   reply: vi.fn(async () => {}),
+   ...overrides
+});
+
+const ensureLoaded = async (): Promise<void> => {
    if (loadPromise) {
       await loadPromise;
       return;
    }
    loadPromise = (async () => {
       process.env.BOT_NAME = "test-swaps";
+      initEnvConfig();
       ({ Swaps } = await import("@/filters/swaps/manager"));
       ({ plugins } = await import("@/plugins/modules/swaps"));
       ({ Filters } = await import("@/filters"));
@@ -40,10 +56,9 @@ const ensureLoaded = async () => {
    await loadPromise;
 };
 
-const resetSwapStore = () => {
-   (Swaps as unknown as { rules: { clear: () => void } }).rules.clear();
-   (Swaps as unknown as { groups: { clear: () => void } }).groups.clear();
-   (Swaps as unknown as { legacy: { clear: () => void } }).legacy.clear();
+const resetSwapStore = (): void => {
+   (Swaps as unknown as { rules: { clear: (options?: { backup?: boolean }) => void } }).rules.clear({ backup: false });
+   (Swaps as unknown as { groups: { clear: (options?: { backup?: boolean }) => void } }).groups.clear({ backup: false });
 };
 
 beforeAll(async () => {
@@ -332,5 +347,42 @@ describe("swaps plugin", () => {
       const unswapMatches = unswapContext.content.match(unswapPlugin.matcher) ?? undefined;
       await unswapPlugin.execute(unswapContext, unswapMatches);
       expect(Swaps.listRules({ scope: "guild", scopeId: "guild-9" }).length).toBe(0);
+   });
+
+   it("handles swap and swap-list commands via onCommand", async () => {
+      const swapPlugin = plugins.find(plugin => plugin.id === "swap");
+      if (!swapPlugin?.onCommand) throw new Error("swap plugin not available");
+
+      const swapReply = vi.fn(async () => {});
+      await swapPlugin.onCommand(createInteraction("swap", { pattern: "fudge", replacement: "frick" }, { reply: swapReply }));
+      expect(swapReply).toHaveBeenCalledWith(expect.objectContaining({
+         contents: expect.stringContaining("swap saved for guild guild-1")
+      }));
+      expect(Swaps.listRules({ scope: "guild", scopeId: "guild-1" }).length).toBe(1);
+
+      const listReply = vi.fn(async () => {});
+      await swapPlugin.onCommand(createInteraction("swap-list", {}, { reply: listReply }));
+      expect(listReply).toHaveBeenCalledWith(expect.objectContaining({
+         contents: expect.stringContaining("fudge")
+      }));
+   });
+
+   it("validates swap-remove inputs and clears rules", async () => {
+      const swapPlugin = plugins.find(plugin => plugin.id === "swap");
+      if (!swapPlugin?.onCommand) throw new Error("swap plugin not available");
+
+      const missingReply = vi.fn(async () => {});
+      await swapPlugin.onCommand(createInteraction("swap-remove", {}, { reply: missingReply }));
+      expect(missingReply).toHaveBeenCalledWith(expect.objectContaining({
+         contents: "pattern or all=true is required"
+      }));
+
+      await swapPlugin.onCommand(createInteraction("swap", { pattern: "fudge", replacement: "frick" }));
+      const clearReply = vi.fn(async () => {});
+      await swapPlugin.onCommand(createInteraction("swap-remove", { all: true }, { reply: clearReply }));
+      expect(clearReply).toHaveBeenCalledWith(expect.objectContaining({
+         contents: expect.stringContaining("cleared swap rules for guild guild-1")
+      }));
+      expect(Swaps.listRules({ scope: "guild", scopeId: "guild-1" }).length).toBe(0);
    });
 });

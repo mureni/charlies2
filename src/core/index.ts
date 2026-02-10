@@ -1,20 +1,9 @@
 import { Brain } from "./brain";
 import { log } from "./log";
 import { ProcessResults, processMessage, cleanMessage } from "./messageProcessor";
-import { Trigger, TriggerResult, ModificationType } from "./triggerTypes";
+import { InteractionResult, ModificationType } from "./interactionTypes";
 import { InteractionRouter } from "./interactionRouter";
 import { Conversation, KnownUsers, interpolateUsers, getEndearment } from "./user";
-import {
-   CoreMessage,
-   OutgoingAttachment,
-   OutgoingEmbed,
-   OutgoingEmbedField,
-   OutgoingMessage,
-   PlatformAdapter,
-   PlatformHistoryQuery,
-   PlatformMemberQuery,
-   PlatformPermission
-} from "@/platform";
 
 export {
    Conversation,
@@ -25,18 +14,20 @@ export {
    ProcessResults,
    processMessage,
    cleanMessage,
-   Trigger,
    InteractionRouter,
-   TriggerResult,
+   InteractionResult,
    interpolateUsers,
-   getEndearment,
-   CoreMessage,
-   OutgoingAttachment,
-   OutgoingEmbed,
-   OutgoingEmbedField,
-   OutgoingMessage,
-   PlatformAdapter,
-   PlatformHistoryQuery,
-   PlatformMemberQuery,
-   PlatformPermission
+   getEndearment
 };
+
+export type {
+   StandardMessage,
+   StandardOutgoingAttachment,
+   StandardOutgoingEmbed,
+   StandardOutgoingEmbedField,
+   StandardOutgoingMessage,
+   PlatformAdapter,
+   StandardHistoryQuery,
+   StandardMemberQuery,
+   StandardPermission
+} from "@/contracts";

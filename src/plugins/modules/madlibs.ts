@@ -3,11 +3,11 @@ import { watch } from "fs";
 import { resolve } from "path";
 import { cleanMessage } from "@/core";
 import { log } from "@/core/log";
-import type { TriggerResult } from "@/core/triggerTypes";
-import type { CoreMessage } from "@/platform";
+import type { InteractionResult } from "@/core/interactionTypes";
+import type { StandardMessage } from "@/contracts";
 import { escapeRegExp } from "@/utils";
 import { resolvePluginPaths } from "@/plugins/paths";
-import type { PluginCommand, TriggerPlugin } from "@/plugins/types";
+import type { PluginCommand, InteractionPlugin } from "@/plugins/types";
 import { Madlibs } from "./madlibs/manager";
 
 const madlibMatcher = /^madlib(?<category>\s+.+)?$/ui;
@@ -36,8 +36,8 @@ interface MadlibSession {
 }
 
 const sessions = new Map<string, MadlibSession>();
-const sessionKey = (context: CoreMessage) => `${context.channelId}:${context.authorId}`;
-const isDirectMessage = (context: CoreMessage) => context.channel?.scope === "dm" || !context.guildId;
+const sessionKey = (context: StandardMessage): string => `${context.channelId}:${context.authorId}`;
+const isDirectMessage = (context: StandardMessage): boolean => context.channel?.scope === "dm" || !context.guildId;
 const { resourcesDir, dataDir } = resolvePluginPaths("madlibs");
 const builtinsDir = resolve(resourcesDir, "builtins");
 const baseDir = resolve(resourcesDir, "base");
@@ -223,17 +223,17 @@ const resolveCommand = (content: string): { name: string; match: RegExpMatchArra
    return undefined;
 };
 
-const readonlyNotice = (category: string): TriggerResult => ({
+const readonlyNotice = (category: string): InteractionResult => ({
    results: [{ contents: `\`${category}\` is read-only` }],
    modifications: { Case: "unchanged" }
 });
 
-const blockedNotice = (category: string): TriggerResult => ({
+const blockedNotice = (category: string): InteractionResult => ({
    results: [{ contents: `\`${category}\` is disabled in this context` }],
    modifications: { Case: "unchanged" }
 });
 
-const sessionMenu = (category: string): TriggerResult => ({
+const sessionMenu = (category: string): InteractionResult => ({
    results: [
       {
          contents:
@@ -254,7 +254,7 @@ const sessionMenu = (category: string): TriggerResult => ({
    modifications: { Case: "unchanged" }
 });
 
-const sessionListSummary = (category: string): TriggerResult => {
+const sessionListSummary = (category: string): InteractionResult => {
    const snapshot = Madlibs.getCategorySnapshot(category);
    if (!snapshot?.merged) {
       return { results: [{ contents: "no data found for that category" }], modifications: { Case: "unchanged" } };
@@ -277,7 +277,7 @@ const sessionListSummary = (category: string): TriggerResult => {
    };
 };
 
-const sessionExport = (category: string): TriggerResult => {
+const sessionExport = (category: string): InteractionResult => {
    const snapshot = Madlibs.getCategorySnapshot(category);
    if (!snapshot) {
       return { results: [{ contents: "no data found for that category" }], modifications: { Case: "unchanged" } };
@@ -296,7 +296,7 @@ const sessionExport = (category: string): TriggerResult => {
    };
 };
 
-const handleSessionInput = async (context: CoreMessage, session: MadlibSession): Promise<TriggerResult> => {
+const handleSessionInput = async (context: StandardMessage, session: MadlibSession): Promise<InteractionResult> => {
    const content = context.content.trim();
    const lower = content.toLowerCase();
 
@@ -395,7 +395,7 @@ const handleSessionInput = async (context: CoreMessage, session: MadlibSession):
    return sessionMenu(session.category);
 };
 
-const execute = async (context: CoreMessage): Promise<TriggerResult> => {
+const execute = async (context: StandardMessage): Promise<InteractionResult> => {
    const resolved = resolveCommand(context.content);
    if (!resolved) return { results: [], modifications: { Case: "unchanged" } };
 
@@ -503,7 +503,7 @@ const execute = async (context: CoreMessage): Promise<TriggerResult> => {
    return { results: [], modifications: { Case: "unchanged" } };
 };
 
-const madlibsPlugin: TriggerPlugin = {
+const madlibsPlugin: InteractionPlugin = {
    id: "madlibs",
    name: "Madlib generator",
    description: "Pattern-driven nonsense generator with built-in and user-supplied vocabularies (supports tokenized vocab).",

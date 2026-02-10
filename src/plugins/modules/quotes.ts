@@ -1,11 +1,11 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { resolve, extname } from "path";
 import { log } from "@/core/log";
-import type { CoreMessage } from "@/platform";
-import type { TriggerResult } from "@/core/triggerTypes";
+import type { StandardMessage, StandardOutgoingMessage } from "@/contracts";
+import type { InteractionResult } from "@/core/interactionTypes";
 import { checkFilePath } from "@/utils";
 import { resolvePluginPaths } from "@/plugins/paths";
-import type { PluginCommand, TriggerPlugin } from "@/plugins/types";
+import type { PluginCommand, InteractionPlugin } from "@/plugins/types";
 import type { QuoteHelpers, QuoteSource, QuoteStyle } from "@/plugins/modules/quotes/types";
 
 const pluginId = "quotes";
@@ -53,6 +53,44 @@ const applyStyle = (quote: string, style?: QuoteStyle): string => {
 };
 
 const quoteFallbackMatcher = /^quote(?:\s+(?<source>[\w-]+))?$/ui;
+const buildSourceCommandContent = (source: QuoteSource): string => source.command?.name ?? source.id;
+
+const getSourceMatch = (source: QuoteSource, content: string): RegExpMatchArray | undefined => {
+   if (source.matcher) {
+      const match = content.match(source.matcher);
+      if (match) return match;
+   }
+   if (source.command?.fallbackMatcher) {
+      const match = content.match(source.command.fallbackMatcher);
+      if (match) return match;
+   }
+   return undefined;
+};
+
+const prefixSourceOutput = (source: QuoteSource, message: StandardOutgoingMessage): StandardOutgoingMessage => {
+   const label = source.name || source.id;
+   const contents = message.contents ? `${label}: ${message.contents}` : label;
+   return { ...message, contents };
+};
+
+const buildSourceSample = async (
+   source: QuoteSource,
+   context: StandardMessage,
+   helpers: QuoteHelpers
+): Promise<StandardOutgoingMessage | null> => {
+   if (source.resolveQuote) {
+      const content = buildSourceCommandContent(source);
+      const match = getSourceMatch(source, content);
+      const result = await source.resolveQuote({ ...context, content }, match, helpers);
+      const first = result.results[0];
+      return first ? prefixSourceOutput(source, first) : null;
+   }
+   if (!source.fileName) return null;
+   const quotes = helpers.getQuotes(source.fileName);
+   if (quotes.length === 0) return null;
+   const quote = helpers.applyStyle(helpers.randomQuote(quotes), source.style);
+   return prefixSourceOutput(source, { contents: quote });
+};
 
 const quoteCommand: PluginCommand = {
    name: "quote",
@@ -223,14 +261,31 @@ const helpers: QuoteHelpers = {
    defaultModifications
 };
 
-const normalizeResult = (result: TriggerResult): TriggerResult => ({
+const normalizeResult = (result: InteractionResult): InteractionResult => ({
    ...result,
    modifications: result.modifications ?? defaultModifications
 });
 
-const execute = async (context: CoreMessage): Promise<TriggerResult> => {
+const execute = async (context: StandardMessage): Promise<InteractionResult> => {
    await ensureSourcesLoaded();
    const content = context.content.trim();
+   const quoteMatch = content.match(quoteFallbackMatcher);
+   const isCommandContext = context.id.startsWith("command:");
+
+   if (isCommandContext && quoteMatch && !quoteMatch.groups?.source) {
+      const sampler: StandardOutgoingMessage[] = [];
+      for (const source of quoteSources) {
+         const sample = await buildSourceSample(source, context, helpers);
+         if (sample) sampler.push(sample);
+      }
+      if (sampler.length > 0) {
+         return {
+            results: sampler,
+            modifications: defaultModifications
+         };
+      }
+   }
+
    const resolved = resolveSource(content);
    if ("error" in resolved) {
       return {
@@ -240,7 +295,11 @@ const execute = async (context: CoreMessage): Promise<TriggerResult> => {
    }
    const { source } = resolved;
    if (source.resolveQuote) {
-      const result = await source.resolveQuote(context, resolved.match, helpers);
+      const useSynthetic = Boolean(quoteMatch);
+      const syntheticContent = useSynthetic ? buildSourceCommandContent(source) : content;
+      const resolvedContext = useSynthetic ? { ...context, content: syntheticContent } : context;
+      const resolvedMatch = useSynthetic ? getSourceMatch(source, syntheticContent) : resolved.match;
+      const result = await source.resolveQuote(resolvedContext, resolvedMatch, helpers);
       return normalizeResult(result);
    }
    const quotes = getQuotes(source);
@@ -257,7 +316,7 @@ const execute = async (context: CoreMessage): Promise<TriggerResult> => {
    };
 };
 
-const quotesPlugin: TriggerPlugin = {
+const quotesPlugin: InteractionPlugin = {
    id: pluginId,
    name: "quotes",
    description: "Random quotes from multiple sources",

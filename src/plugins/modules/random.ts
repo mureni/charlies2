@@ -1,6 +1,6 @@
-import type { CoreMessage } from "@/platform";
-import type { TriggerResult } from "@/core/triggerTypes";
-import type { TriggerPlugin } from "@/plugins/types";
+import type { StandardMessage } from "@/contracts";
+import type { InteractionResult } from "@/core/interactionTypes";
+import type { InteractionPlugin } from "@/plugins/types";
 import { env } from "@/utils";
 
 const rollMatcher = /!r(oll)? (?<rolls>\d+)?\s*d\s*(?<sides>\d+)/ui;
@@ -18,8 +18,8 @@ const rollDie = (rolls: number, sides: number): number[] => {
    return rollResults;
 };
 
-const executeRoll = (context: CoreMessage, matches?: RegExpMatchArray): TriggerResult => {
-   const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
+const executeRoll = (context: StandardMessage, matches?: RegExpMatchArray): InteractionResult => {
+   const output: InteractionResult = { results: [], modifications: { Case: "unchanged" } };
    if (!matches?.groups?.sides) return output;
 
    const sum = (values: number[]): number => values.reduce((prev, cur) => prev + cur, 0);
@@ -54,8 +54,8 @@ const drawLotto = (howMany: number, low: number, high: number, unique: boolean =
    return Array.from(results);
 };
 
-const executeLotto = (_context: CoreMessage, matches?: RegExpMatchArray): TriggerResult => {
-   const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
+const executeLotto = (_context: StandardMessage, matches?: RegExpMatchArray): InteractionResult => {
+   const output: InteractionResult = { results: [], modifications: { Case: "unchanged" } };
    if (!matches?.groups?.number) return output;
 
    const howMany: number = clamp(parseInt(matches.groups.number), 0, 200);
@@ -76,11 +76,11 @@ const executeLotto = (_context: CoreMessage, matches?: RegExpMatchArray): Trigge
    return output;
 };
 
-const executeCheckem = (context: CoreMessage): TriggerResult => {
-   const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
-   const isDubs = (str: string) => /(.)\1{1}$/.test(str);
-   const isTrips = (str: string) => /(.)\1{2}$/.test(str);
-   const isQuads = (str: string) => /(.)\1{3}$/.test(str);
+const executeCheckem = (context: StandardMessage): InteractionResult => {
+   const output: InteractionResult = { results: [], modifications: { Case: "unchanged" } };
+   const isDubs = (str: string): boolean => /(.)\1{1}$/.test(str);
+   const isTrips = (str: string): boolean => /(.)\1{2}$/.test(str);
+   const isQuads = (str: string): boolean => /(.)\1{3}$/.test(str);
 
    const getNumber = (): string => Math.round(Math.random() * 9999).toString();
 
@@ -111,7 +111,7 @@ const executeCheckem = (context: CoreMessage): TriggerResult => {
    return output;
 };
 
-const rollPlugin: TriggerPlugin = {
+const rollPlugin: InteractionPlugin = {
    id: "roll",
    name: "roll",
    description: "Rolls one or more Dungeons and Dragons type multi-sided di(c)e. Minimum of 1 roll, minimum of 4 sides. Maximum of 100 rolls, maximum of 120 sides.",
@@ -119,26 +119,26 @@ const rollPlugin: TriggerPlugin = {
    example: "!roll d20, !roll 4d24, !roll 1d6",
    icon: "icons/dnd.png",
    matcher: rollMatcher,
-   execute: async (context: CoreMessage, matches?: RegExpMatchArray) => executeRoll(context, matches)
+   execute: async (context: StandardMessage, matches?: RegExpMatchArray) => executeRoll(context, matches)
 };
 
-const lottoPlugin: TriggerPlugin = {
+const lottoPlugin: InteractionPlugin = {
    id: "lotto",
    name: "lotto",
    description: "Draws up to 200 random lottery numbers. Defaults to between 1 and 100, negatives are ignored",
    usage: "give me <number> [unique] [lotto/lottery] numbers [between <low> and <high>]",
    matcher: lottoMatcher,
-   execute: async (context: CoreMessage, matches?: RegExpMatchArray) => executeLotto(context, matches)
+   execute: async (context: StandardMessage, matches?: RegExpMatchArray) => executeLotto(context, matches)
 };
 
-const checkemPlugin: TriggerPlugin = {
+const checkemPlugin: InteractionPlugin = {
    id: "checkem",
    name: "checkem",
    description: "Returns a random number between 1 and 9999 to check if the chaos gods are smiling",
    usage: "checkem",
    icon: "icons/checkem.png",
    matcher: checkemMatcher,
-   execute: async (context: CoreMessage) => executeCheckem(context)
+   execute: async (context: StandardMessage) => executeCheckem(context)
 };
 
 const plugins = [rollPlugin, lottoPlugin, checkemPlugin];

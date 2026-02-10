@@ -1,12 +1,12 @@
 import type {
-   CoreMessage,
-   OutgoingMessage,
+   StandardMessage,
+   StandardOutgoingMessage,
    PlatformAdapter
 } from "@/platform";
 
 interface SentMessage {
    channelId: string;
-   message: OutgoingMessage;
+   message: StandardOutgoingMessage;
 }
 
 interface MockAdapterResult {
@@ -25,7 +25,7 @@ const createMockAdapter = (overrides: Partial<PlatformAdapter> = {}): MockAdapte
       reply: async (messageId: string, content: string): Promise<void> => {
          replies.push({ messageId, content });
       },
-      sendMessage: async (channelId: string, message: OutgoingMessage): Promise<void> => {
+      sendMessage: async (channelId: string, message: StandardOutgoingMessage): Promise<void> => {
          sent.push({ channelId, message });
       },
       sendTyping: async (channelId: string): Promise<void> => {
@@ -43,7 +43,7 @@ const createMockAdapter = (overrides: Partial<PlatformAdapter> = {}): MockAdapte
    return { adapter, sent, replies, typings };
 };
 
-const createMessage = (overrides: Partial<CoreMessage> = {}): CoreMessage => ({
+const createMessage = (overrides: Partial<StandardMessage> = {}): StandardMessage => ({
    id: "msg-1",
    content: "",
    authorId: "user-1",

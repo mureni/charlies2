@@ -2,6 +2,7 @@
     "outburstThreshold": 0.005,
     "numberOfLines": 1,
     "angerLevel": 0.01,
+    "surprise": 0.5,
     "angerIncrease": 1.75,
     "angerDecrease": 0.8,
     "recursion": 1,

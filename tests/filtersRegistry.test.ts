@@ -5,7 +5,7 @@ import { mkdirSync, rmSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { checkFilePath } from "@/utils";
 
-const createRegistry = () => new FilterRegistry();
+const createRegistry = (): FilterRegistry => new FilterRegistry();
 
 const context = createMessage({ content: "hello" });
 
@@ -73,5 +73,30 @@ describe("filter registry", () => {
       expect(list.some(filter => filter.id === "dist-test")).toBe(true);
 
       rmSync(filePath, { force: true });
+   });
+
+   it("skips invalid filter modules but still loads valid ones", async () => {
+      const registry = createRegistry();
+      const distRoot = resolve(checkFilePath("code"), "filters");
+      mkdirSync(distRoot, { recursive: true });
+      const validFile = resolve(distRoot, `valid-filter-${Date.now()}.js`);
+      const invalidFile = resolve(distRoot, `invalid-filter-${Date.now()}.js`);
+      writeFileSync(
+         validFile,
+         "module.exports = { filters: [{ id: 'valid-test', stage: 'preBrain', apply: (text) => text + '?' }] };",
+         "utf8"
+      );
+      writeFileSync(
+         invalidFile,
+         "throw new Error('boom');",
+         "utf8"
+      );
+
+      await registry.loadFromDist();
+      const list = registry.list("preBrain");
+      expect(list.some(filter => filter.id === "valid-test")).toBe(true);
+
+      rmSync(validFile, { force: true });
+      rmSync(invalidFile, { force: true });
    });
 });

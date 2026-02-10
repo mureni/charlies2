@@ -359,7 +359,7 @@ test("SQLiteMap supports all key/value permutations for supported types", () => 
    const dbPath = makeDbPath(dir, "map-permutations");
    const map = new SQLiteMap<unknown, unknown>({ filename: dbPath, table: "map_permutations", backupOnClear: false });
    const sharedObj = { label: "obj" };
-   const sharedFn = () => "fn";
+   const sharedFn = (): string => "fn";
    const sharedSymbol = Symbol("sym");
 
    const keyCases: Array<{ label: string; key: unknown }> = [
@@ -503,7 +503,7 @@ test("SQLiteSet supports supported value permutations and persistence for primit
    const dbPath = makeDbPath(dir, "set-permutations");
    const set = new SQLiteSet<unknown>({ filename: dbPath, table: "set_permutations", backupOnClear: false });
    const sharedObj = { label: "obj" };
-   const sharedFn = () => "fn";
+   const sharedFn = (): string => "fn";
    const sharedSymbol = Symbol("sym");
 
    const values: unknown[] = [

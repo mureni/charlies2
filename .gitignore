@@ -4,6 +4,11 @@
 .github
 .review
 charlies2.zip
+coverage/
+report/
+tests/
+src/admin-portal/
+resources/admin-portal/
 
 # Documentation (hide for now - far too incomplete to publish)
 docs/
@@ -34,6 +39,7 @@ node_modules/
 dist/
 sourcemaps/
 build/
+.tmp/
 
 # Optional npm cache directory
 .npm

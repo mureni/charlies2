@@ -1,5 +1,5 @@
 import { SQLiteMap } from "@/core/SQLiteCollections";
-import { checkFilePath, env } from "@/utils";
+import { checkFilePath, env, envFlag, getBotName } from "@/utils";
 
 interface Conversation {
    lastSpokeAt: number;
@@ -12,13 +12,20 @@ interface KnownUser {
    conversations: Map<string, Conversation>;
 }
 
-const BOT_NAME = env("BOT_NAME", "default");
+interface KnownUserProfile {
+   id: string;
+   username: string;
+   displayName?: string;
+   aliases?: string[];
+}
+
+const BOT_NAME = getBotName();
 const KnownUsers = new SQLiteMap<string, KnownUser>({
    filename: checkFilePath("data", `${BOT_NAME}-known-users.sqlite`),
    table: "known_users",
    cacheSize: 64,
    allowSchemaMigration: env("NODE_ENV") !== "production",
-   debug: /^(1|true|yes|on)$/i.test(env("TRACE_SQL") ?? "")
+   debug: envFlag("TRACE_SQL")
 });
 
 interface KnownUsersSnapshot {
@@ -69,6 +76,13 @@ const upsertKnownUser = (id: string, name: string, aliases: string[] = []): Know
 
 const touchKnownUser = (id: string, name: string): KnownUser => upsertKnownUser(id, name);
 
+const syncKnownUserProfile = (profile: KnownUserProfile): KnownUser => {
+   const aliases: string[] = [];
+   if (profile.displayName && profile.displayName !== profile.username) aliases.push(profile.displayName);
+   if (profile.aliases && profile.aliases.length > 0) aliases.push(...profile.aliases);
+   return upsertKnownUser(profile.id, profile.username, aliases);
+};
+
 const getKnownUsersSnapshot = (): KnownUsersSnapshot => {
    if (snapshotCache && snapshotCache.version === knownUsersVersion) return snapshotCache;
    const entries = Array.from(KnownUsers.entries());
@@ -76,5 +90,5 @@ const getKnownUsersSnapshot = (): KnownUsersSnapshot => {
    return snapshotCache;
 };
 
-export type { KnownUser, Conversation };
-export { KnownUsers, touchKnownUser, upsertKnownUser, saveKnownUser, getKnownUsersSnapshot };
+export type { KnownUser, Conversation, KnownUserProfile };
+export { KnownUsers, touchKnownUser, upsertKnownUser, saveKnownUser, getKnownUsersSnapshot, syncKnownUserProfile };

@@ -1,7 +1,7 @@
 import { SQLiteMap } from "./SQLiteCollections";
-import { checkFilePath, env } from "@/utils";
+import { checkFilePath, env, envFlag, getBotName } from "@/utils";
 
-const BOT_NAME = (env("BOT_NAME") ?? "").trim() || "chatbot";
+const BOT_NAME = getBotName();
 
 export type BrainOverlayScope = "global" | "community" | "conversation";
 
@@ -28,7 +28,7 @@ class BrainOverlays {
       table: "overlays",
       cacheSize: 32,
       allowSchemaMigration: env("NODE_ENV") !== "production",
-      debug: /^(1|true|yes|on)$/i.test(env("TRACE_SQL") ?? "")
+      debug: envFlag("TRACE_SQL")
    });
 
    public static listContexts(): BrainOverlayContext[] {

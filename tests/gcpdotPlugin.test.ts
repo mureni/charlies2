@@ -7,6 +7,7 @@ const gcpPlugin = plugins.find(plugin => plugin.id === "gcp");
 
 describe("gcpdot plugin", () => {
    afterEach(() => {
+      vi.unstubAllGlobals();
       vi.restoreAllMocks();
    });
 
@@ -36,5 +37,24 @@ describe("gcpdot plugin", () => {
 
       expect(result.results[0].contents).toMatch(/error occurred/i);
       expect(result.results[0].contents).toMatch(/boom/i);
+   });
+
+   it("parses dot thresholds from raw data", () => {
+      const result = GCPDot.parseDotResults("0.12 0.96 0.55");
+      expect(result.index).toBe(0.96);
+      expect(result.color).toBe("#2457fd");
+      expect(result.explanation).toMatch(/index is above 95%/i);
+   });
+
+   it("fetches dot data when the request succeeds", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, text: async () => "0.42" })) as unknown as typeof fetch);
+      const result = await GCPDot.fetchGCPDotData();
+      expect(result).toBe("0.42");
+   });
+
+   it("returns empty dot data when the request fails", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("nope"); }) as unknown as typeof fetch);
+      const result = await GCPDot.fetchGCPDotData();
+      expect(result).toBe("");
    });
 });

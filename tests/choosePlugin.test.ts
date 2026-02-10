@@ -37,4 +37,17 @@ describe("choose plugin", () => {
 
       expect(result.results[0].contents).toBe("bananas, because: because bananas");
    });
+
+   it("returns no results when no options are provided", async () => {
+      if (!choosePlugin?.execute) throw new Error("choose plugin not available");
+      const seedSpy = vi.spyOn(Brain, "getSeed");
+      const responseSpy = vi.spyOn(Brain, "getResponse");
+
+      const message = createMessage({ content: "choose" });
+      const result = await choosePlugin.execute(message, undefined);
+
+      expect(result.results).toHaveLength(0);
+      expect(seedSpy).not.toHaveBeenCalled();
+      expect(responseSpy).not.toHaveBeenCalled();
+   });
 });

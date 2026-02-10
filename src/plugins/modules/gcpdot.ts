@@ -1,17 +1,17 @@
-import type { TriggerResult } from "@/core/triggerTypes";
-import type { CoreMessage, OutgoingAttachment, OutgoingEmbed } from "@/platform";
-import type { TriggerPlugin } from "@/plugins/types";
+import type { InteractionResult } from "@/core/interactionTypes";
+import type { StandardMessage, StandardOutgoingAttachment, StandardOutgoingEmbed } from "@/contracts";
+import type { InteractionPlugin } from "@/plugins/types";
 import { GCPDot } from "@/plugins/modules/gcpdot/controller";
 
 const gcpMatcher = /\bgcp\b/ui;
 
-const execute = async (_context: CoreMessage): Promise<TriggerResult> => {
-   const output: TriggerResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
+const execute = async (_context: StandardMessage): Promise<InteractionResult> => {
+   const output: InteractionResult = { results: [], modifications: { Case: "unchanged" }, directedTo: undefined };
 
    try {
       const dot = await GCPDot.getDotData();
-      const attachment: OutgoingAttachment = { name: "gcpdot.png", data: dot.image };
-      const embed: OutgoingEmbed = {
+      const attachment: StandardOutgoingAttachment = { name: "gcpdot.png", data: dot.image };
+      const embed: StandardOutgoingEmbed = {
          title: "The current state of the GCP Dot",
          color: "#ffffff",
          description: dot.data.explanation,
@@ -27,7 +27,7 @@ const execute = async (_context: CoreMessage): Promise<TriggerResult> => {
    }
 };
 
-const gcpPlugin: TriggerPlugin = {
+const gcpPlugin: InteractionPlugin = {
    id: "gcp",
    name: "GCP Dot",
    description: "Shows the current status of the Global Consciousness Project Dot",

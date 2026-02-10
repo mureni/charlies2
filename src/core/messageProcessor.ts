@@ -3,10 +3,11 @@ import { Brain } from "./brain";
 import { log } from "./log";
 import { Filters } from "@/filters";
 import { InteractionRouter } from "./interactionRouter";
-import type { ModificationType, TriggerResult } from "./triggerTypes";
-import { env, escapeRegExp, newRX, randFrom } from "@/utils";
-import type { CoreMessage, OutgoingMessage, OutgoingMessage as PlatformOutgoingMessage } from "@/platform";
-import { touchKnownUser, saveKnownUser } from "@/platform/knownUsers";
+import type { ModificationType, InteractionResult } from "./interactionTypes";
+import { shouldRespond as shouldRespondDecision, shouldYell as shouldYellDecision } from "./responseDecision";
+import { envFlag, escapeRegExp, newRX, randFrom } from "@/utils";
+import type { StandardMessage, StandardOutgoingMessage, StandardOutgoingMessage as PlatformOutgoingMessage } from "@/contracts";
+import { touchKnownUser, saveKnownUser } from "@/core/knownUsers";
 
 
 // Maximum length of discord message
@@ -23,18 +24,6 @@ interface ProcessResults {
 type MemberContext = Parameters<typeof interpolateUsers>[1];
 
 
-const emoticonRXs = [
-   `:-)`, `:)`, `:-]`, `:]`, `:-3`, `:3`,	`:->`, `:>`, `8-)`, `8)`, `:-}`, `:}`, `:o)`, `:c)`, `:^)`, `=]`, `=)`,
-   `:-D`, `:D`, `8-D`, `8D`, `x-D`, `xD`, `X-D`, `XD`, `=D`, `=3`, `B^D`, `:-))`, `:-(`, `:(`, `:-c`, `:c`,`:-<`,
-   `:<`, `:-[`, `:[`, `:-||`, `>:[`, `:{`, `:@`, `>:(`, `:'-(`, `:'(`, `:'-)`, `:')`, `D-':`, `D:<`, `D:`, `D8`,
-   `D;`, `D=`, `DX`, `:-O`, `:O`, `:-o`, `:o`, `:-0`, `8-0`, `>:O`, `:-*`, `:*`, `:×`, `;-)`, `;)`, `*-)`, `*)`,
-   `;-]`, `;]`, `;^)`, `:-,`, `;D`, `:-P`, `:P`, `X-P`, `XP`, `x-p`, `xp`, `:-p`, `:p`, `:-Þ`, `:Þ`, `:-þ`, `:þ`,
-   `:-b`, `:b`, `d:`, `=p`, `>:P`, `:-/`, `:/`, `:-.`, `>:\\`, `>:/`, `:\\`, `=/`, `=\\`, `:L`, `=L`, `:S`,`:-|`,
-   `:|`, `:$`, `://)`, `://3`, `:-X`, `:X`, `:-#`, `:#`, `:-&`, `:&`, `O:-)`, `O:)`, `0:-3`, `0:3`, `0:-)`, `0:)`,
-   `;^)`, `>:-)`, `>:)`, `}:-)`, `}:)`, `3:-)`, `3:)`, `>;)`, `>:3`, `>;3`, `|;-)`, `|-O`, `:-J`, `#-)`, `%-)`, `%)`,
-   `:-###..`, `:###..`, `<:-|`, `',:-|`, `',:-l`, `</3`, `<\\3`, `<3`
-].map(emoticon => newRX(`\\b${escapeRegExp(emoticon)}\\b`)).join("|");
-
 const LINE_BREAK_RX = newRX(`\\r?\\n`, "musig");
 const GREENTEXT_START_RX = newRX(`^\\s*>`, "u");
 const GREENTEXT_SPLIT_RX = newRX(`(?=>)`, "u");
@@ -49,7 +38,7 @@ const DEFAULT_SECRET_PLACES = [
    "the back hallway",
    "a little hideaway"
 ];
-const traceFlow = env("TRACE_FLOW") === "true";
+const traceFlow = envFlag("TRACE_FLOW");
 const trace = (message: string, data?: unknown): void => {
    if (traceFlow) log(data ? { message: `Flow: ${message}`, data } : `Flow: ${message}`, "trace");
 };
@@ -62,9 +51,7 @@ const getSecretPlace = (): string => {
    return randFrom(places) ?? "my secret place";
 };
 
-//erx = [`:-)`, `:)`, `:-]`, `:]`, `:-3`, `:3`, `:->`, `:>`, `8-)`, `8)`, `:-}`, `:}`, `:o)`, `:c)`, `:^)`, `=]`, `=)`, `:-D`, `:D`, `8-D`, `8D`, `x-D`, `xD`, `X-D`, `XD`, `=D`, `=3`, `B^D`, `:-))`, `:-(`, `:(`, `:-c`, `:c`,`:-<`, `:<`, `:-[`, `:[`, `:-||`, `>:[`, `:{`, `:@`, `>:(`, `:'-(`, `:'(`, `:'-)`, `:')`, `D-':`, `D:<`, `D:`, `D8`, `D;`, `D=`, `DX`, `:-O`, `:O`, `:-o`, `:o`, `:-0`, `8-0`, `>:O`, `:-*`, `:*`, `:×`, `;-)`, `;)`, `*-)`, `*)`, `;-]`, `;]`, `;^)`, `:-,`, `;D`, `:-P`, `:P`, `X-P`, `XP`, `x-p`, `xp`, `:-p`, `:p`, `:-Þ`, `:Þ`, `:-þ`, `:þ`, `:-b`, `:b`, `d:`, `=p`, `>:P`, `:-/`, `:/`, `:-.`, `>:\\`, `>:/`, `:\\`, `=/`, `=\\`, `:L`, `=L`, `:S`,`:-|`, `:|`, `:$`, `://)`, `://3`, `:-X`, `:X`, `:-#`, `:#`, `:-&`, `:&`, `O:-)`, `O:)`, `0:-3`, `0:3`, `0:-)`, `0:)`, `;^)`, `>:-)`, `>:)`, `}:-)`, `}:)`, `3:-)`, `3:)`, `>;)`, `>:3`, `>;3`, `|;-)`, `|-O`, `:-J`, `#-)`, `%-)`, `%)`, `:-###..`, `:###..`, `<:-|`, `',:-|`, `',:-l`, `</3`, `<\\3`, `<3` ].map(emoticon => emoticon.replace(/[.*+?^${}()|[\]\\\-]/ug, '\\$&')).join('|');
-
-const processMessage = async (message: CoreMessage): Promise<ProcessResults> => {
+const processMessage = async (message: StandardMessage): Promise<ProcessResults> => {
    const results: ProcessResults = { learned: false, processedText: "" }
    const memberContext = message as MemberContext;
    const platform = message.platform;
@@ -95,9 +82,9 @@ const processMessage = async (message: CoreMessage): Promise<ProcessResults> => 
    cleanText = cleanText.replace(newRX(`^\\s*\\b${escapeRegExp(Brain.botName)}\\b[:,]?\\s*`, "uig"), "");
    const preBrainText = Filters.apply("preBrain", cleanText, message, "learn");
 
-   const processed: TriggerResult = await InteractionRouter.process(message);
+   const processed: InteractionResult = await InteractionRouter.process(message);
    await InteractionRouter.registerCommands(platform);
-   log(`Trigger results: ${JSON.stringify(processed)}`, "debug");
+   log(`Interaction results: ${JSON.stringify(processed)}`, "debug");
 
    if (processed.error) {
       log(processed.error.message, "error");
@@ -128,25 +115,25 @@ const processMessage = async (message: CoreMessage): Promise<ProcessResults> => 
       const mods: ModificationType = processed.modifications;
       if (!mods.KeepOriginal) mods.Balance = true;
       
-      if (!(mods.KeepOriginal || mods.Case === "unchanged") && Brain.shouldYell(message.content)) mods.Case = "upper";
+      if (!(mods.KeepOriginal || mods.Case === "unchanged") && shouldYellDecision(message.content, Brain.settings)) mods.Case = "upper";
 
       if (processed.directedTo && shouldPrefixResponse) {
          processed.results[0].contents = `${processed.directedTo}: ${processed.results[0].contents}`;
          results.directedTo = processed.directedTo;
       }
       
-      const outgoingPayload: OutgoingMessage = { contents: "", embeds: [], attachments: [] };
+      const outgoingPayload: StandardOutgoingMessage = { contents: "", embeds: [], attachments: [] };
       results.response = "";
       for (const resultsPayload of processed.results as PlatformOutgoingMessage[]) {
          outgoingPayload.contents = resultsPayload.contents;
          if (resultsPayload.attachments) {
             results.response += resultsPayload.attachments.map(attachment => `[attachment ${attachment.name}]`).join("\n");
-            //log(`Trigger results contain attachments; including attachments in message`);
+            //log(`Interaction results contain attachments; including attachments in message`);
             outgoingPayload.attachments = resultsPayload.attachments;
          }
          if (resultsPayload.embeds) {
             results.response += resultsPayload.embeds.map(embed => `[embed ${embed.title}]`).join("\n");
-            //log(`Trigger results contain embeds; including embeds in message`);
+            //log(`Interaction results contain embeds; including embeds in message`);
             outgoingPayload.embeds = resultsPayload.embeds;
          }
 
@@ -166,8 +153,8 @@ const processMessage = async (message: CoreMessage): Promise<ProcessResults> => 
 }
 
 const processPersonalityResponse = async (
-   message: CoreMessage,
-   processed: TriggerResult,
+   message: StandardMessage,
+   processed: InteractionResult,
    preBrainText: string,
    memberContext: MemberContext | undefined,
    canSend: boolean,
@@ -192,7 +179,7 @@ const processPersonalityResponse = async (
       const groupOutburst = Math.min(1, baseOutburst * groupSize);
       shouldRespond = Math.random() < groupOutburst || mentionsBot || matchesBotName(preBrainText);
    } else {
-      shouldRespond = mentionsBot || Brain.shouldRespond(Brain.botName, preBrainText);
+      shouldRespond = mentionsBot || shouldRespondDecision(Brain.botName, preBrainText, Brain.settings);
    }
 
    /* If the message is a reference (reply) then check if the referenced message should be responded to */
@@ -201,6 +188,13 @@ const processPersonalityResponse = async (
    }
 
    trace("shouldRespond", { mentionsBot, shouldRespond, isDirectMessage, isGroupDm });
+
+   const lexiconSize = Brain.lexicon?.size ?? 0;
+   const ngramSize = Brain.nGrams?.size ?? 0;
+   if (lexiconSize === 0 || ngramSize === 0) {
+      trace("brain empty; skipping response", { lexicon: lexiconSize, ngrams: ngramSize });
+      return { learned: await Brain.learn(preBrainText) };
+   }
 
    let seed: string = "";
    let conversationActive = false;
@@ -242,7 +236,7 @@ const processPersonalityResponse = async (
       const mods: ModificationType = { ...processed.modifications };
 
       if (message.tts) mods.TTS = true;
-      if (Brain.shouldYell(message.content)) mods.Case = "upper";
+      if (shouldYellDecision(message.content, Brain.settings)) mods.Case = "upper";
 
       const directedTo = shouldPrefixResponse ? message.authorName : undefined;
       if (directedTo) {
@@ -296,7 +290,7 @@ const splitTextForSending = (text: string, maxLength: number): string[] => {
 };
 
 /* Utility functions for bot interface */
-const sendMessage = async (context: CoreMessage, message: OutgoingMessage, mods?: ModificationType): Promise<boolean> => {
+const sendMessage = async (context: StandardMessage, message: StandardOutgoingMessage, mods?: ModificationType): Promise<boolean> => {
    const platform = context.platform;
    if (!platform) {
       trace(`sendMessage skipped: platform=false channel=${context.channelId}`);
@@ -309,11 +303,9 @@ const sendMessage = async (context: CoreMessage, message: OutgoingMessage, mods?
       workingMods.Balance = false;
       workingMods.Case = "unchanged";
       workingMods.ProcessSwaps = false;
-      workingMods.StripFormatting = false;
       workingMods.UseEndearments = false;
    }
    let text = message.contents;
-   text = await interpolateUsers(text, memberContext, Boolean(workingMods?.UseEndearments));
    text = await cleanMessage(text, workingMods, memberContext);
    const skipFilters = workingMods?.ProcessSwaps === false ? ["swaps"] : undefined;
    text = Filters.apply("postBrain", text, context, "respond", { skipIds: skipFilters });
@@ -344,10 +336,9 @@ const cleanMessage = async (text: string, mods?: ModificationType, members?: Mem
       workingMods.Balance = false;
       workingMods.Case = "unchanged";
       workingMods.ProcessSwaps = false;
-      workingMods.StripFormatting = false;
       workingMods.UseEndearments = false;
    }
-   const botNameCleaner = (text: string) => {
+   const botNameCleaner = (text: string): string => {
       /* Ensure no rogue RegExp-breaking characters in the bot name */
       const cleanBotName = escapeRegExp(Brain.botName);
       /* Strip initial use of the bot's name (most common usage being "botname: text text text" with or without the ":") */
@@ -365,19 +356,8 @@ const cleanMessage = async (text: string, mods?: ModificationType, members?: Mem
    /* Remove ANSI control characters and RTL marks (skipping CR and LF) */
    fullText = fullText.replace(newRX(`[\\u0000-\\u0009\\u000b\\u000c\\u000e-\\u001f\\u200f\\u061c\\u00ad]`, "musig"), "");
       
-   const formatCodes = {
-      underline: "_",
-      bold: "*",
-      bold2: "__",
-      italic: "**",
-      spoiler: "||",
-      strikethrough: "~~",
-      code: "`"
-   }
-
    const blockCodes = {
       URLs: "🔗",
-      emoticons: "☻",
       codeBlocks: "⎁",
       injections: "⚿"
    }
@@ -399,16 +379,6 @@ const cleanMessage = async (text: string, mods?: ModificationType, members?: Mem
    const extractedURLs = extractBlocks(fullText, blockCodes.URLs, urlRX);
    const urls: string[] = extractedURLs.blocks;
    fullText = extractedURLs.text;
-
-   /* Capture emoticons, case-sensitive, NO UNICODE (will cause 'invalid escape') */
-   const emoticonRX = newRX(emoticonRXs, "mg");
-   const extractedEmoticons = extractBlocks(fullText, blockCodes.emoticons, emoticonRX);
-   const emoticons: string[] = extractedEmoticons.blocks;
-   fullText = extractedEmoticons.text;
-
-   /* Prepare regexp for stripping formatting if required */
-   const formatCodeRX = `(?:${Object.values(formatCodes).map(code => escapeRegExp(code)).join("|")})`;
-   const stripFormattingRX = newRX(`${formatCodeRX}+(?<Text>.+?)${formatCodeRX}+`, "misug");
 
    /* Split lines for further line-level processing */
    const lines = fullText.split(LINE_BREAK_RX);
@@ -437,8 +407,6 @@ const cleanMessage = async (text: string, mods?: ModificationType, members?: Mem
             break;
       }
       
-      if (workingMods?.StripFormatting) text = text.replace(stripFormattingRX, "$<Text>");
-
       const greentextParts = text.match(GREENTEXT_START_RX) ? text.split(GREENTEXT_SPLIT_RX) : null;
       if (greentextParts && greentextParts.length > 1) {
          greentextParts.forEach((part) => results.push(part));
@@ -448,9 +416,6 @@ const cleanMessage = async (text: string, mods?: ModificationType, members?: Mem
       results.push(text);
    }
    let result = results.join("\n");
-
-   /* Restore emoticons */
-   if (emoticons.length > 0) result = restoreBlocks(result, blockCodes.emoticons, emoticons);
 
    /* Restore URLs */
    if (urls.length > 0) result = restoreBlocks(result, blockCodes.URLs, urls);
@@ -518,35 +483,13 @@ const balanceText = (text: string): string => {
    const lines = text.split(LINE_BREAK_RX);
    const results: string[] = [];
    const CODE_SEGMENT_RX = newRX(`\``, "musig");
-   const OPEN_PAREN_RX = newRX(`\\(`, "musig");
-   const CLOSE_PAREN_RX = newRX(`\\)`, "musig");
-   const DOUBLE_QUOTE_RX = newRX(`"`, "musig");
 
    for (let line of lines) {
    
       const isCodeSegmentsUnbalanced: boolean = (line.match(CODE_SEGMENT_RX) ?? []).length % 2 !== 0;
-      const numParenthesisStarted: number = (line.match(OPEN_PAREN_RX) ?? []).length;
-      const numParenthesisEnded: number = (line.match(CLOSE_PAREN_RX) ?? []).length;
-      const isDoubleQuoteUnbalanced: boolean = (line.match(DOUBLE_QUOTE_RX) ?? []).length % 2 !== 0;
-      
-      if (isDoubleQuoteUnbalanced) {
-         if (line.endsWith('"')) {
-            line = '"' + line;
-         } else {
-            line = line + '"';
-         }
-      }
-      if (numParenthesisStarted < numParenthesisEnded) {
-         line = "(".repeat(numParenthesisEnded - numParenthesisStarted) + line;
-      } else if (numParenthesisStarted > numParenthesisEnded) {
-         line = line + ")".repeat(numParenthesisStarted - numParenthesisEnded);
-      }
+
       if (isCodeSegmentsUnbalanced) {
-         if (line.endsWith("`")) {
-            line = "`" + line;
-         } else {
-            line = line + "`";
-         }
+         line = `${line}\``;
       }
       results.push(line);
    }
@@ -561,11 +504,7 @@ const balanceText = (text: string): string => {
    const isCodeBlockUnbalanced: boolean = (fixedText.match(CODE_BLOCK_RX) ?? []).length % 2 !== 0;
 
    if (isCodeBlockUnbalanced) {
-      if (fixedText.endsWith("```")) {
-         fixedText = "```" + fixedText;
-      } else {
-         fixedText = fixedText + "```";
-      }
+      fixedText = `${fixedText}\`\`\``;
    }
 
    return fixedText;

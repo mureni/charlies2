@@ -1,5 +1,5 @@
-import type { CoreMessage } from "@/platform";
-import type { ModificationType, TriggerResult } from "@/core/triggerTypes";
+import type { StandardMessage } from "@/contracts";
+import type { ModificationType, InteractionResult } from "@/core/interactionTypes";
 import type { PluginCommand } from "@/plugins/types";
 
 export interface QuoteStyle {
@@ -25,5 +25,5 @@ export interface QuoteSource {
    style?: QuoteStyle;
    modifications?: ModificationType;
    command?: PluginCommand;
-   resolveQuote?: (context: CoreMessage, match: RegExpMatchArray | undefined, helpers: QuoteHelpers) => Promise<TriggerResult> | TriggerResult;
+   resolveQuote?: (context: StandardMessage, match: RegExpMatchArray | undefined, helpers: QuoteHelpers) => Promise<InteractionResult> | InteractionResult;
 }

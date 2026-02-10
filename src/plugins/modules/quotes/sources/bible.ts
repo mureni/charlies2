@@ -1,7 +1,7 @@
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import type { CoreMessage } from "@/platform";
-import type { TriggerResult } from "@/core/triggerTypes";
+import type { StandardMessage } from "@/contracts";
+import type { InteractionResult } from "@/core/interactionTypes";
 import { resolvePluginPaths } from "@/plugins/paths";
 import type { QuoteHelpers, QuoteSource } from "@/plugins/modules/quotes/types";
 
@@ -55,33 +55,75 @@ const loadBibleIndex = (): BibleIndex => {
 const pickRandomFromList = <T>(items: T[]): T => items[Math.floor(Math.random() * items.length)];
 
 const parseQuery = (content: string): {
-   book: string;
+   book?: string;
    chapter?: number;
    verse?: number;
    verseRange?: number;
 } | { error: string } => {
-   const match = content.match(bibleMatcher);
-   if (!match || !match.groups) return { error: "invalid bible query" };
-   const book = (match.groups.book ?? "").trim();
-   if (!book) return { error: "book is required" };
-   const chapter = match.groups.chapter ? Number.parseInt(match.groups.chapter, 10) : undefined;
-   const verse = match.groups.verse ? Number.parseInt(match.groups.verse, 10) : undefined;
-   const verseRange = match.groups.verseRange ? Number.parseInt(match.groups.verseRange, 10) : undefined;
-   return { book, chapter, verse, verseRange };
+   const trimmed = content.trim();
+   if (!/^!?bible\b/i.test(trimmed)) return { error: "invalid bible query" };
+   const remainder = trimmed.replace(/^!?bible\b/i, "").trim();
+   if (!remainder) return { book: undefined };
+
+   const colonMatch = remainder.match(
+      /^(?<book>.+?)\s+(?<chapter>\d+)(?::(?<verse>\d+)(?:\s*-\s*(?<verseRange>\d+))?)?\s*$/ui
+   );
+   if (colonMatch?.groups?.book) {
+      const book = colonMatch.groups.book.trim();
+      if (!book) return { error: "book is required" };
+      const chapter = Number.parseInt(colonMatch.groups.chapter, 10);
+      const verse = colonMatch.groups.verse ? Number.parseInt(colonMatch.groups.verse, 10) : undefined;
+      const verseRange = colonMatch.groups.verseRange ? Number.parseInt(colonMatch.groups.verseRange, 10) : undefined;
+      return { book, chapter, verse, verseRange };
+   }
+
+   const spaceMatch = remainder.match(
+      /^(?<book>.+?)\s+(?<chapter>\d+)(?:\s+(?<verse>\d+)(?:\s+(?<verseRange>\d+))?)?\s*$/ui
+   );
+   if (spaceMatch?.groups?.book) {
+      const book = spaceMatch.groups.book.trim();
+      if (!book) return { error: "book is required" };
+      const chapter = Number.parseInt(spaceMatch.groups.chapter, 10);
+      const verse = spaceMatch.groups.verse ? Number.parseInt(spaceMatch.groups.verse, 10) : undefined;
+      const verseRange = spaceMatch.groups.verseRange ? Number.parseInt(spaceMatch.groups.verseRange, 10) : undefined;
+      return { book, chapter, verse, verseRange };
+   }
+
+   return { book: remainder };
 };
 
 const resolveBible = (
-   context: CoreMessage,
+   context: StandardMessage,
    match: RegExpMatchArray | undefined,
    _helpers: QuoteHelpers
-): TriggerResult => {
+): InteractionResult => {
    const content = match?.input ?? context.content;
    const parsed = parseQuery(content);
    if ("error" in parsed) {
       return { results: [{ contents: parsed.error }], modifications: baseModifications };
    }
    const index = loadBibleIndex();
-   const bookKey = parsed.book.toLowerCase();
+   const requestedBook = parsed.book?.trim();
+   if (!requestedBook) {
+      const allVerses: Array<{ bookName: string; verse: BibleVerse }> = [];
+      for (const book of index.books.values()) {
+         for (const verseList of book.chapters.values()) {
+            for (const verseEntry of verseList) {
+               allVerses.push({ bookName: book.name, verse: verseEntry });
+            }
+         }
+      }
+      if (allVerses.length === 0) {
+         return { results: [{ contents: "no verses found in the bible" }], modifications: baseModifications };
+      }
+      const selection = pickRandomFromList(allVerses);
+      return {
+         results: [{ contents: `${selection.bookName} ${selection.verse.ref} - ${selection.verse.text}` }],
+         modifications: baseModifications
+      };
+   }
+
+   const bookKey = requestedBook.toLowerCase();
    const found = index.books.get(bookKey);
    if (!found) {
       return { results: [{ contents: "no such book was found" }], modifications: baseModifications };
@@ -124,7 +166,7 @@ const resolveBible = (
    let end = Math.max(1, Math.min(verseRange ?? verse, total));
    if (start > end) [start, end] = [end, start];
 
-   const results: TriggerResult = { results: [], modifications: baseModifications };
+   const results: InteractionResult = { results: [], modifications: baseModifications };
    if (end - start + 1 > MAX_VERSES_AT_ONCE) {
       end = Math.min(start + MAX_VERSES_AT_ONCE - 1, total);
       results.results.push({ contents: `*only showing ${MAX_VERSES_AT_ONCE} verses*` });

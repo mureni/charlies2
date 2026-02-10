@@ -1,7 +1,7 @@
 import { newRX, escapeRegExp } from "@/utils";
 import { isCommonWord } from "@/core/dictionary";
-import type { CoreMessage, PlatformAdapter, PlatformMemberQuery } from "@/platform";
-import { KnownUsers, KnownUser, Conversation, getKnownUsersSnapshot } from "@/platform/knownUsers";
+import type { StandardMember, StandardMessage, PlatformAdapter, StandardMemberQuery } from "@/contracts";
+import { KnownUsers, KnownUser, Conversation, getKnownUsersSnapshot } from "@/core/knownUsers";
 
 const getEndearment = (plural: boolean = false): string => {
    const synonyms = ["pal", plural ? "buddie" : "buddy", "chum", "compadre", "comrade", "friend", "my friend", "mate", "amigo", "fella", "bro", "broseph", "darling", "sweetheart", "sweetpea", plural ? "honie" : "honey", "sweetie"];
@@ -11,7 +11,7 @@ const getEndearment = (plural: boolean = false): string => {
 
 const MENTION_RX = newRX(`<@!?\\s*(\\d+)>`, "uig");
 
-const lookupMember = async (platform: PlatformAdapter | undefined, guildId: string | undefined, query: PlatformMemberQuery) => {
+const lookupMember = async (platform: PlatformAdapter | undefined, guildId: string | undefined, query: StandardMemberQuery): Promise<StandardMember | undefined> => {
    if (!platform || !platform.fetchMember || !guildId) return undefined;
    return platform.fetchMember(guildId, query);
 };
@@ -54,7 +54,7 @@ const getAliasCache = (): AliasCache => {
    return buildAliasCache(snapshot.entries, snapshot.version);
 };
 
-const interpolateUsers = async (text: string, context: CoreMessage | undefined = undefined, useEndearments: boolean = false): Promise<string> => {
+const interpolateUsers = async (text: string, context: StandardMessage | undefined = undefined, useEndearments: boolean = false): Promise<string> => {
    const snapshot = getKnownUsersSnapshot();
    const { aliasLookup, skipAliases } = getAliasCache();
 

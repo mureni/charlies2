@@ -1,9 +1,10 @@
 import { SQLiteMap } from "@/core/SQLiteCollections";
-import type { CoreMessage } from "@/platform";
-import { checkFilePath, env, escapeRegExp } from "@/utils";
+import type { StandardMessage } from "@/contracts";
+import { checkFilePath, escapeRegExp, getBotName } from "@/utils";
 import type { SwapGroup, SwapMode, SwapRule, SwapScope, SwapScopeRecord } from "./types";
 
-const swapDbPath = checkFilePath("data", `${env("BOT_NAME")}-swaps.sqlite`);
+const BOT_NAME = getBotName();
+const swapDbPath = checkFilePath("data", `${BOT_NAME}-swaps.sqlite`);
 const GROUP_DM_PREFIX = "dm:";
 
 const createRuleId = (): string =>
@@ -55,10 +56,6 @@ class Swaps {
    private static groups = new SQLiteMap<string, SwapGroup>({
       filename: swapDbPath,
       table: "swap_groups"
-   });
-   private static legacy = new SQLiteMap<string, Map<string, string>>({
-      filename: swapDbPath,
-      table: "swaps"
    });
 
    public static groupIdForDm(channelId: string): string {
@@ -207,33 +204,13 @@ class Swaps {
       return removed;
    }
 
-   private static collectLegacyRules(scope: SwapScope, scopeId: string): SwapRule[] {
-      const legacyMap = Swaps.legacy.get(scopeId);
-      if (!legacyMap || legacyMap.size === 0) return [];
-      const now = new Date().toISOString();
-      return Array.from(legacyMap.entries()).map(([pattern, replacement]) => ({
-         id: createRuleId(),
-         scope,
-         scopeId,
-         pattern,
-         replacement: replacement === "<blank>" ? "" : replacement,
-         mode: "word",
-         caseSensitive: false,
-         applyLearn: true,
-         applyRespond: true,
-         enabled: true,
-         createdAt: now,
-         updatedAt: now
-      }));
-   }
-
    private static getScopeRules(scope: SwapScope, scopeId: string): SwapRule[] {
       const record = Swaps.rules.get(buildScopeKey(scope, scopeId));
       if (!record) return [];
       return record.rules;
    }
 
-   private static getApplicableGroupIds(context: CoreMessage): string[] {
+   private static getApplicableGroupIds(context: StandardMessage): string[] {
       const groupIds = new Set<string>();
       if (context.channel?.isGroupDm) {
          groupIds.add(Swaps.groupIdForDm(context.channelId));
@@ -247,7 +224,7 @@ class Swaps {
       return Array.from(groupIds.values()).sort();
    }
 
-   private static getApplicableRules(context: CoreMessage): SwapRule[] {
+   private static getApplicableRules(context: StandardMessage): SwapRule[] {
       const rules: SwapRule[] = [];
       const channelId = context.channelId;
       const guildId = context.guildId;
@@ -256,21 +233,19 @@ class Swaps {
       // Highest precedence first: user -> group -> guild -> channel.
       if (userId) {
          rules.push(...Swaps.getScopeRules("user", userId));
-         rules.push(...Swaps.collectLegacyRules("user", userId));
       }
       for (const groupId of Swaps.getApplicableGroupIds(context)) {
          rules.push(...Swaps.getScopeRules("group", groupId));
       }
       if (guildId) {
          rules.push(...Swaps.getScopeRules("guild", guildId));
-         rules.push(...Swaps.collectLegacyRules("guild", guildId));
       }
       if (channelId) rules.push(...Swaps.getScopeRules("channel", channelId));
 
       return rules;
    }
 
-   public static apply(text: string, context: CoreMessage, phase: "learn" | "respond"): string {
+   public static apply(text: string, context: StandardMessage, phase: "learn" | "respond"): string {
       if (!text) return text;
       const rules = Swaps.getApplicableRules(context);
       if (rules.length === 0) return text;
@@ -295,7 +270,7 @@ class Swaps {
       return output;
    }
 
-   public static getDefaultScope(context: CoreMessage): { scope: SwapScope; scopeId: string } {
+   public static getDefaultScope(context: StandardMessage): { scope: SwapScope; scopeId: string } {
       if (context.channel?.isGroupDm) {
          return { scope: "group", scopeId: Swaps.groupIdForDm(context.channelId) };
       }

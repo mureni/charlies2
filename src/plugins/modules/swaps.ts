@@ -1,6 +1,6 @@
-import type { TriggerResult } from "@/core/triggerTypes";
-import type { CoreMessage, PlatformCommandInteraction } from "@/platform";
-import type { PluginCommand, TriggerPlugin } from "@/plugins/types";
+import type { InteractionResult } from "@/core/interactionTypes";
+import type { StandardMessage, StandardCommandInteraction } from "@/contracts";
+import type { PluginCommand, InteractionPlugin } from "@/plugins/types";
 import { registerSwapFilters, unregisterSwapFilters } from "@/filters/swaps";
 import { Swaps } from "@/filters/swaps/manager";
 import type { SwapScope } from "@/filters/swaps/types";
@@ -48,7 +48,7 @@ const resolveScopeInput = (input: SwapScopeInput): { scope: SwapScope; scopeId: 
    return { scope: resolvedScope, scopeId };
 };
 
-const resolveScopeFromMessage = (context: CoreMessage): { scope: SwapScope; scopeId: string } | Error =>
+const resolveScopeFromMessage = (context: StandardMessage): { scope: SwapScope; scopeId: string } | Error =>
    resolveScopeInput({
       authorId: context.authorId,
       channelId: context.channelId,
@@ -56,7 +56,7 @@ const resolveScopeFromMessage = (context: CoreMessage): { scope: SwapScope; scop
       isGroupDm: Boolean(context.channel?.isGroupDm)
    });
 
-const resolveScopeFromCommand = (interaction: PlatformCommandInteraction, scope?: string, scopeId?: string): { scope: SwapScope; scopeId: string } | Error =>
+const resolveScopeFromCommand = (interaction: StandardCommandInteraction, scope?: string, scopeId?: string): { scope: SwapScope; scopeId: string } | Error =>
    resolveScopeInput({
       scope,
       scopeId,
@@ -65,7 +65,7 @@ const resolveScopeFromCommand = (interaction: PlatformCommandInteraction, scope?
       guildId: interaction.guildId
    });
 
-const executeSwap = async (context: CoreMessage, matches?: RegExpMatchArray): Promise<TriggerResult> => {
+const executeSwap = async (context: StandardMessage, matches?: RegExpMatchArray): Promise<InteractionResult> => {
    const pattern = matches?.groups?.pattern?.trim() ?? "";
    const replacement = matches?.groups?.replacement?.trim() ?? "";
    if (!pattern) {
@@ -95,7 +95,7 @@ const executeSwap = async (context: CoreMessage, matches?: RegExpMatchArray): Pr
    };
 };
 
-const executeUnswap = async (context: CoreMessage, matches?: RegExpMatchArray): Promise<TriggerResult> => {
+const executeUnswap = async (context: StandardMessage, matches?: RegExpMatchArray): Promise<InteractionResult> => {
    const pattern = matches?.groups?.pattern?.trim() ?? "";
    if (!pattern) {
       return { results: [{ contents: "usage: unswap <word> or unswap all" }], modifications: baseModifications };
@@ -116,7 +116,7 @@ const executeUnswap = async (context: CoreMessage, matches?: RegExpMatchArray): 
    return { results: [{ contents: `removed ${removed} swap rule(s) for ${scope} ${scopeId}` }], modifications: baseModifications };
 };
 
-const executeSwapList = async (context: CoreMessage): Promise<TriggerResult> => {
+const executeSwapList = async (context: StandardMessage): Promise<InteractionResult> => {
    const resolved = resolveScopeFromMessage(context);
    if (resolved instanceof Error) {
       return { results: [{ contents: resolved.message }], modifications: baseModifications };
@@ -193,7 +193,7 @@ const swapListCommand: PluginCommand = {
    usage: "swap-list [scope] [scopeId]"
 };
 
-const handleCommand = async (interaction: PlatformCommandInteraction): Promise<void> => {
+const handleCommand = async (interaction: StandardCommandInteraction): Promise<void> => {
    if (interaction.command === "swap") {
       const pattern = String(interaction.options.pattern ?? "").trim();
       const replacement = String(interaction.options.replacement ?? "").trim();
@@ -265,7 +265,7 @@ const handleCommand = async (interaction: PlatformCommandInteraction): Promise<v
    }
 };
 
-const swapPlugin: TriggerPlugin = {
+const swapPlugin: InteractionPlugin = {
    id: "swap",
    name: "Swap words",
    description: "Adds words to a swap list that can be applied when learning or responding.",
@@ -278,7 +278,7 @@ const swapPlugin: TriggerPlugin = {
    onUnload: () => unregisterSwapFilters()
 };
 
-const unswapPlugin: TriggerPlugin = {
+const unswapPlugin: InteractionPlugin = {
    id: "unswap",
    name: "Unswap word",
    description: "Remove a word from the current swap list.",
@@ -287,7 +287,7 @@ const unswapPlugin: TriggerPlugin = {
    execute: executeUnswap
 };
 
-const swapListPlugin: TriggerPlugin = {
+const swapListPlugin: InteractionPlugin = {
    id: "swap-list",
    name: "Swap list",
    description: "Displays the swap list for this context.",

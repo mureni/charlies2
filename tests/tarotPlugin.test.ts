@@ -10,7 +10,8 @@ if (!deckPaths) {
    throw new Error("default deck not found");
 }
 
-const loadDefaultDeck = async () => loadDeck(deckPaths.deckDir, deckPaths.fontPath);
+const loadDefaultDeck = async (): Promise<Awaited<ReturnType<typeof loadDeck>>> =>
+   loadDeck(deckPaths.deckDir, deckPaths.fontPath);
 
 describe("tarot plugin", () => {
    it("normalizes spread ids", () => {

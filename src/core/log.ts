@@ -1,6 +1,6 @@
 import winston from "winston";
 const { createLogger, format, transports } = winston;
-import { DEBUG, env } from "@/utils";
+import { DEBUG, env, envFlag } from "@/utils";
 import util from "util";
 const { combine, colorize, timestamp, printf } = format;
 
@@ -17,8 +17,8 @@ const outputFormat = combine(
 )
 
 export type LogType = "trace" | "debug" | "error" | "warn" | "general";
-const TRACE_FLOW = /^(1|true|yes|on)$/i.test(env("TRACE_FLOW") ?? "");
-const TRACE_CALLSITE = /^(1|true|yes|on)$/i.test(env("TRACE_CALLSITE") ?? "");
+const TRACE_FLOW = envFlag("TRACE_FLOW");
+const TRACE_CALLSITE = envFlag("TRACE_CALLSITE");
 const LOG_LEVEL = env("LOG_LEVEL", (TRACE_FLOW ? "trace" : (DEBUG ? "debug" : "info")));
 const RESOLVED_LOG_LEVEL = LOG_LEVEL === "general" ? "info" : LOG_LEVEL;
 
@@ -60,7 +60,7 @@ class Logger {
          })
       ]
    });
-   public static log(message: unknown = "", type: LogType = (DEBUG ? "debug" : "general")) {
+   public static log(message: unknown = "", type: LogType = (DEBUG ? "debug" : "general")): void {
       if (message === "") return;
       let outputMessage = formatMessage(message).normalize();
       switch (type) {

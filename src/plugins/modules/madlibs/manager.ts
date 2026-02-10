@@ -1,10 +1,9 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import { basename, extname, resolve } from "path";
 import { SQLiteMap } from "@/core/SQLiteCollections";
 import { log } from "@/core/log";
-import { checkFilePath, env } from "@/utils";
 import { resolvePluginPaths } from "@/plugins/paths";
-import type { CoreMessage } from "@/platform";
+import type { StandardMessage } from "@/contracts";
 
 type MadlibPatterns = Set<string>;
 type MadlibVocab = Map<string, Set<string>>;
@@ -83,7 +82,6 @@ interface MadlibCategorySnapshot {
 }
 
 const normalizeCategoryId = (value: string): string => value.trim().toLowerCase();
-const BOT_NAME = (env("BOT_NAME") ?? "").trim() || "chatbot";
 const { resourcesDir, dataDir } = resolvePluginPaths("madlibs");
 const builtinsDir = resolve(resourcesDir, "builtins");
 const baseDir = resolve(resourcesDir, "base");
@@ -99,16 +97,6 @@ const ensureDataFile = (): string => {
    ensureDir(dataDir);
    const currentPath = resolve(dataDir, "madlibs.sqlite");
    if (existsSync(currentPath)) return currentPath;
-   const legacyRoot = checkFilePath("data");
-   const legacyPath = resolve(legacyRoot, `${BOT_NAME}-madlibs.sql`);
-   if (existsSync(legacyPath)) {
-      try {
-         copyFileSync(legacyPath, currentPath);
-      } catch (error: unknown) {
-         const message = error instanceof Error ? error.message : String(error);
-         log(`Madlibs migration copy failed: ${message}`, "warn");
-      }
-   }
    return currentPath;
 };
 
@@ -411,7 +399,7 @@ class Madlibs {
       const merged = Madlibs.getMergedCategory(normalized);
       if (!builtin && !base && !overlay && !merged) return undefined;
 
-      const formatCategory = (cat: MadlibCategory | undefined) => {
+      const formatCategory = (cat: MadlibCategory | undefined): { patterns: string[]; vocab: Record<string, string[]> } | undefined => {
          if (!cat) return undefined;
          const vocab: Record<string, string[]> = {};
          for (const [key, words] of cat.vocab.entries()) {
@@ -423,7 +411,7 @@ class Madlibs {
          };
       };
 
-      const formatTombstones = (tombstones: MadlibTombstones | undefined) => {
+      const formatTombstones = (tombstones: MadlibTombstones | undefined): { patterns: string[]; vocab: Record<string, string[]> } => {
          if (!tombstones) return { patterns: [], vocab: {} };
          const vocab: Record<string, string[]> = {};
          for (const [key, words] of tombstones.vocab.entries()) {
@@ -575,7 +563,7 @@ class Madlibs {
       return true;
    }
 
-   public static isCategoryAllowed(context: CoreMessage, category: string): boolean {
+   public static isCategoryAllowed(context: StandardMessage, category: string): boolean {
       Madlibs.ensureAccessLoaded();
       const channelId = context.channelId;
       const guildId = context.guildId;
@@ -633,7 +621,7 @@ class Madlibs {
       }
 
       const vocab = new Map<string, Set<string>>();
-      const appendVocab = (source?: MadlibVocab) => {
+      const appendVocab = (source?: MadlibVocab): void => {
          if (!source) return;
          for (const [vocabType, words] of source.entries()) {
             const current = vocab.get(vocabType) ?? new Set<string>();

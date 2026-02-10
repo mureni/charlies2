@@ -1,7 +1,7 @@
 import type { FSWatcher } from "fs";
 import { existsSync, readdirSync, statSync, watch } from "fs";
 import { extname, resolve } from "path";
-import type { CoreMessage } from "@/platform";
+import type { StandardMessage } from "@/contracts";
 import { log } from "@/core/log";
 import { checkFilePath } from "@/utils";
 
@@ -12,7 +12,7 @@ interface FilterApplyOptions { skipIds?: string[] }
 interface Filter {
    id: string;
    stage: FilterStage;
-   apply: (text: string, context: CoreMessage, phase: FilterPhase) => string;
+   apply: (text: string, context: StandardMessage, phase: FilterPhase) => string;
 }
 
 interface FilterModule {
@@ -45,7 +45,7 @@ class FilterRegistry {
    public apply(
       stage: FilterStage,
       text: string,
-      context: CoreMessage,
+      context: StandardMessage,
       phase: FilterPhase,
       options?: FilterApplyOptions
    ): string {

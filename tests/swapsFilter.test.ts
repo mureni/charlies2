@@ -4,10 +4,9 @@ import { Swaps } from "@/filters/swaps/manager";
 import { registerSwapFilters, unregisterSwapFilters } from "@/filters/swaps";
 import { createMessage } from "./pluginHarness";
 
-const resetSwapStore = () => {
-   (Swaps as unknown as { rules: { clear: () => void } }).rules.clear();
-   (Swaps as unknown as { groups: { clear: () => void } }).groups.clear();
-   (Swaps as unknown as { legacy: { clear: () => void } }).legacy.clear();
+const resetSwapStore = (): void => {
+   (Swaps as unknown as { rules: { clear: (options?: { backup?: boolean }) => void } }).rules.clear({ backup: false });
+   (Swaps as unknown as { groups: { clear: (options?: { backup?: boolean }) => void } }).groups.clear({ backup: false });
 };
 
 describe("swaps filter", () => {
@@ -27,6 +26,13 @@ describe("swaps filter", () => {
       const list = Filters.list();
       const swaps = list.filter(filter => filter.id === "swaps");
       expect(swaps).toHaveLength(2);
+   });
+
+   it("unregisters swap filters", () => {
+      unregisterSwapFilters();
+      const list = Filters.list();
+      const swaps = list.filter(filter => filter.id === "swaps");
+      expect(swaps).toHaveLength(0);
    });
 
    it("applies swaps only in the correct phase", () => {

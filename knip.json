@@ -1,0 +1,37 @@
+{
+  "entry": [
+    "src/admin-portal/index.ts",
+    "src/admin-portal/harnessWorker.ts",
+    "src/filters/**/*.ts",
+    "src/plugins/modules/**/*.ts",
+    "src/plugins/modules/quotes/sources/*.ts",
+    "tools/**/*.{ts,js}",
+    "tests/**/*.test.ts"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "tools/**/*.{ts,js}"
+  ],
+  "paths": {
+    "@/*": ["src/*"]
+  },
+  "exclude": [
+    "exports",
+    "nsExports",
+    "types",
+    "nsTypes",
+    "classMembers",
+    "enumMembers"
+  ],
+  "ignore": [
+    "coverage/**",
+    "data/**",
+    "dist/**",
+    "docs/**",
+    "resources/**"
+  ],
+  "ignoreDependencies": [
+    "@types/*"
+  ]
+}

@@ -12,9 +12,13 @@ interface DotData {
     explanation: string,
     index: number
 }
+
+interface RgbColor { r: number; g: number; b: number }
+interface RgbaColor { r: number; g: number; b: number; a: number }
+
 class GCPDot {
 
-   public static async fetchGCPDotData() {
+   public static async fetchGCPDotData(): Promise<string> {
       let dotData: string = "";
       try {
          const response = await fetch(DOT_URL);
@@ -37,7 +41,7 @@ class GCPDot {
       const context = canvas.getContext("2d");
       const radius = DOT_SIZE * 0.45;
       const middle = { x: DOT_SIZE / 2, y: DOT_SIZE / 2 };
-      const parseHexColor = (hex: string) => {
+      const parseHexColor = (hex: string): RgbaColor => {
          const normalized = hex.replace("#", "").trim();
          const value = normalized.length === 3
             ? normalized.split("").map((c) => c + c).join("")
@@ -49,9 +53,9 @@ class GCPDot {
          const a = hasAlpha ? parseInt(value.slice(6, 8), 16) / 255 : 1;
          return { r, g, b, a };
       };
-      const toRgba = (color: { r: number, g: number, b: number, a: number }) =>
+      const toRgba = (color: RgbaColor): string =>
          `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
-      const mix = (base: { r: number, g: number, b: number, a: number }, target: { r: number, g: number, b: number }, amount: number) => ({
+      const mix = (base: RgbaColor, target: RgbColor, amount: number): RgbaColor => ({
          r: Math.round(base.r + (target.r - base.r) * amount),
          g: Math.round(base.g + (target.g - base.g) * amount),
          b: Math.round(base.b + (target.b - base.b) * amount),
@@ -130,7 +134,7 @@ class GCPDot {
       return { image: imageData, data: dotResults };
    }
 
-   public static async saveDotImage(filename: string = DOT_FILENAME) {
+   public static async saveDotImage(filename: string = DOT_FILENAME): Promise<void> {
       const dotData = await GCPDot.getDotData();
       writeFileSync(filename, dotData.image);
    }

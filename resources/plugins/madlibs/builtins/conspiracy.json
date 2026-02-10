@@ -108,16 +108,16 @@
     ],
 
     "[nArtifact]": [
-      "a memo",
-      "a policy update",
-      "a fact-check",
-      "a press release",
-      "a dashboard",
-      "a report",
-      "a committee",
-      "a task force",
-      "a transparency page",
-      "a clarification"
+      "memo",
+      "policy update",
+      "fact-check",
+      "press release",
+      "dashboard",
+      "report",
+      "committee",
+      "task force",
+      "transparency page",
+      "clarification"
     ],
 
     "[nRitual]": [

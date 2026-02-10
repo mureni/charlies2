@@ -1,12 +1,12 @@
-import type { CoreMessage } from "@/platform";
-import type { TriggerResult } from "@/core/triggerTypes";
-import type { TriggerPlugin } from "@/plugins/types";
+import type { StandardMessage } from "@/contracts";
+import type { InteractionResult } from "@/core/interactionTypes";
+import type { InteractionPlugin } from "@/plugins/types";
 import { Brain } from "@/core";
 
 const chooseMatcher = /^choose (?:(.+) or (.+))+$/ui;
 
-const execute = async (context: CoreMessage, matches?: RegExpMatchArray): Promise<TriggerResult> => {
-   const output: TriggerResult = { results: [], modifications: { ProcessSwaps: true }, directedTo: undefined };
+const execute = async (context: StandardMessage, matches?: RegExpMatchArray): Promise<InteractionResult> => {
+   const output: InteractionResult = { results: [], modifications: { ProcessSwaps: true }, directedTo: undefined };
    if (!matches || !matches[0]) return output;
 
    const options: string[] = matches[0]
@@ -25,7 +25,7 @@ const execute = async (context: CoreMessage, matches?: RegExpMatchArray): Promis
    return output;
 };
 
-const choosePlugin: TriggerPlugin = {
+const choosePlugin: InteractionPlugin = {
    id: "choose",
    name: "Choose an option",
    description: "Choose an option from a list of possibilities, with commentary on the choice",

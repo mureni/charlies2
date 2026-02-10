@@ -44,4 +44,22 @@ describe("story plugin", () => {
       expect(result.directedTo).toBeUndefined();
       expect(result.results[0].contents).toBe("*whisper*");
    });
+
+   it("returns empty results when matcher is missing", async () => {
+      if (!storyPlugin?.execute) throw new Error("story plugin not available");
+      const message = createMessage({ content: "story" });
+      const result = await storyPlugin.execute(message, undefined);
+      expect(result.results).toHaveLength(0);
+   });
+
+   it("returns a clear message when the brain yields no lines", async () => {
+      if (!storyPlugin?.execute || !storyPlugin.matcher) throw new Error("story plugin not available");
+      vi.spyOn(Math, "random").mockReturnValue(0);
+      vi.spyOn(Brain, "getSeed").mockResolvedValue("");
+      vi.spyOn(Brain, "getResponse").mockResolvedValue("");
+      const message = createMessage({ content: "tell me a story", authorName: "Alex" });
+      const matches = message.content.match(storyPlugin.matcher);
+      const result = await storyPlugin.execute(message, matches ?? undefined);
+      expect(result.results[0].contents).toBe("my brain is empty");
+   });
 });

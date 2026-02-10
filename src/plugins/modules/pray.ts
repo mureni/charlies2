@@ -1,8 +1,8 @@
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import type { CoreMessage } from "@/platform";
-import type { TriggerResult } from "@/core/triggerTypes";
-import type { TriggerPlugin } from "@/plugins/types";
+import type { StandardMessage } from "@/contracts";
+import type { InteractionResult } from "@/core/interactionTypes";
+import type { InteractionPlugin } from "@/plugins/types";
 import { resolvePluginPaths } from "@/plugins/paths";
 
 interface BibleVerse {
@@ -37,8 +37,8 @@ const loadBibleWords = (): string[] => {
 
 const prayMatcher = /^!?pray/ui;
 
-const execute = async (): Promise<TriggerResult> => {
-   const output: TriggerResult = { results: [], modifications: { ProcessSwaps: true }, directedTo: undefined };
+const execute = async (): Promise<InteractionResult> => {
+   const output: InteractionResult = { results: [], modifications: { ProcessSwaps: true }, directedTo: undefined };
    try {
       const allWords = loadBibleWords();
       if (allWords.length === 0) {
@@ -60,14 +60,14 @@ const execute = async (): Promise<TriggerResult> => {
    }
 };
 
-const prayPlugin: TriggerPlugin = {
+const prayPlugin: InteractionPlugin = {
    id: "pray",
    name: "Pray - Talk to God",
    description: "Sends your thoughts to God and retrieves a message in return (orig. by Terry Davis)",
    usage: "pray or !pray",
    icon: "icons/pray.gif",
    matcher: prayMatcher,
-   execute: async (_context: CoreMessage) => execute()
+   execute: async (_context: StandardMessage) => execute()
 };
 
 const plugins = [prayPlugin];

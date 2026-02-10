@@ -1,18 +1,33 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
-import { extname, resolve } from "node:path";
+import { fork, type ChildProcess } from "node:child_process";
+import { createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, extname, relative, resolve } from "node:path";
 import { createGzip } from "node:zlib";
 import { Brain } from "@/core/brain";
 import { BrainOverlays } from "@/core/brainOverlays";
 import { log } from "@/core/log";
-import { env } from "@/utils";
+import { handleCoreCommand, handleCoreMessage, isCoreInitialized, startCoreInitialization } from "@/core/runtime";
+import { checkFilePath, env, envFlag, getBotName } from "@/utils";
 import { Madlibs } from "@/plugins/modules/madlibs/manager";
 import { Swaps } from "@/filters/swaps/manager";
+import { resolvePluginPaths } from "@/plugins/paths";
+import type { PlatformAdapter, StandardChannel, StandardCommandInteraction, StandardMessage, StandardOutgoingMessage } from "@/contracts";
 
 const DEFAULT_PORT = Number(env("ADMIN_PORTAL_PORT", "3140"));
 const DEFAULT_HOST = env("ADMIN_PORTAL_HOST", "127.0.0.1");
-const DEFAULT_PUBLIC_DIR = resolve(env("BOT_ROOT") ?? process.cwd(), "resources", "admin-portal");
+const DEFAULT_PUBLIC_DIR = checkFilePath("resources", "admin-portal");
+const HARNESS_PROXY_TOKEN = (env("HARNESS_PROXY_TOKEN") ?? "").trim();
+const HARNESS_PROXY_HOST = env("HARNESS_PROXY_HOST", "127.0.0.1");
+const HARNESS_PROXY_PORT = env("HARNESS_PROXY_PORT", "3141");
+const HARNESS_PROXY_URL = (() => {
+   const configured = (env("HARNESS_PROXY_URL") ?? "").trim();
+   if (configured) return configured;
+   if (!HARNESS_PROXY_TOKEN) return "";
+   return `http://${HARNESS_PROXY_HOST}:${HARNESS_PROXY_PORT}`;
+})();
+const HAS_HARNESS_PROXY = Boolean(HARNESS_PROXY_URL && HARNESS_PROXY_TOKEN);
+const TRACE_HARNESS_PROXY = envFlag("TRACE_HARNESS_PROXY");
 
 interface PluginInfo { id: string; name: string; script: string }
 
@@ -28,7 +43,12 @@ const contentTypeByExt: Record<string, string> = {
    ".html": "text/html; charset=utf-8",
    ".css": "text/css; charset=utf-8",
    ".js": "text/javascript; charset=utf-8",
-   ".json": "application/json; charset=utf-8"
+   ".json": "application/json; charset=utf-8",
+   ".txt": "text/plain; charset=utf-8",
+   ".md": "text/markdown; charset=utf-8",
+   ".yml": "text/yaml; charset=utf-8",
+   ".yaml": "text/yaml; charset=utf-8",
+   ".csv": "text/csv; charset=utf-8"
 };
 
 interface BrainLexiconItem {
@@ -89,6 +109,286 @@ interface BrainWordDetail {
    ngrams: BrainNgramDetail[];
 }
 
+interface BrainStats {
+   brainName: string;
+   lexiconCount: number;
+   ngramCount: number;
+   chainLength: number;
+   dbBytes: number;
+   overlays: {
+      total: number;
+      contexts: ReturnType<typeof BrainOverlays.listContexts>;
+   };
+}
+
+interface AdminServer {
+   server: http.Server;
+   start: (port?: number) => Promise<number>;
+   stop: () => Promise<void>;
+}
+
+interface ResourceFileInfo {
+   path: string;
+   size: number;
+   ext: string;
+   mime: string;
+   isText: boolean;
+   updatedAt: string;
+}
+
+interface HarnessMessagePayload {
+   id?: string;
+   content: string;
+   authorId?: string;
+   authorName?: string;
+   channelId?: string;
+   channelName?: string;
+   guildId?: string;
+   guildName?: string;
+   scope?: "dm" | "server";
+   isGroupDm?: boolean;
+   memberCount?: number;
+   isBot?: boolean;
+   isSelf?: boolean;
+   mentionsBot?: boolean;
+   isAdmin?: boolean;
+   isBotOwner?: boolean;
+}
+
+interface HarnessCommandPayload {
+   command: string;
+   options?: Record<string, unknown>;
+   userId?: string;
+   channelId?: string;
+   guildId?: string;
+}
+
+interface HarnessOutgoingAttachment {
+   name: string;
+   size: number;
+   contentType?: string;
+}
+
+interface HarnessOutgoingMessage {
+   contents: string;
+   embeds?: StandardOutgoingMessage["embeds"];
+   attachments?: HarnessOutgoingAttachment[];
+   tts?: boolean;
+   error?: StandardOutgoingMessage["error"];
+}
+
+type HarnessMode = "sandbox" | "live" | "proxy";
+
+interface HarnessResponse {
+   process?: unknown;
+   outgoing?: HarnessOutgoingMessage[];
+   typingCount?: number;
+   replies?: HarnessOutgoingMessage[];
+}
+
+const TEXT_EXTENSIONS = new Set([".json", ".txt", ".md", ".yml", ".yaml", ".csv"]);
+const isTextExtension = (ext: string): boolean => TEXT_EXTENSIONS.has(ext);
+const isValidPluginId = (value: string): boolean => /^[a-z0-9][a-z0-9-_]*$/i.test(value);
+
+const getPluginBaseDir = (pluginId: string, type: "resources" | "data"): string => {
+   const paths = resolvePluginPaths(pluginId);
+   return type === "data" ? paths.dataDir : paths.resourcesDir;
+};
+
+const resolvePluginFilePath = (pluginId: string, type: "resources" | "data", filePath: string): string => {
+   const baseDir = getPluginBaseDir(pluginId, type);
+   const resolved = resolve(baseDir, filePath);
+   const relativePath = relative(baseDir, resolved);
+   if (relativePath.startsWith("..") || relativePath === "" || relativePath.includes("..") && relativePath.split(/[\\/]+/).includes("..")) {
+      throw new Error("resolved path escapes base directory");
+   }
+   return resolved;
+};
+
+const listResourceFiles = (baseDir: string): ResourceFileInfo[] => {
+   const files: ResourceFileInfo[] = [];
+   const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+         if (entry.name.startsWith(".")) continue;
+         const fullPath = resolve(dir, entry.name);
+         if (entry.isDirectory()) {
+            walk(fullPath);
+            continue;
+         }
+         if (!entry.isFile()) continue;
+         const stats = statSync(fullPath);
+         const ext = extname(entry.name).toLowerCase();
+         files.push({
+            path: relative(baseDir, fullPath).replace(/\\/g, "/"),
+            size: stats.size,
+            ext,
+            mime: contentTypeByExt[ext] ?? "application/octet-stream",
+            isText: isTextExtension(ext),
+            updatedAt: stats.mtime.toISOString()
+         });
+      }
+   };
+   if (existsSync(baseDir)) {
+      walk(baseDir);
+   }
+   files.sort((a, b) => a.path.localeCompare(b.path));
+   return files;
+};
+
+const serializeOutgoing = (message: StandardOutgoingMessage): HarnessOutgoingMessage => ({
+   contents: message.contents,
+   embeds: message.embeds,
+   attachments: message.attachments?.map((attachment) => ({
+      name: attachment.name,
+      size: attachment.data?.length ?? 0,
+      contentType: attachment.contentType
+   })),
+   tts: message.tts,
+   error: message.error
+});
+
+const createHarnessAdapter = (outbound: HarnessOutgoingMessage[], onTyping?: () => void): PlatformAdapter => ({
+   reply: async () => undefined,
+   sendMessage: async (_channelId, message) => {
+      outbound.push(serializeOutgoing(message));
+   },
+   sendTyping: async () => {
+      if (onTyping) onTyping();
+   },
+   fetchGuilds: async () => [],
+   fetchGuild: async () => undefined,
+   fetchChannels: async () => [],
+   fetchChannel: async () => undefined,
+   fetchMember: async () => undefined,
+   fetchHistory: async () => [],
+   canSend: async () => true
+});
+
+const buildHarnessChannel = (payload: HarnessMessagePayload): StandardChannel => {
+   const scope = payload.scope ?? "server";
+   return {
+      id: payload.channelId ?? "channel-1",
+      name: payload.channelName ?? (scope === "dm" ? "direct" : "general"),
+      type: scope === "dm" ? "dm" : "text",
+      scope,
+      guildId: payload.guildId,
+      supportsText: true,
+      supportsVoice: false,
+      supportsTyping: true,
+      supportsHistory: true,
+      isGroupDm: payload.isGroupDm,
+      memberCount: payload.memberCount
+   };
+};
+
+const buildHarnessMessage = (payload: HarnessMessagePayload, adapter: PlatformAdapter): StandardMessage => {
+   const channel = buildHarnessChannel(payload);
+   return {
+      id: payload.id ?? `harness-${Date.now()}`,
+      content: payload.content,
+      authorId: payload.authorId ?? "user-1",
+      authorName: payload.authorName ?? payload.authorId ?? "User",
+      isBot: Boolean(payload.isBot),
+      isSelf: Boolean(payload.isSelf),
+      channelId: channel.id,
+      channelName: channel.name,
+      channel,
+      guildId: payload.guildId,
+      guildName: payload.guildName,
+      mentionsBot: Boolean(payload.mentionsBot),
+      isAdmin: payload.isAdmin,
+      isBotOwner: payload.isBotOwner,
+      platform: adapter
+   };
+};
+
+const ensureCoreReady = async (): Promise<void> => {
+   if (!isCoreInitialized()) {
+      await startCoreInitialization();
+   }
+};
+
+class SandboxHarness {
+   private worker?: ChildProcess;
+   private pending = new Map<number, { resolve: (value: HarnessResponse) => void; reject: (error: Error) => void }>();
+   private requestId = 0;
+   private tempDir: string;
+
+   public constructor() {
+      const base = resolve(process.cwd(), ".tmp");
+      mkdirSync(base, { recursive: true });
+      this.tempDir = mkdtempSync(resolve(base, "harness-"));
+   }
+
+   public async request(type: "status" | "message" | "command", payload?: unknown): Promise<HarnessResponse> {
+      await this.ensureWorker();
+      const id = ++this.requestId;
+      const worker = this.worker;
+      if (!worker) throw new Error("sandbox harness not available");
+      return new Promise<HarnessResponse>((resolveRequest, rejectRequest) => {
+         this.pending.set(id, { resolve: resolveRequest, reject: rejectRequest });
+         worker.send({ id, type, payload });
+      });
+   }
+
+   public async reset(): Promise<void> {
+      if (this.worker) {
+         this.worker.removeAllListeners();
+         this.worker.kill();
+         this.worker = undefined;
+      }
+   }
+
+   public async stop(): Promise<void> {
+      await this.reset();
+      if (this.tempDir) {
+         rmSync(this.tempDir, { recursive: true, force: true });
+      }
+   }
+
+   private async ensureWorker(): Promise<void> {
+      if (this.worker && !this.worker.killed) return;
+      const { path, isTs } = this.resolveWorkerPath();
+      const env = {
+         ...process.env,
+         NODE_ENV: "test",
+         BOT_NAME: "harness",
+         CHARLIES_DATA_DIR: this.tempDir
+      };
+      const execArgv = isTs
+         ? ["-r", "ts-node/register/transpile-only", "-r", "tsconfig-paths/register"]
+         : [];
+      const worker = fork(path, [], { env, execArgv });
+      worker.on("message", (message: { id?: number; ok?: boolean; result?: HarnessResponse; error?: string }) => {
+         if (!message || typeof message.id !== "number") return;
+         const pending = this.pending.get(message.id);
+         if (!pending) return;
+         this.pending.delete(message.id);
+         if (message.ok) {
+            pending.resolve(message.result ?? {});
+         } else {
+            pending.reject(new Error(message.error ?? "sandbox harness error"));
+         }
+      });
+      worker.on("exit", () => {
+         for (const pending of this.pending.values()) {
+            pending.reject(new Error("sandbox harness exited"));
+         }
+         this.pending.clear();
+      });
+      this.worker = worker;
+   }
+
+   private resolveWorkerPath(): { path: string; isTs: boolean } {
+      const distPath = resolve(checkFilePath("code"), "admin-portal", "harnessWorker.js");
+      if (existsSync(distPath)) {
+         return { path: distPath, isTs: false };
+      }
+      const srcPath = resolve(checkFilePath("code"), "..", "src", "admin-portal", "harnessWorker.ts");
+      return { path: srcPath, isTs: true };
+   }
+}
+
 const sendJson = (res: http.ServerResponse, status: number, payload: unknown): void => {
    const body = JSON.stringify(payload, null, 2);
    res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
@@ -106,8 +406,7 @@ const readBody = async (req: http.IncomingMessage): Promise<string> =>
 
 const ensureBrainSettings = (): void => {
    if (Brain.settings) return;
-   const configuredName = (env("BOT_NAME") ?? "").trim();
-   const preferredName = configuredName ? Brain.botName : "default";
+   const preferredName = getBotName();
    const result = Brain.loadSettings(preferredName);
    if (!(result instanceof Error)) return;
    if (preferredName !== "default") {
@@ -119,15 +418,48 @@ const ensureBrainSettings = (): void => {
    log(`Brain settings not loaded: ${result.message}`, "warn");
 };
 
-const getBrainDbPath = (): string => resolve(env("BOT_ROOT") ?? process.cwd(), "data", `${Brain.botName}.sqlite`);
+const getBrainDbPath = (): string => checkFilePath("data", `${Brain.botName}.sqlite`);
 
-const getDefaultPlugins = (): PluginInfo[] => ([
-   { id: "brain", name: "Brain", script: "/plugins/brain/index.js" },
-   { id: "madlibs", name: "Madlibs", script: "/plugins/madlibs/index.js" },
-   { id: "swaps", name: "Swaps", script: "/plugins/swaps/index.js" }
-]);
+const toDisplayName = (value: string): string => {
+   const trimmed = value.trim().replace(/[-_]+/g, " ");
+   return trimmed
+      .split(" ")
+      .filter(Boolean)
+      .map((word) => word.slice(0, 1).toUpperCase() + word.slice(1))
+      .join(" ");
+};
 
-const buildBrainStats = () => {
+const getDefaultPlugins = (publicDir: string = DEFAULT_PUBLIC_DIR): PluginInfo[] => {
+   const pluginsDir = resolve(publicDir, "plugins");
+   if (!existsSync(pluginsDir)) return [];
+   const plugins: PluginInfo[] = [];
+   for (const entry of readdirSync(pluginsDir)) {
+      if (!entry || entry.startsWith(".")) continue;
+      const entryPath = resolve(pluginsDir, entry);
+      try {
+         if (!statSync(entryPath).isDirectory()) continue;
+      } catch {
+         continue;
+      }
+      const entryScript = resolve(entryPath, "index.js");
+      if (!existsSync(entryScript)) continue;
+      let name = toDisplayName(entry);
+      const manifestPath = resolve(entryPath, "manifest.json");
+      if (existsSync(manifestPath)) {
+         try {
+            const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { name?: string };
+            if (manifest?.name) name = manifest.name;
+         } catch {
+            // Ignore malformed manifests; fall back to the folder name.
+         }
+      }
+      plugins.push({ id: entry, name, script: `/plugins/${entry}/index.js` });
+   }
+   plugins.sort((a, b) => a.name.localeCompare(b.name));
+   return plugins;
+};
+
+const buildBrainStats = (): BrainStats => {
    ensureBrainSettings();
    const dbPath = getBrainDbPath();
    const dbBytes = existsSync(dbPath) ? statSync(dbPath).size : 0;
@@ -545,9 +877,10 @@ const getNgramPage = (options: NgramQueryOptions): BrainNgramPage => {
    };
 };
 
-const createAdminServer = (options: AdminServerOptions = {}) => {
+const createAdminServer = (options: AdminServerOptions = {}): AdminServer => {
    const publicDir = options.publicDir ?? DEFAULT_PUBLIC_DIR;
-   const plugins: PluginInfo[] = options.plugins ?? getDefaultPlugins();
+   const plugins: PluginInfo[] = options.plugins ?? getDefaultPlugins(publicDir);
+   const sandboxHarness = new SandboxHarness();
 
    const serveStatic = (req: http.IncomingMessage, res: http.ServerResponse): void => {
       const url = new URL(req.url ?? "/", "http://localhost");
@@ -914,6 +1247,306 @@ const createAdminServer = (options: AdminServerOptions = {}) => {
       return false;
    };
 
+   const handleHarnessApi = async (req: http.IncomingMessage, res: http.ServerResponse, pathname: string): Promise<boolean> => {
+      if (!pathname.startsWith("/api/harness")) return false;
+      const url = new URL(req.url ?? "", "http://localhost");
+      const mode = (url.searchParams.get("mode") ?? "sandbox") as HarnessMode;
+      const resolvedMode: HarnessMode = mode === "live" || mode === "proxy" ? mode : "sandbox";
+
+      const callProxy = async (path: string, payload?: unknown): Promise<unknown> => {
+         if (!HAS_HARNESS_PROXY) throw new Error("harness proxy is not configured");
+         const base = HARNESS_PROXY_URL.endsWith("/") ? HARNESS_PROXY_URL.slice(0, -1) : HARNESS_PROXY_URL;
+         const url = `${base}${path}`;
+         let response: Awaited<ReturnType<typeof fetch>>;
+         if (TRACE_HARNESS_PROXY) {
+            log(`Harness proxy request: method=${payload ? "POST" : "GET"} url=${url}`, "debug");
+         }
+         try {
+            response = await fetch(url, {
+               method: payload ? "POST" : "GET",
+               headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${HARNESS_PROXY_TOKEN}`
+               },
+               body: payload ? JSON.stringify(payload) : undefined
+            });
+         } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            log(`Harness proxy fetch failed: ${message} url=${url}`, "error");
+            throw new Error(`proxy fetch failed: ${message}`);
+         }
+         if (!response.ok) {
+            const text = await response.text();
+            log(`Harness proxy error: status=${response.status} url=${url} body=${text}`, "error");
+            throw new Error(text || `proxy error (${response.status})`);
+         }
+         const result = await response.json();
+         if (TRACE_HARNESS_PROXY) {
+            log(`Harness proxy response: status=${response.status} url=${url}`, "debug");
+         }
+         return result;
+      };
+
+      const runMessage = async (payload: HarnessMessagePayload): Promise<HarnessResponse> => {
+         if (resolvedMode === "proxy") {
+            const result = await callProxy("/api/harness/message", { message: payload });
+            return (result as { result?: HarnessResponse }).result ?? {};
+         }
+         if (resolvedMode === "sandbox") {
+            return await sandboxHarness.request("message", payload);
+         }
+         await ensureCoreReady();
+         const outgoing: HarnessOutgoingMessage[] = [];
+         let typingCount = 0;
+         const adapter = createHarnessAdapter(outgoing, () => {
+            typingCount += 1;
+         });
+         const message = buildHarnessMessage(payload, adapter);
+         const process = await handleCoreMessage(message);
+         return { process, outgoing, typingCount };
+      };
+
+      const runCommand = async (payload: HarnessCommandPayload): Promise<HarnessResponse> => {
+         if (resolvedMode === "proxy") {
+            const result = await callProxy("/api/harness/command", { command: payload });
+            return (result as { result?: HarnessResponse }).result ?? {};
+         }
+         if (resolvedMode === "sandbox") {
+            return await sandboxHarness.request("command", payload);
+         }
+         await ensureCoreReady();
+         const replies: HarnessOutgoingMessage[] = [];
+         const interaction: StandardCommandInteraction = {
+            command: payload.command,
+            options: payload.options ?? {},
+            userId: payload.userId ?? "user-1",
+            channelId: payload.channelId ?? "channel-1",
+            guildId: payload.guildId,
+            reply: async (message) => {
+               replies.push(serializeOutgoing(message));
+            }
+         };
+         await handleCoreCommand(interaction);
+         return { replies };
+      };
+
+      const runStatus = async (): Promise<Record<string, unknown>> => {
+         if (resolvedMode === "proxy") {
+            if (!HAS_HARNESS_PROXY) {
+               return { mode: "proxy", available: false, error: "proxy not configured" };
+            }
+            try {
+               return await callProxy("/api/harness/status") as Record<string, unknown>;
+            } catch (error) {
+               return {
+                  mode: "proxy",
+                  available: false,
+                  error: error instanceof Error ? error.message : String(error)
+               };
+            }
+         }
+         if (resolvedMode === "sandbox") {
+            const status = await sandboxHarness.request("status");
+            return { mode: "sandbox", ...status };
+         }
+         return {
+            mode: "live",
+            initialized: isCoreInitialized(),
+            botName: Brain.botName,
+            dataDir: process.env.CHARLIES_DATA_DIR ?? "",
+            nodeEnv: process.env.NODE_ENV ?? ""
+         };
+      };
+
+      if (pathname === "/api/harness/status" && req.method === "GET") {
+         const status = await runStatus();
+         sendJson(res, 200, status);
+         return true;
+      }
+      if (pathname === "/api/harness/reset" && req.method === "POST") {
+         if (resolvedMode === "proxy") {
+            sendJson(res, 400, { error: "proxy mode does not support reset" });
+            return true;
+         }
+         if (resolvedMode === "sandbox") {
+            await sandboxHarness.reset();
+         }
+         sendJson(res, 200, { success: true, mode: resolvedMode });
+         return true;
+      }
+      if (pathname === "/api/harness/message" && req.method === "POST") {
+         const raw = await readBody(req);
+         const parsed = JSON.parse(raw || "{}") as { mode?: HarnessMode; message?: HarnessMessagePayload };
+         const messagePayload = parsed.message ?? (parsed as unknown as HarnessMessagePayload);
+         if (!messagePayload?.content) {
+            sendJson(res, 400, { error: "missing message content" });
+            return true;
+         }
+         const result = await runMessage(messagePayload);
+         sendJson(res, 200, { mode: resolvedMode, result });
+         return true;
+      }
+      if (pathname === "/api/harness/command" && req.method === "POST") {
+         const raw = await readBody(req);
+         const parsed = JSON.parse(raw || "{}") as { mode?: HarnessMode; command?: HarnessCommandPayload };
+         const commandPayload = parsed.command ?? (parsed as unknown as HarnessCommandPayload);
+         if (!commandPayload?.command) {
+            sendJson(res, 400, { error: "missing command name" });
+            return true;
+         }
+         const result = await runCommand(commandPayload);
+         sendJson(res, 200, { mode: resolvedMode, result });
+         return true;
+      }
+
+      return false;
+   };
+
+   const handleResourcesApi = async (req: http.IncomingMessage, res: http.ServerResponse, pathname: string): Promise<boolean> => {
+      if (!pathname.startsWith("/api/resources")) return false;
+      const url = new URL(req.url ?? "", "http://localhost");
+      const pluginId = url.searchParams.get("plugin") ?? "";
+      if (!isValidPluginId(pluginId)) {
+         sendJson(res, 400, { error: "invalid plugin id" });
+         return true;
+      }
+      const typeParam = (url.searchParams.get("type") ?? "resources").toLowerCase();
+      if (typeParam !== "resources" && typeParam !== "data") {
+         sendJson(res, 400, { error: "invalid resource type" });
+         return true;
+      }
+      const type = typeParam as "resources" | "data";
+
+      if (pathname === "/api/resources" && req.method === "GET") {
+         const baseDir = getPluginBaseDir(pluginId, type);
+         const files = listResourceFiles(baseDir);
+         sendJson(res, 200, { plugin: pluginId, type, files });
+         return true;
+      }
+
+      if (pathname === "/api/resources/file" && req.method === "GET") {
+         const pathParam = url.searchParams.get("path") ?? "";
+         if (!pathParam) {
+            sendJson(res, 400, { error: "missing path" });
+            return true;
+         }
+         let filePath = "";
+         try {
+            filePath = resolvePluginFilePath(pluginId, type, pathParam);
+         } catch (error) {
+            sendJson(res, 400, { error: error instanceof Error ? error.message : "invalid path" });
+            return true;
+         }
+         if (!existsSync(filePath)) {
+            sendJson(res, 404, { error: "file not found" });
+            return true;
+         }
+         const stats = statSync(filePath);
+         if (!stats.isFile()) {
+            sendJson(res, 400, { error: "path is not a file" });
+            return true;
+         }
+         const ext = extname(filePath).toLowerCase();
+         const isText = isTextExtension(ext);
+         const payload: Record<string, unknown> = {
+            path: pathParam,
+            size: stats.size,
+            ext,
+            mime: contentTypeByExt[ext] ?? "application/octet-stream",
+            isText,
+            updatedAt: stats.mtime.toISOString()
+         };
+         if (isText) {
+            const content = readFileSync(filePath, "utf8");
+            payload.encoding = "utf8";
+            payload.content = content;
+         } else {
+            payload.encoding = "binary";
+            payload.content = null;
+         }
+         sendJson(res, 200, payload);
+         return true;
+      }
+
+      if (pathname === "/api/resources/file" && req.method === "POST") {
+         const raw = await readBody(req);
+         const parsed = JSON.parse(raw || "{}") as {
+            plugin?: string;
+            type?: string;
+            path?: string;
+            content?: string;
+            encoding?: string;
+         };
+         const postPlugin = parsed.plugin ?? pluginId;
+         if (!isValidPluginId(postPlugin)) {
+            sendJson(res, 400, { error: "invalid plugin id" });
+            return true;
+         }
+         const postType = (parsed.type ?? type) as "resources" | "data";
+         if (postType !== "resources" && postType !== "data") {
+            sendJson(res, 400, { error: "invalid resource type" });
+            return true;
+         }
+         const targetPath = parsed.path ?? "";
+         if (!targetPath) {
+            sendJson(res, 400, { error: "missing path" });
+            return true;
+         }
+         if (typeof parsed.content !== "string") {
+            sendJson(res, 400, { error: "missing content" });
+            return true;
+         }
+         const encoding = parsed.encoding === "base64" ? "base64" : "utf8";
+         let filePath = "";
+         try {
+            filePath = resolvePluginFilePath(postPlugin, postType, targetPath);
+         } catch (error) {
+            sendJson(res, 400, { error: error instanceof Error ? error.message : "invalid path" });
+            return true;
+         }
+         mkdirSync(dirname(filePath), { recursive: true });
+         const buffer = encoding === "base64"
+            ? Buffer.from(parsed.content, "base64")
+            : Buffer.from(parsed.content, "utf8");
+         writeFileSync(filePath, buffer);
+         sendJson(res, 200, { success: true });
+         return true;
+      }
+
+      if (pathname === "/api/resources/download" && req.method === "GET") {
+         const pathParam = url.searchParams.get("path") ?? "";
+         if (!pathParam) {
+            sendJson(res, 400, { error: "missing path" });
+            return true;
+         }
+         let filePath = "";
+         try {
+            filePath = resolvePluginFilePath(pluginId, type, pathParam);
+         } catch (error) {
+            sendJson(res, 400, { error: error instanceof Error ? error.message : "invalid path" });
+            return true;
+         }
+         if (!existsSync(filePath)) {
+            sendJson(res, 404, { error: "file not found" });
+            return true;
+         }
+         const stats = statSync(filePath);
+         if (!stats.isFile()) {
+            sendJson(res, 400, { error: "path is not a file" });
+            return true;
+         }
+         const ext = extname(filePath).toLowerCase();
+         res.writeHead(200, {
+            "Content-Type": contentTypeByExt[ext] ?? "application/octet-stream",
+            "Content-Disposition": `attachment; filename="${basename(filePath)}"`
+         });
+         createReadStream(filePath).pipe(res);
+         return true;
+      }
+
+      return false;
+   };
+
    const server = http.createServer(async (req, res) => {
       const url = new URL(req.url ?? "/", "http://localhost");
       const pathname = url.pathname;
@@ -936,6 +1569,14 @@ const createAdminServer = (options: AdminServerOptions = {}) => {
          }
          if (pathname.startsWith("/api/settings/")) {
             const handled = await handleSettingsApi(req, res, pathname);
+            if (handled) return;
+         }
+         if (pathname.startsWith("/api/resources")) {
+            const handled = await handleResourcesApi(req, res, pathname);
+            if (handled) return;
+         }
+         if (pathname.startsWith("/api/harness")) {
+            const handled = await handleHarnessApi(req, res, pathname);
             if (handled) return;
          }
          return serveStatic(req, res);
@@ -962,7 +1603,9 @@ const createAdminServer = (options: AdminServerOptions = {}) => {
 
    const stop = (): Promise<void> =>
       new Promise((resolveStop) => {
-         server.close(() => resolveStop());
+         sandboxHarness.stop().finally(() => {
+            server.close(() => resolveStop());
+         });
       });
 
    return { server, start, stop };

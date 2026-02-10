@@ -1,5 +1,6 @@
-ARG NODE_VERSION=24-bullseye
-FROM node:${NODE_VERSION} AS base
+# Keep in sync with .nvmrc
+ARG NODE_VERSION=24
+FROM node:${NODE_VERSION}-bullseye AS base
 
 ## Install build toolchain, install node deps and compile native add-ons
 #RUN apk add --no-cache make g++ sudo curl jq build-base libpng libpng-dev jpeg-dev pango-dev cairo-dev giflib-dev

@@ -1,21 +1,19 @@
-import { existsSync, readdirSync, readFileSync } from "fs";
-import { Trigger, TriggerResult } from "./triggerTypes";
+import { existsSync, readFileSync } from "fs";
+import { InteractionResult } from "./interactionTypes";
 import { log } from "./log";
-import { PluginRegistry, type PluginCommand, type TriggerPlugin } from "@/plugins";
+import { PluginRegistry, type PluginCommand, type InteractionPlugin } from "@/plugins";
 import { Filters } from "@/filters";
-import { checkFilePath, env } from "@/utils";
+import { registerSwapFilters } from "@/filters/swaps";
+import { checkFilePath, envFlag } from "@/utils";
 import type {
-   CoreMessage,
-   OutgoingAttachment,
-   OutgoingEmbed,
-   OutgoingEmbedField,
-   OutgoingMessage,
-   PlatformCommand
-} from "@/platform";
-import type { PlatformAdapter, PlatformCommandInteraction } from "@/platform";
-
-// TODO: Add "resources" field to allow a plugin to have static resources it can pull from (i.e. dictionaries, image folders, etc.)
-// TODO: Add "data" field to allow a plugin to load and save data -- should also have option to specify whether data applies to server, channel, user, or self
+   StandardMessage,
+   StandardOutgoingAttachment,
+   StandardOutgoingEmbed,
+   StandardOutgoingEmbedField,
+   StandardOutgoingMessage,
+   StandardCommand
+} from "@/contracts";
+import type { PlatformAdapter, StandardCommandInteraction } from "@/contracts";
 
 interface HelpEntry {
    id: string;
@@ -30,46 +28,33 @@ interface HelpEntry {
 }
 
 class InteractionRouter {
-   public static list: Trigger[] = [];
    private static pluginManager = new PluginRegistry();
    private static commandsRegistered = false;
    private static commandsRegistering = false;
    private static commandHandlerRegistered = false;
    private static watching = false;
    
-   public static async initialize(): Promise<Trigger[]> {
-      const triggers: Trigger[] = [];
+   public static async initialize(): Promise<InteractionPlugin[]> {
       await Filters.reload();
-      if (env("FILTERS_WATCH", "false") === "true") {
+      if (envFlag("FILTERS_WATCH")) {
          Filters.startWatching(() => {
-            void Filters.reload();
+            void Filters.reload().then(() => {
+               if (InteractionRouter.pluginManager.getPlugins().some(plugin => plugin.id === "swaps")) {
+                  registerSwapFilters();
+               }
+            });
          });
       }
       InteractionRouter.pluginManager.clear();
-      const triggerFiles = readdirSync(checkFilePath("code", "triggers/"));
-      for (const file of triggerFiles) {
-         const fullPath = checkFilePath("code", `triggers/${file}`);
-         log(`Loading trigger file ${fullPath}...`);
-         await import(fullPath).then((importedTriggers: { triggers: Trigger[] }) => {
-            for (const trigger of importedTriggers.triggers) {
-               log(`Loaded trigger ${trigger.id}`);
-               triggers.push(trigger);
-            }
-         }).catch(error => {
-            log(`Error loading trigger file ${file}: ${error}`, "error");
-         });
-      }
-      InteractionRouter.pluginManager.registerLegacyTriggers(triggers);
       await InteractionRouter.pluginManager.loadFromDist();
-      InteractionRouter.list = InteractionRouter.pluginManager.getLegacyTriggers();
       InteractionRouter.startWatching();
-      return InteractionRouter.list;
+      return InteractionRouter.pluginManager.getPlugins();
    }
 
    public static async registerCommands(platform?: PlatformAdapter): Promise<void> {
       if (InteractionRouter.commandsRegistered || InteractionRouter.commandsRegistering) return;
       if (!platform || !platform.supportsCommands || !platform.registerCommands) return;
-      if (InteractionRouter.list.length === 0) await InteractionRouter.initialize();
+      if (InteractionRouter.pluginManager.getPlugins().length === 0) await InteractionRouter.initialize();
       const commands = InteractionRouter.getRegisteredCommands();
       if (commands.length === 0) return;
       InteractionRouter.commandsRegistering = true;
@@ -77,7 +62,7 @@ class InteractionRouter {
          await platform.registerCommands(commands);
          InteractionRouter.commandsRegistered = true;
          if (platform.onCommand && !InteractionRouter.commandHandlerRegistered) {
-            platform.onCommand(async (interaction: PlatformCommandInteraction) => {
+            platform.onCommand(async (interaction: StandardCommandInteraction) => {
                await InteractionRouter.handleCommand(interaction);
             });
             InteractionRouter.commandHandlerRegistered = true;
@@ -90,9 +75,9 @@ class InteractionRouter {
       }
    }
 
-   public static async handleCommand(interaction: PlatformCommandInteraction): Promise<void> {
-      if (InteractionRouter.list.length === 0) {
-         InteractionRouter.list = await InteractionRouter.initialize();
+   public static async handleCommand(interaction: StandardCommandInteraction): Promise<void> {
+      if (InteractionRouter.pluginManager.getPlugins().length === 0) {
+         await InteractionRouter.initialize();
       }
       if (interaction.command === "help") {
          const request = typeof interaction.options.command === "string"
@@ -111,53 +96,68 @@ class InteractionRouter {
       }
    }
 
-   public static async reload(): Promise<Trigger[]> {
+   public static async reload(): Promise<InteractionPlugin[]> {
       await InteractionRouter.pluginManager.unloadAll();
       InteractionRouter.commandsRegistered = false;
       InteractionRouter.commandsRegistering = false;
-      InteractionRouter.list = [];
       return InteractionRouter.initialize();
    }
 
    public static startWatching(): void {
       if (InteractionRouter.watching) return;
-      if (env("PLUGINS_WATCH", "false") !== "true") return;
+      if (!envFlag("PLUGINS_WATCH")) return;
       InteractionRouter.watching = true;
       InteractionRouter.pluginManager.startWatching(() => {
          void InteractionRouter.reload();
       });
    }
 
-   public static async process(message: CoreMessage): Promise<TriggerResult> {
-
-      if (InteractionRouter.list.length === 0) {
-         InteractionRouter.list = await InteractionRouter.initialize();
+   public static async process(message: StandardMessage): Promise<InteractionResult> {
+      if (InteractionRouter.pluginManager.getPlugins().length === 0) {
+         await InteractionRouter.initialize();
       }
+      const output: InteractionResult = { results: [], modifications: { Case: "unchanged" } };
+      if (message.isBot) return { ...output, triggered: false };
 
       const helpRequest = InteractionRouter.parseHelpRequest(message.content);
       if (helpRequest) {
          const output = InteractionRouter.buildHelpResponse(helpRequest);
          if (output.results.length > 0) return { ...output, triggered: true, triggeredBy: "help" };
       }
-      const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
-      if (message.isBot) return output;
       
       const isAdmin = Boolean(message.isAdmin);
       const isBotOwner = Boolean(message.isBotOwner);
 
-      for (const trigger of InteractionRouter.list) {
-         if (trigger.ownerOnly && !isBotOwner) continue;
-         if (trigger.adminOnly && !(isAdmin || isBotOwner)) continue;
-         const matches = message.content.match(trigger.command);
-         if (!matches) continue;
+      const plugins = InteractionRouter.pluginManager.getPlugins();
+      for (const plugin of plugins) {
+         if (plugin.permissions?.ownerOnly && !isBotOwner) continue;
+         if (plugin.permissions?.adminOnly && !(isAdmin || isBotOwner)) continue;
 
-         const triggerOutput = await trigger.action(message, matches);
-         if (triggerOutput.results.length > 0 || triggerOutput.triggered) {
-            log(`Successful trigger output: ${JSON.stringify(triggerOutput)}`, "debug");
-            return { ...triggerOutput, triggered: true, triggeredBy: trigger.id };
+         if (plugin.matcher && plugin.execute) {
+            const matches = message.content.match(plugin.matcher);
+            if (matches) {
+               const result = await plugin.execute(message, matches);
+               if (result.results.length > 0 || result.triggered) {
+                  log(`Successful interaction output: ${JSON.stringify(result)}`, "debug");
+                  return { ...result, triggered: true, triggeredBy: plugin.id };
+               }
+            }
+         }
+
+         if (plugin.commands && plugin.execute) {
+            for (const command of plugin.commands) {
+               if (!command.fallbackMatcher) continue;
+               const matches = message.content.match(command.fallbackMatcher);
+               if (!matches) continue;
+               const result = await plugin.execute(message, matches);
+               if (result.results.length > 0 || result.triggered) {
+                  log(`Successful interaction output: ${JSON.stringify(result)}`, "debug");
+                  return { ...result, triggered: true, triggeredBy: command.name };
+               }
+            }
          }
       }
-      log(`Trigger output: ${JSON.stringify(output)}`, "debug");
+      log(`Interaction output: ${JSON.stringify(output)}`, "debug");
       return { ...output, triggered: false };
    }
    
@@ -168,8 +168,8 @@ class InteractionRouter {
       return command && command.length > 0 ? command : "commands";
    }
 
-   private static buildHelpResponse(command?: string): TriggerResult {
-      const output: TriggerResult = { results: [], modifications: { Case: "unchanged" } };
+   private static buildHelpResponse(command?: string): InteractionResult {
+      const output: InteractionResult = { results: [], modifications: { Case: "unchanged" } };
       const entries = InteractionRouter.buildHelpEntries();
       if (entries.length === 0) return output;
       const normalized = command?.trim().toLowerCase() ?? "commands";
@@ -180,7 +180,7 @@ class InteractionRouter {
             .map(entry => entry.id)
             .sort((a, b) => a.localeCompare(b));
          if (list.length === 0) return output;
-         const embed: OutgoingEmbed = {
+         const embed: StandardOutgoingEmbed = {
             title: "Available commands",
             description: list.join(", ")
          };
@@ -200,9 +200,9 @@ class InteractionRouter {
          return output;
       }
 
-      const fields: OutgoingEmbedField[] = [{ name: "Usage", value: found.usage }];
+      const fields: StandardOutgoingEmbedField[] = [{ name: "Usage", value: found.usage }];
       if (found.example) fields.push({ name: "Example", value: found.example });
-      const entry: OutgoingEmbed = {
+      const entry: StandardOutgoingEmbed = {
          color: found.ownerOnly ? "RED" : found.adminOnly ? "ORANGE" : "#0099ff",
          title: `${found.ownerOnly ? "Bot Owner Only - " : found.adminOnly ? "Server Admin Only - " : ""}Help for ${found.name}`,
          description: found.description,
@@ -210,10 +210,10 @@ class InteractionRouter {
          fields
       };
 
-      const payload: OutgoingMessage = { contents: "", embeds: [entry] };
+      const payload: StandardOutgoingMessage = { contents: "", embeds: [entry] };
       const attachmentPath = InteractionRouter.resolveHelpIcon(found.icon);
       if (attachmentPath) {
-         const attachment: OutgoingAttachment = {
+         const attachment: StandardOutgoingAttachment = {
             name: "help.png",
             data: readFileSync(attachmentPath)
          };
@@ -242,7 +242,7 @@ class InteractionRouter {
 
    private static registerHelpEntry(
       entries: Map<string, HelpEntry>,
-      plugin: TriggerPlugin,
+      plugin: InteractionPlugin,
       command?: PluginCommand
    ): void {
       const id = command?.name ?? plugin.id;
@@ -277,9 +277,9 @@ class InteractionRouter {
       return existsSync(attachmentPath) ? attachmentPath : null;
    }
 
-   private static getRegisteredCommands(): PlatformCommand[] {
+   private static getRegisteredCommands(): StandardCommand[] {
       const commands = InteractionRouter.pluginManager.getCommands();
-      const helpCommand: PlatformCommand = {
+      const helpCommand: StandardCommand = {
          name: "help",
          description: "Show available commands or details for one command",
          options: [
@@ -298,4 +298,4 @@ class InteractionRouter {
    }
 }
 
-export { TriggerResult, Trigger, InteractionRouter }
+export { InteractionResult, InteractionRouter }

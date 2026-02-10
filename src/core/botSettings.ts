@@ -6,6 +6,7 @@ interface BrainSettings {
    outburstThreshold: number;          /* 0..1 chance of speaking without being spoken to */
    numberOfLines: number;              /* # of lines to speak at once */
    angerLevel: number;                 /* 0..1 chance of yelling */
+   surprise: number;                   /* 0..1 randomness factor for weighted selections */
    angerIncrease: number;              /* multiplier to increase anger if yelled at */
    angerDecrease: number;              /* multiplier to decrease anger if not yelled at */
    recursion: number;                  /* # of times to think about a line before responding */
