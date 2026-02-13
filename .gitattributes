@@ -1,18 +1,4 @@
 * text=auto eol=lf
 *.{cmd,[cC][mM][dD]} text eol=crlf
 *.{bat,[bB][aA][tT]} text eol=crlf
-
-# Exclude non-production assets from git archive exports
-/.devcontainer export-ignore
-/.github export-ignore
-/.review export-ignore
-/.tmp export-ignore
-/.vscode export-ignore
-/coverage export-ignore
-/docs export-ignore
-/report export-ignore
-/reports export-ignore
-/tests export-ignore
-/tools export-ignore
-/src/admin-portal export-ignore
-/resources/admin-portal export-ignore
+/dev export-ignore
