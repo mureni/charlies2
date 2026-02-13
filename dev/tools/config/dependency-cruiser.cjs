@@ -33,7 +33,7 @@ module.exports = {
         orphan: true,
         pathNot: [
           "^src/index\\.ts$",
-          "^src/admin-portal/index\\.ts$",
+          "^dev/admin-portal/index\\.ts$",
           "^src/types/.*\\.d\\.ts$"
         ]
       },

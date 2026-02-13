@@ -9,15 +9,15 @@ export default defineConfig({
    },
    test: {
       environment: "node",
-      setupFiles: ["tests/setup.ts"],
-      include: ["tests/**/*.test.ts"],
+      setupFiles: ["dev/tests/setup.ts"],
+      include: ["dev/tests/**/*.test.ts"],
       typecheck: {
-         include: ["tests/**/*.test.ts"]
+         include: ["dev/tests/**/*.test.ts"]
       },
       coverage: {
          provider: "v8",
          reporter: ["text", "html"],
-         exclude: ["dist/**", "resources/**", "tools/**", "tests/**", "**/*.d.ts"]
+         exclude: ["dist/**", "resources/**", "tools/**", "dev/tests/**", "**/*.d.ts"]
       }
    }
 });

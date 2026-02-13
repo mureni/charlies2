@@ -2,8 +2,8 @@
    "extends": "./tsconfig.json",
    "include": [
       "src/**/*.ts",
-      "tests/**/*.ts",
-      "tools/**/*.ts"
+      "dev/tests/**/*.ts",
+      "dev/tools/**/*.ts"
    ],
    "exclude": [
       "dist",

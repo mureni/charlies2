@@ -6,9 +6,14 @@
 charlies2.zip
 coverage/
 report/
+reports/
 tests/
 src/admin-portal/
 resources/admin-portal/
+tools/config/
+.dependency-cruiser.cjs
+.jscpd.json
+knip.json
 
 # Documentation (hide for now - far too incomplete to publish)
 docs/

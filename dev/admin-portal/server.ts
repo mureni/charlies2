@@ -16,7 +16,7 @@ import type { PlatformAdapter, StandardChannel, StandardCommandInteraction, Stan
 
 const DEFAULT_PORT = Number(env("ADMIN_PORTAL_PORT", "3140"));
 const DEFAULT_HOST = env("ADMIN_PORTAL_HOST", "127.0.0.1");
-const DEFAULT_PUBLIC_DIR = checkFilePath("resources", "admin-portal");
+const DEFAULT_PUBLIC_DIR = resolve(checkFilePath("resources"), "..", "dev", "admin-portal", "resources");
 const HARNESS_PROXY_TOKEN = (env("HARNESS_PROXY_TOKEN") ?? "").trim();
 const HARNESS_PROXY_HOST = env("HARNESS_PROXY_HOST", "127.0.0.1");
 const HARNESS_PROXY_PORT = env("HARNESS_PROXY_PORT", "3141");
@@ -380,11 +380,11 @@ class SandboxHarness {
    }
 
    private resolveWorkerPath(): { path: string; isTs: boolean } {
-      const distPath = resolve(checkFilePath("code"), "admin-portal", "harnessWorker.js");
+      const distPath = resolve(checkFilePath("code"), "..", "dev", "admin-portal", "harnessWorker.js");
       if (existsSync(distPath)) {
          return { path: distPath, isTs: false };
       }
-      const srcPath = resolve(checkFilePath("code"), "..", "src", "admin-portal", "harnessWorker.ts");
+      const srcPath = resolve(checkFilePath("code"), "..", "dev", "admin-portal", "harnessWorker.ts");
       return { path: srcPath, isTs: true };
    }
 }

@@ -9,6 +9,6 @@
   },
   "include": [
     "./src/core/SQLiteCollections.ts",
-    "./tests/sqlite-collections.test.ts"
+    "./dev/tests/sqlite-collections.test.ts"
   ]
 }
