@@ -4,29 +4,29 @@
 .github
 .review
 charlies2.zip
-coverage/
-report/
-reports/
-tests/
-src/admin-portal/
-resources/admin-portal/
-tools/config/
-.dependency-cruiser.cjs
-.jscpd.json
-knip.json
+/coverage/
+/report/
+/reports/
+/tests/
+/src/admin-portal/
+/resources/admin-portal/
+/tools/config/
+/.dependency-cruiser.cjs
+/.jscpd.json
+/knip.json
 
 # Documentation (hide for now - far too incomplete to publish)
-docs/
+/docs/
 
 # Data directory (should contain information at runtime only)
-data
+/data
 
 # Allow package.json and package-lock.json
 !package.json
 !package-lock.json
 
 # Logs
-logs
+/logs
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -40,22 +40,22 @@ pids
 
 
 # Dependency directories
-node_modules/
-dist/
-sourcemaps/
-build/
-.tmp/
+/node_modules/
+/dist/
+/sourcemaps/
+/build/
+/.tmp/
 
 # Optional npm cache directory
-.npm
+/.npm
 
 # Optional eslint cache
-.eslintcache
+/.eslintcache
 
 # dotenv environment variables file
-.env
-.env*
-*.env
+/.env
+/.env*
+/*.env
 
 # Allow example env only
 !example.env
