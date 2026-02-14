@@ -10,7 +10,7 @@ interface BrainSettings {
    angerIncrease: number;              /* multiplier to increase anger if yelled at */
    angerDecrease: number;              /* multiplier to decrease anger if not yelled at */
    recursion: number;                  /* # of times to think about a line before responding */
-   conversationTimeLimit: number;      /* number of seconds to wait for a response */
+   conversationTimeLimit: number;      /* number of milliseconds to wait for a response */
    learnFromBots: boolean;
    secretPlaces?: string[];
 }

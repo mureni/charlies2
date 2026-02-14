@@ -30,6 +30,8 @@ interface HarnessCommandPayload {
    userId?: string;
    channelId?: string;
    guildId?: string;
+   isAdmin?: boolean;
+   isBotOwner?: boolean;
 }
 
 interface HarnessOutgoingAttachment {
@@ -55,6 +57,21 @@ interface HarnessResponse {
 
 const DEFAULT_PROXY_PORT = Number(env("HARNESS_PROXY_PORT", "3141"));
 const DEFAULT_PROXY_HOST = env("HARNESS_PROXY_HOST", "127.0.0.1");
+const DEFAULT_PROXY_MAX_BODY_BYTES = Number(env("HARNESS_PROXY_MAX_BODY_BYTES", "1048576"));
+const MAX_PROXY_BODY_BYTES = Number.isFinite(DEFAULT_PROXY_MAX_BODY_BYTES) && DEFAULT_PROXY_MAX_BODY_BYTES > 0
+   ? DEFAULT_PROXY_MAX_BODY_BYTES
+   : 1048576;
+
+class HarnessHttpError extends Error {
+   public readonly status: number;
+   public readonly clientMessage: string;
+
+   public constructor(status: number, clientMessage: string, internalMessage?: string) {
+      super(internalMessage ?? clientMessage);
+      this.status = status;
+      this.clientMessage = clientMessage;
+   }
+}
 
 const isLocalAddress = (address: string | undefined): boolean => {
    if (!address) return false;
@@ -71,14 +88,48 @@ const getBearerToken = (req: http.IncomingMessage): string => {
    return typeof alt === "string" ? alt.trim() : "";
 };
 
-const readBody = async (req: http.IncomingMessage): Promise<string> =>
-   new Promise((resolveBody) => {
+const readBody = async (req: http.IncomingMessage, maxBytes: number = MAX_PROXY_BODY_BYTES): Promise<string> =>
+   new Promise((resolveBody, rejectBody) => {
       let data = "";
+      let size = 0;
+      let done = false;
+      const fail = (error: Error): void => {
+         if (done) return;
+         done = true;
+         rejectBody(error);
+      };
       req.on("data", chunk => {
-         data += chunk;
+         if (done) return;
+         const bytes = typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.length;
+         size += bytes;
+         if (size > maxBytes) {
+            fail(new HarnessHttpError(413, "payload too large"));
+            req.destroy();
+            return;
+         }
+         data += typeof chunk === "string" ? chunk : chunk.toString("utf8");
       });
-      req.on("end", () => resolveBody(data));
+      req.on("error", error => {
+         const message = error instanceof Error ? error.message : String(error);
+         fail(new HarnessHttpError(400, "invalid request body", message));
+      });
+      req.on("aborted", () => {
+         fail(new HarnessHttpError(400, "request aborted"));
+      });
+      req.on("end", () => {
+         if (done) return;
+         done = true;
+         resolveBody(data);
+      });
    });
+
+const parseJsonBody = <T>(raw: string): T => {
+   try {
+      return JSON.parse(raw || "{}") as T;
+   } catch {
+      throw new HarnessHttpError(400, "invalid JSON payload");
+   }
+};
 
 const sendJson = (res: http.ServerResponse, status: number, payload: unknown): void => {
    const body = JSON.stringify(payload, null, 2);
@@ -180,6 +231,8 @@ const handleCommand = async (payload: HarnessCommandPayload): Promise<HarnessRes
       userId: payload.userId ?? "user-1",
       channelId: payload.channelId ?? "channel-1",
       guildId: payload.guildId,
+      isAdmin: Boolean(payload.isAdmin),
+      isBotOwner: Boolean(payload.isBotOwner),
       reply: async (message) => {
          replies.push(serializeOutgoing(message));
       }
@@ -218,7 +271,7 @@ const createProxyServer = (token: string): http.Server =>
          }
          if (pathname === "/api/harness/message" && req.method === "POST") {
             const raw = await readBody(req);
-            const parsed = JSON.parse(raw || "{}") as { message?: HarnessMessagePayload };
+            const parsed = parseJsonBody<{ message?: HarnessMessagePayload }>(raw);
             if (!parsed.message) {
                sendJson(res, 400, { error: "missing message payload" });
                return;
@@ -229,7 +282,7 @@ const createProxyServer = (token: string): http.Server =>
          }
          if (pathname === "/api/harness/command" && req.method === "POST") {
             const raw = await readBody(req);
-            const parsed = JSON.parse(raw || "{}") as { command?: HarnessCommandPayload };
+            const parsed = parseJsonBody<{ command?: HarnessCommandPayload }>(raw);
             if (!parsed.command) {
                sendJson(res, 400, { error: "missing command payload" });
                return;
@@ -240,9 +293,13 @@ const createProxyServer = (token: string): http.Server =>
          }
          sendJson(res, 404, { error: "not found" });
       } catch (error: unknown) {
+         if (error instanceof HarnessHttpError) {
+            sendJson(res, error.status, { error: error.clientMessage });
+            return;
+         }
          const message = error instanceof Error ? error.message : String(error);
          log(`Harness proxy error: ${message}`, "error");
-         sendJson(res, 500, { error: message });
+         sendJson(res, 500, { error: "internal server error" });
       }
    });
 

@@ -573,6 +573,11 @@ const toStandardCommandInteraction = (interaction: ChatInputCommandInteraction):
          await interaction.reply(payload);
       }
    };
+   const memberPermissions = interaction.memberPermissions;
+   const isAdmin = Boolean(memberPermissions && (
+      memberPermissions.has(PermissionFlagsBits.Administrator)
+      || memberPermissions.has(PermissionFlagsBits.ManageGuild)
+   ));
 
    return {
       command: interaction.commandName,
@@ -580,6 +585,8 @@ const toStandardCommandInteraction = (interaction: ChatInputCommandInteraction):
       userId: interaction.user.id,
       channelId: interaction.channelId,
       guildId: interaction.guildId ?? undefined,
+      isAdmin,
+      isBotOwner: interaction.user.id === env("BOT_OWNER_DISCORD_ID"),
       reply
    };
 };

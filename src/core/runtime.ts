@@ -33,6 +33,7 @@ import { envFlag, requireEnv } from "@/utils";
 
 const mandatoryCoreEnvVars = ["NODE_ENV"];
 const traceFlow = envFlag("TRACE_FLOW");
+const logMessageContent = envFlag("LOG_MESSAGE_CONTENT");
 
 const tracePlatformEvent = (event: StandardEvent, note?: string): void => {
    if (!traceFlow) return;
@@ -558,7 +559,11 @@ const handleCoreMessage = async (message: StandardMessage): Promise<ProcessResul
 
    const channelLabel = message.channelName ?? message.channel?.name ?? message.channelId;
    const messageSource = `${message.guildName ?? "Private"}:#${channelLabel}:${message.authorName}`;
-   log(`<${messageSource}> ${message.content}`);
+   if (logMessageContent) {
+      log(`<${messageSource}> ${message.content}`);
+   } else {
+      log(`Message received from ${messageSource} (len=${message.content.length})`, "debug");
+   }
 
    const results = await processMessage(message);
    if (results.learned) {
@@ -572,7 +577,11 @@ const handleCoreMessage = async (message: StandardMessage): Promise<ProcessResul
    const botResponse = results.response ? (results.directedTo ? `${results.directedTo}: ${results.response}` : results.response) : undefined;
    if (botResponse) {
       const botSource = `${message.guildName ?? "Private"}:#${channelLabel}:${Brain.botName}`;
-      log(`<${botSource}> ${botResponse}`);
+      if (logMessageContent) {
+         log(`<${botSource}> ${botResponse}`);
+      } else {
+         log(`Message sent by ${botSource} (len=${botResponse.length})`, "debug");
+      }
    }
 
    return results;

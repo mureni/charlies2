@@ -137,6 +137,8 @@ export interface StandardCommandInteraction {
    userId: string;
    channelId: string;
    guildId?: string;
+   isAdmin?: boolean;
+   isBotOwner?: boolean;
    reply: (message: StandardOutgoingMessage) => Promise<void>;
 }
 

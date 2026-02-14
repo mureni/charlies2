@@ -6,6 +6,7 @@ import type { SwapGroup, SwapMode, SwapRule, SwapScope, SwapScopeRecord } from "
 const BOT_NAME = getBotName();
 const swapDbPath = checkFilePath("data", `${BOT_NAME}-swaps.sqlite`);
 const GROUP_DM_PREFIX = "dm:";
+const MAX_REGEX_PATTERN_LENGTH = 256;
 
 const createRuleId = (): string =>
    `swap_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -39,13 +40,37 @@ const buildRuleRegex = (rule: SwapRule): RegExp | null => {
    if (!rule.pattern) return null;
    const flags = rule.caseSensitive ? "gu" : "giu";
    if (rule.mode === "regex") {
-      try {
-         return new RegExp(rule.pattern, flags);
-      } catch {
+      const safe = buildSafeRegex(rule.pattern, flags);
+      if (safe instanceof Error) {
          return null;
       }
+      return safe;
    }
    return buildWordRegex(rule.pattern, flags);
+};
+
+const buildSafeRegex = (pattern: string, flags: string): RegExp | Error => {
+   if (pattern.length > MAX_REGEX_PATTERN_LENGTH) {
+      return new Error(`regex pattern too long (max ${MAX_REGEX_PATTERN_LENGTH} characters)`);
+   }
+   // Reject high-risk constructs to avoid regex DoS on message traffic.
+   if (/(^|[^\\])\\[1-9]/u.test(pattern)) {
+      return new Error("regex pattern contains backreferences, which are not allowed");
+   }
+   if (/\(\?<[=!]/u.test(pattern)) {
+      return new Error("regex pattern contains lookbehind, which is not allowed");
+   }
+   if (/\((?:[^()\\]|\\.)*[+*{](?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/u.test(pattern)) {
+      return new Error("regex pattern appears to use nested quantifiers and may be unsafe");
+   }
+   if (/\.\*(?:[+*]|\{\d+(?:,\d*)?\})/u.test(pattern) || /\.\+(?:[+*]|\{\d+(?:,\d*)?\})/u.test(pattern)) {
+      return new Error("regex pattern appears to use repeated wildcard quantifiers and may be unsafe");
+   }
+   try {
+      return new RegExp(pattern, flags);
+   } catch {
+      return new Error("invalid regex pattern");
+   }
 };
 
 class Swaps {
@@ -141,14 +166,22 @@ class Swaps {
       const record: SwapScopeRecord = Swaps.rules.get(scopeKey) ?? { scope: payload.scope, scopeId, rules: [] };
       const now = new Date().toISOString();
       const existingIndex = payload.id ? record.rules.findIndex(rule => rule.id === payload.id) : -1;
+      const existing = existingIndex >= 0 ? record.rules[existingIndex] : undefined;
+      const mode: SwapMode = payload.mode ?? existing?.mode ?? "word";
+      const caseSensitive = payload.caseSensitive ?? existing?.caseSensitive ?? false;
+      if (mode === "regex") {
+         const flags = caseSensitive ? "gu" : "giu";
+         const safe = buildSafeRegex(pattern, flags);
+         if (safe instanceof Error) return safe;
+      }
       const base: SwapRule = existingIndex >= 0 ? record.rules[existingIndex] : {
          id: payload.id ?? createRuleId(),
          scope: payload.scope,
          scopeId,
          pattern,
          replacement: payload.replacement,
-         mode: payload.mode ?? "word",
-         caseSensitive: payload.caseSensitive ?? false,
+         mode,
+         caseSensitive,
          applyLearn: payload.applyLearn ?? true,
          applyRespond: payload.applyRespond ?? true,
          enabled: payload.enabled ?? true,
@@ -161,8 +194,8 @@ class Swaps {
          scopeId,
          pattern,
          replacement: payload.replacement,
-         mode: payload.mode ?? base.mode,
-         caseSensitive: payload.caseSensitive ?? base.caseSensitive,
+         mode,
+         caseSensitive,
          applyLearn: payload.applyLearn ?? base.applyLearn,
          applyRespond: payload.applyRespond ?? base.applyRespond,
          enabled: payload.enabled ?? base.enabled,

@@ -63,6 +63,8 @@ class PluginRegistry {
 
    public async handleCommand(interaction: StandardCommandInteraction): Promise<InteractionResult | null> {
       for (const plugin of this.plugins) {
+         if (plugin.permissions?.ownerOnly && !interaction.isBotOwner) continue;
+         if (plugin.permissions?.adminOnly && !(interaction.isAdmin || interaction.isBotOwner)) continue;
          if (!plugin.commands || plugin.commands.length === 0) continue;
          for (const command of plugin.commands) {
             if (command.hidden || command.name !== interaction.command) continue;

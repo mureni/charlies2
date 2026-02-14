@@ -1,11 +1,14 @@
    
 import Canvas from "canvas";
 import { log } from "@/core/log";
-import { checkFilePath } from "@/utils";
+import { checkFilePath, env } from "@/utils";
 
 import { writeFileSync } from "fs";
 const DOT_FILENAME = checkFilePath("data", "gcpdot.png", true);
-const DOT_URL = "http://gcpdot.com/gcpindex.php?small=1";
+const DEFAULT_GCP_DOT_URL = "https://gcpdot.com/gcpindex.php?small=1";
+// TODO: Replace HTML scraping endpoints with a stable API/cache layer for GCP dot data.
+const DOT_URL = env("GCP_DOT_URL", DEFAULT_GCP_DOT_URL) ?? DEFAULT_GCP_DOT_URL;
+const DOT_FALLBACK_URL = env("GCP_DOT_FALLBACK_URL", "http://gcpdot.com/gcpindex.php?small=1");
 const DOT_SIZE = 50;
 interface DotData {
     color: string,
@@ -19,17 +22,22 @@ interface RgbaColor { r: number; g: number; b: number; a: number }
 class GCPDot {
 
    public static async fetchGCPDotData(): Promise<string> {
-      let dotData: string = "";
-      try {
-         const response = await fetch(DOT_URL);
-         if (response.ok) {
-            dotData = await response.text();
+      const sources = [DOT_URL, DOT_FALLBACK_URL].filter((value, index, all) =>
+         Boolean(value) && all.indexOf(value) === index
+      ) as string[];
+      for (const source of sources) {
+         try {
+            const response = await fetch(source);
+            if (response.ok) {
+               return await response.text();
+            }
+            log(`Unable to fetch GCP dot data from ${source}: status=${response.status}`, "warn");
+         } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            log(`Unable to fetch GCP dot data from ${source}: ${message}`, "warn");
          }
-      } catch (e) {
-         // handle failure to fetch data
-         log(`Unable to fetch GCP dot data: ${JSON.stringify(e, null, 2)}`, "warn");
       }
-      return dotData;
+      return "";
    }
 
    public static async getDotData(): Promise<{ image: Buffer, data: DotData }> {

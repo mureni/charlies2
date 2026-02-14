@@ -27,12 +27,13 @@ interface SwapScopeInput {
    channelId?: string;
    guildId?: string;
    isGroupDm?: boolean;
+   defaultScope?: SwapScope;
 }
 
 const resolveScopeInput = (input: SwapScopeInput): { scope: SwapScope; scopeId: string } | Error => {
    const scopeRaw = input.scope?.trim();
    const scope = scopeRaw ? Swaps.normalizeScope(scopeRaw) : null;
-   const defaultScope: SwapScope = input.isGroupDm ? "group" : (input.guildId ? "guild" : "user");
+   const defaultScope: SwapScope = input.defaultScope ?? (input.isGroupDm ? "group" : (input.guildId ? "guild" : "user"));
    const resolvedScope = scope ?? defaultScope;
    let scopeId = (input.scopeId ?? "").trim();
    if (!scopeId) {
@@ -53,7 +54,10 @@ const resolveScopeFromMessage = (context: StandardMessage): { scope: SwapScope; 
       authorId: context.authorId,
       channelId: context.channelId,
       guildId: context.guildId,
-      isGroupDm: Boolean(context.channel?.isGroupDm)
+      isGroupDm: Boolean(context.channel?.isGroupDm),
+      defaultScope: Boolean(context.channel?.isGroupDm)
+         ? "group"
+         : (context.isAdmin || context.isBotOwner ? "guild" : "user")
    });
 
 const resolveScopeFromCommand = (interaction: StandardCommandInteraction, scope?: string, scopeId?: string): { scope: SwapScope; scopeId: string } | Error =>
@@ -62,8 +66,18 @@ const resolveScopeFromCommand = (interaction: StandardCommandInteraction, scope?
       scopeId,
       authorId: interaction.userId,
       channelId: interaction.channelId,
-      guildId: interaction.guildId
+      guildId: interaction.guildId,
+      defaultScope: interaction.guildId ? "guild" : "user"
    });
+
+const canManageScopeFromMessage = (context: StandardMessage, scope: SwapScope, scopeId: string): boolean => {
+   if (context.isBotOwner || context.isAdmin) return true;
+   if (scope === "user") return scopeId === context.authorId;
+   if (scope === "group" && context.channel?.isGroupDm) {
+      return scopeId === Swaps.groupIdForDm(context.channelId);
+   }
+   return false;
+};
 
 const executeSwap = async (context: StandardMessage, matches?: RegExpMatchArray): Promise<InteractionResult> => {
    const pattern = matches?.groups?.pattern?.trim() ?? "";
@@ -76,6 +90,12 @@ const executeSwap = async (context: StandardMessage, matches?: RegExpMatchArray)
       return { results: [{ contents: resolved.message }], modifications: baseModifications };
    }
    const { scope, scopeId } = resolved;
+   if (!canManageScopeFromMessage(context, scope, scopeId)) {
+      return {
+         results: [{ contents: "insufficient permissions for that scope; use user scope or ask an admin" }],
+         modifications: baseModifications
+      };
+   }
    const rule = Swaps.saveRule({
       scope,
       scopeId,
@@ -105,6 +125,12 @@ const executeUnswap = async (context: StandardMessage, matches?: RegExpMatchArra
       return { results: [{ contents: resolved.message }], modifications: baseModifications };
    }
    const { scope, scopeId } = resolved;
+   if (!canManageScopeFromMessage(context, scope, scopeId)) {
+      return {
+         results: [{ contents: "insufficient permissions for that scope; use user scope or ask an admin" }],
+         modifications: baseModifications
+      };
+   }
    if (pattern.toLowerCase() === "all" || pattern.toLowerCase() === "<all>") {
       Swaps.clearScope(scope, scopeId);
       return { results: [{ contents: `cleared swap rules for ${scope} ${scopeId}` }], modifications: baseModifications };
@@ -132,6 +158,7 @@ const executeSwapList = async (context: StandardMessage): Promise<InteractionRes
 const swapCommand: PluginCommand = {
    name: "swap",
    description: "Create or update a swap rule.",
+   permissions: ["MANAGE_GUILD"],
    options: [
       { name: "pattern", description: "Pattern to replace", type: "string", required: true },
       { name: "replacement", description: "Replacement text", type: "string", required: true },
@@ -164,6 +191,7 @@ const swapCommand: PluginCommand = {
 const swapRemoveCommand: PluginCommand = {
    name: "swap-remove",
    description: "Remove swap rules by pattern or clear scope.",
+   permissions: ["MANAGE_GUILD"],
    options: [
       { name: "pattern", description: "Pattern to remove", type: "string", required: false },
       { name: "all", description: "Clear all rules for scope", type: "boolean", required: false },
