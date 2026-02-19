@@ -59,13 +59,33 @@ interface WeightedRandOptions {
    rng?: () => number;
    surprise?: number;
 }
-const weightedRandFrom = <T>(
+interface WeightedRandTraceCandidate<T> {
+   value: T;
+   weight: number;
+   logWeight: number;
+   gumbel: number;
+   score: number;
+}
+interface WeightedRandTrace<T> {
+   surprise: number;
+   scale: number;
+   candidateCount: number;
+   candidates: WeightedRandTraceCandidate<T>[];
+   winner?: WeightedRandTraceCandidate<T>;
+}
+interface WeightedRandTraceResult<T> {
+   value: T | undefined;
+   trace: WeightedRandTrace<T>;
+}
+const weightedRandFromWithTrace = <T>(
    weights: Map<T, number> | WeightedValue<T>[],
    rngOrOptions: (() => number) | WeightedRandOptions = Math.random
-): T | undefined => {
+): WeightedRandTraceResult<T> => {
    const options: WeightedRandOptions = typeof rngOrOptions === "function" ? { rng: rngOrOptions } : rngOrOptions;
    const rng = options.rng ?? Math.random;
-   const surprise = clamp(options.surprise ?? 0, 0, 1);
+   const rawSurprise = options.surprise;
+   const surpriseSource = typeof rawSurprise === "number" && Number.isFinite(rawSurprise) ? rawSurprise : 0;
+   const surprise = clamp(surpriseSource, 0, 1);
    const scale = 1 - surprise;
    const safeRandom = (): number => {
       const value = rng();
@@ -74,38 +94,61 @@ const weightedRandFrom = <T>(
       return value;
    };
    const gumbel = (): number => -Math.log(-Math.log(safeRandom()));
-   const scoreWeight = (weight: number): number => (scale === 0 ? 0 : Math.log(weight) * scale) + gumbel();
+
+   const candidates: WeightedRandTraceCandidate<T>[] = [];
+   const scoreWeight = (value: T, weight: number): void => {
+      if (!Number.isFinite(weight) || weight <= 0) return;
+      const logWeight = scale === 0 ? 0 : Math.log(weight) * scale;
+      const gumbelNoise = gumbel();
+      candidates.push({
+         value,
+         weight,
+         logWeight,
+         gumbel: gumbelNoise,
+         score: logWeight + gumbelNoise
+      });
+   };
 
    if (weights instanceof Map) {
-      let bestValue: T | undefined;
-      let bestScore = -Infinity;
-      let found = false;
       for (const [value, weight] of weights.entries()) {
-         if (weight <= 0) continue;
-         const score = scoreWeight(weight);
-         if (!found || score > bestScore) {
-            bestScore = score;
-            bestValue = value;
-            found = true;
-         }
+         scoreWeight(value, weight);
       }
-      return found ? bestValue : undefined;
+   } else {
+      for (const entry of weights) {
+         scoreWeight(entry.value, entry.weight);
+      }
    }
 
-   let bestValue: T | undefined = weights[0]?.value;
+   let winner: WeightedRandTraceCandidate<T> | undefined;
    let bestScore = -Infinity;
-   let found = false;
-   for (const entry of weights) {
-      if (entry.weight <= 0) continue;
-      const score = scoreWeight(entry.weight);
-      if (!found || score > bestScore) {
-         bestScore = score;
-         bestValue = entry.value;
-         found = true;
+   for (const candidate of candidates) {
+      if (winner === undefined || candidate.score > bestScore) {
+         winner = candidate;
+         bestScore = candidate.score;
       }
    }
-   return found ? bestValue : weights[0]?.value;
+   const rankedCandidates = candidates.slice().sort((a, b) => b.score - a.score);
+
+   let fallbackValue: T | undefined;
+   if (winner === undefined && !(weights instanceof Map)) {
+      fallbackValue = weights[0]?.value;
+   }
+
+   return {
+      value: winner?.value ?? fallbackValue,
+      trace: {
+         surprise,
+         scale,
+         candidateCount: candidates.length,
+         candidates: rankedCandidates,
+         winner
+      }
+   };
 };
+const weightedRandFrom = <T>(
+   weights: Map<T, number> | WeightedValue<T>[],
+   rngOrOptions: (() => number) | WeightedRandOptions = Math.random
+): T | undefined => weightedRandFromWithTrace(weights, rngOrOptions).value;
 
 const escapeRegExp = (rxString: string): string => RegExp.escape(rxString);
 
@@ -145,4 +188,19 @@ const DEBUG =
    || envFlag("DISCORD_DEBUG")
    || envFlag("TRACE_CALLSITE");
 
-export { initEnvConfig, env, envFlag, requireEnv, getBotName, checkFilePath, escapeRegExp, newRX, clamp, randFrom, weightedRandFrom, DEBUG };
+export {
+   initEnvConfig,
+   env,
+   envFlag,
+   requireEnv,
+   getBotName,
+   checkFilePath,
+   escapeRegExp,
+   newRX,
+   clamp,
+   randFrom,
+   weightedRandFrom,
+   weightedRandFromWithTrace,
+   DEBUG
+};
+export type { WeightedRandOptions, WeightedRandTrace, WeightedRandTraceCandidate, WeightedRandTraceResult };

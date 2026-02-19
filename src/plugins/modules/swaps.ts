@@ -163,11 +163,11 @@ const swapCommand: PluginCommand = {
       { name: "pattern", description: "Pattern to replace", type: "string", required: true },
       { name: "replacement", description: "Replacement text", type: "string", required: true },
       { name: "scope", description: "user | group | guild | channel", type: "string", required: false },
-      { name: "scopeId", description: "Scope id (optional)", type: "string", required: false },
+      { name: "scope_id", description: "Scope id (optional)", type: "string", required: false },
       { name: "mode", description: "word | regex", type: "string", required: false },
-      { name: "caseSensitive", description: "Case sensitive", type: "boolean", required: false },
-      { name: "applyLearn", description: "Apply on learn", type: "boolean", required: false },
-      { name: "applyRespond", description: "Apply on respond", type: "boolean", required: false },
+      { name: "case_sensitive", description: "Case sensitive", type: "boolean", required: false },
+      { name: "apply_learn", description: "Apply on learn", type: "boolean", required: false },
+      { name: "apply_respond", description: "Apply on respond", type: "boolean", required: false },
       { name: "enabled", description: "Rule enabled", type: "boolean", required: false }
    ],
    usage: "swap <pattern> <replacement> [scope] [scopeId]",
@@ -178,11 +178,11 @@ const swapCommand: PluginCommand = {
          { name: "pattern", label: "Pattern", type: "string", required: true, placeholder: "fudge" },
          { name: "replacement", label: "Replacement", type: "string", required: true, placeholder: "frick" },
          { name: "scope", label: "Scope (user/group/guild/channel)", type: "string", required: false },
-         { name: "scopeId", label: "Scope Id", type: "string", required: false },
+         { name: "scope_id", label: "Scope Id", type: "string", required: false },
          { name: "mode", label: "Mode (word/regex)", type: "string", required: false },
-         { name: "caseSensitive", label: "Case sensitive", type: "boolean", required: false },
-         { name: "applyLearn", label: "Apply on learn", type: "boolean", required: false },
-         { name: "applyRespond", label: "Apply on respond", type: "boolean", required: false },
+         { name: "case_sensitive", label: "Case sensitive", type: "boolean", required: false },
+         { name: "apply_learn", label: "Apply on learn", type: "boolean", required: false },
+         { name: "apply_respond", label: "Apply on respond", type: "boolean", required: false },
          { name: "enabled", label: "Enabled", type: "boolean", required: false }
       ]
    }
@@ -196,7 +196,7 @@ const swapRemoveCommand: PluginCommand = {
       { name: "pattern", description: "Pattern to remove", type: "string", required: false },
       { name: "all", description: "Clear all rules for scope", type: "boolean", required: false },
       { name: "scope", description: "user | group | guild | channel", type: "string", required: false },
-      { name: "scopeId", description: "Scope id (optional)", type: "string", required: false }
+      { name: "scope_id", description: "Scope id (optional)", type: "string", required: false }
    ],
    usage: "swap-remove [pattern] [scope] [scopeId]",
    form: {
@@ -206,7 +206,7 @@ const swapRemoveCommand: PluginCommand = {
          { name: "pattern", label: "Pattern", type: "string", required: false, placeholder: "fudge" },
          { name: "all", label: "Clear all rules in scope", type: "boolean", required: false },
          { name: "scope", label: "Scope (user/group/guild/channel)", type: "string", required: false },
-         { name: "scopeId", label: "Scope Id", type: "string", required: false }
+         { name: "scope_id", label: "Scope Id", type: "string", required: false }
       ]
    }
 };
@@ -216,7 +216,7 @@ const swapListCommand: PluginCommand = {
    description: "List swap rules for a scope.",
    options: [
       { name: "scope", description: "user | group | guild | channel", type: "string", required: false },
-      { name: "scopeId", description: "Scope id (optional)", type: "string", required: false }
+      { name: "scope_id", description: "Scope id (optional)", type: "string", required: false }
    ],
    usage: "swap-list [scope] [scopeId]"
 };
@@ -229,7 +229,8 @@ const handleCommand = async (interaction: StandardCommandInteraction): Promise<v
          await interaction.reply({ contents: "pattern is required" });
          return;
       }
-      const resolved = resolveScopeFromCommand(interaction, String(interaction.options.scope ?? ""), String(interaction.options.scopeId ?? ""));
+      const scopeId = interaction.options.scope_id ?? interaction.options.scopeId;
+      const resolved = resolveScopeFromCommand(interaction, String(interaction.options.scope ?? ""), String(scopeId ?? ""));
       if (resolved instanceof Error) {
          await interaction.reply({ contents: resolved.message });
          return;
@@ -241,9 +242,13 @@ const handleCommand = async (interaction: StandardCommandInteraction): Promise<v
          pattern,
          replacement,
          mode: modeRaw === "regex" ? "regex" : "word",
-         caseSensitive: Boolean(interaction.options.caseSensitive),
-         applyLearn: interaction.options.applyLearn === undefined ? true : Boolean(interaction.options.applyLearn),
-         applyRespond: interaction.options.applyRespond === undefined ? true : Boolean(interaction.options.applyRespond),
+         caseSensitive: Boolean(interaction.options.case_sensitive ?? interaction.options.caseSensitive),
+         applyLearn: (interaction.options.apply_learn ?? interaction.options.applyLearn) === undefined
+            ? true
+            : Boolean(interaction.options.apply_learn ?? interaction.options.applyLearn),
+         applyRespond: (interaction.options.apply_respond ?? interaction.options.applyRespond) === undefined
+            ? true
+            : Boolean(interaction.options.apply_respond ?? interaction.options.applyRespond),
          enabled: interaction.options.enabled === undefined ? true : Boolean(interaction.options.enabled)
       });
       if (rule instanceof Error) {
@@ -256,7 +261,8 @@ const handleCommand = async (interaction: StandardCommandInteraction): Promise<v
    if (interaction.command === "swap-remove") {
       const pattern = String(interaction.options.pattern ?? "").trim();
       const clearAll = Boolean(interaction.options.all);
-      const resolved = resolveScopeFromCommand(interaction, String(interaction.options.scope ?? ""), String(interaction.options.scopeId ?? ""));
+      const scopeId = interaction.options.scope_id ?? interaction.options.scopeId;
+      const resolved = resolveScopeFromCommand(interaction, String(interaction.options.scope ?? ""), String(scopeId ?? ""));
       if (resolved instanceof Error) {
          await interaction.reply({ contents: resolved.message });
          return;
@@ -279,7 +285,8 @@ const handleCommand = async (interaction: StandardCommandInteraction): Promise<v
       return;
    }
    if (interaction.command === "swap-list") {
-      const resolved = resolveScopeFromCommand(interaction, String(interaction.options.scope ?? ""), String(interaction.options.scopeId ?? ""));
+      const scopeId = interaction.options.scope_id ?? interaction.options.scopeId;
+      const resolved = resolveScopeFromCommand(interaction, String(interaction.options.scope ?? ""), String(scopeId ?? ""));
       if (resolved instanceof Error) {
          await interaction.reply({ contents: resolved.message });
          return;

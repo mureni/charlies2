@@ -8,6 +8,13 @@
 |                      | (NB: Avoid using non-ascii characters to prevent unexpected behavior)  |
 | NODE_ENV             | Node Environment: "production" or "development"                        |
 
+# Optional environmental variables
+
+| Variable          | Type of Value                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| TOPIC_MEMORY_SALT | Salt used to anonymize user IDs in temporal topic memory; if unset, topic memory is disabled (fail-closed). |
+| TRACE_SURPRISE    | Enable debug traces for surprise-based next/previous token selection in response generation (`true`/`1`).    |
+
 
 
 
@@ -26,6 +33,10 @@ The following are the required values for the bot settings:
 | angerDecrease         | 0.01 - 10.0      | 0.8           | Value that the AngerLevel will be multipled by if the bot does not witness yelling                    |
 | recursion             | 0 - 100          | 1             | Number of times the output of the bot is sent back in as input (for self-reinforcement learning)      |
 | conversationTimeLimit | 0 - 100000       | 7000          | Number of milliseconds the bot will wait for a additional input without requiring its name to be said |
+| topicMemoryTtlMinutes | 1 - 1440         | 20            | Minutes a remembered topic stays active for a user+channel                                              |
+| topicMemoryMaxInteractions | 1 - 1000    | 8             | Maximum number of personality-response generations before topic memory expires                           |
+| topicMemoryBiasStrength | 0.0 - 1.0      | 0.8           | Chance to bias seed selection toward remembered topic keywords while memory is active                   |
+| topicMemoryKeywordCount | 1 - 5          | 3             | Number of ranked keywords extracted from user input when refreshing topic memory                         |
 | learnFromBots         | true / false     | false         | Whether the bot will learn from other bots, or ignore them                                            |
 
 # Validation

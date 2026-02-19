@@ -7,6 +7,10 @@
     "angerDecrease": 0.8,
     "recursion": 1,
     "conversationTimeLimit": 3,
+    "topicMemoryTtlMinutes": 20,
+    "topicMemoryMaxInteractions": 8,
+    "topicMemoryBiasStrength": 0.8,
+    "topicMemoryKeywordCount": 3,
     "conversationMemoryLength": 600,
     "learnFromBots": false,
     "secretPlaces": [

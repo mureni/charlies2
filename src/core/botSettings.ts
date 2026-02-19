@@ -11,6 +11,10 @@ interface BrainSettings {
    angerDecrease: number;              /* multiplier to decrease anger if not yelled at */
    recursion: number;                  /* # of times to think about a line before responding */
    conversationTimeLimit: number;      /* number of milliseconds to wait for a response */
+   topicMemoryTtlMinutes: number;      /* topic memory time-to-live in minutes */
+   topicMemoryMaxInteractions: number; /* topic memory interactions remaining before expiration */
+   topicMemoryBiasStrength: number;    /* 0..1 chance to prefer remembered topic seed when active */
+   topicMemoryKeywordCount: number;    /* number of topic keywords extracted per update (1..5) */
    learnFromBots: boolean;
    secretPlaces?: string[];
 }

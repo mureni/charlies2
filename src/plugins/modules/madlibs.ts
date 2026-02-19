@@ -95,7 +95,7 @@ const baseCommands: PluginCommand[] = [
    },
    {
       name: "madlib-add-word",
-      description: "Adds a word of <type> to the madlib generator for <category>. Supports # or [####], [A-Z], [a-z], {2,4}.",
+      description: "Adds a word of <type> to madlibs for <category>. Supports #, [####], [A-Z], [a-z], {2,4}.",
       usage: "madlib-add-word <category> <type> <word>",
       example: "madlib-add-word general noun INC-####",
       fallbackMatcher: madlibAddWordMatcher,

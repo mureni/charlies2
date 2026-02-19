@@ -19,6 +19,7 @@ export interface InteractionPlugin {
    name: string;
    description: string;
    usage: string;
+   hidden?: boolean;
    matcher?: RegExp;
    execute?: (context: StandardMessage, matches?: RegExpMatchArray) => InteractionResult | Promise<InteractionResult>;
    permissions?: PluginPermissions;

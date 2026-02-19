@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import { InteractionResult } from "./interactionTypes";
 import { log } from "./log";
+import { summarizeInteractionResultForLog } from "./interactionLogSummary";
 import { PluginRegistry, type PluginCommand, type InteractionPlugin } from "@/plugins";
 import { Filters } from "@/filters";
 import { registerSwapFilters } from "@/filters/swaps";
@@ -138,7 +139,10 @@ class InteractionRouter {
             if (matches) {
                const result = await plugin.execute(message, matches);
                if (result.results.length > 0 || result.triggered) {
-                  log(`Successful interaction output: ${JSON.stringify(result)}`, "debug");
+                  log({
+                     message: "Successful interaction output",
+                     data: summarizeInteractionResultForLog(result)
+                  }, "debug");
                   return { ...result, triggered: true, triggeredBy: plugin.id };
                }
             }
@@ -151,13 +155,19 @@ class InteractionRouter {
                if (!matches) continue;
                const result = await plugin.execute(message, matches);
                if (result.results.length > 0 || result.triggered) {
-                  log(`Successful interaction output: ${JSON.stringify(result)}`, "debug");
+                  log({
+                     message: "Successful interaction output",
+                     data: summarizeInteractionResultForLog(result)
+                  }, "debug");
                   return { ...result, triggered: true, triggeredBy: command.name };
                }
             }
          }
       }
-      log(`Interaction output: ${JSON.stringify(output)}`, "debug");
+      log({
+         message: "Interaction output",
+         data: summarizeInteractionResultForLog(output)
+      }, "debug");
       return { ...output, triggered: false };
    }
    
@@ -229,6 +239,7 @@ class InteractionRouter {
       const entries = new Map<string, HelpEntry>();
       const plugins = InteractionRouter.pluginManager.getPlugins();
       for (const plugin of plugins) {
+         if (plugin.hidden) continue;
          if (plugin.commands) {
             for (const command of plugin.commands) {
                if (command.hidden) continue;

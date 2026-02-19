@@ -72,12 +72,12 @@ const resolveJoke = async (
 const jokeSource: QuoteSource = {
    id: "joke",
    name: "Joke",
-   description: "Tell a random joke (optionally about a topic). Also responds to 'tell <person> a joke [about topic]'.",
+   description: "Tell a random joke (optionally about a topic). Also responds to direct joke requests.",
    matcher: jokeMatcher,
    icon: "plugins/quotes/joke.png",
    command: {
       name: "joke",
-      description: "Tell a random joke (optionally about a topic). Also responds to 'tell <person> a joke [about topic]'.",
+      description: "Tell a random joke (optionally about a topic). Also responds to direct joke requests.",
       options: [
          {
             name: "topic",

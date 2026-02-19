@@ -4,10 +4,12 @@ import { log } from "./log";
 import { Filters } from "@/filters";
 import { InteractionRouter } from "./interactionRouter";
 import type { ModificationType, InteractionResult } from "./interactionTypes";
+import { summarizeInteractionResultForLog } from "./interactionLogSummary";
 import { shouldRespond as shouldRespondDecision, shouldYell as shouldYellDecision } from "./responseDecision";
 import { envFlag, escapeRegExp, newRX, randFrom } from "@/utils";
 import type { StandardMessage, StandardOutgoingMessage, StandardOutgoingMessage as PlatformOutgoingMessage } from "@/contracts";
 import { touchKnownUser, saveKnownUser } from "@/core/knownUsers";
+import { consumeTopicMemoryKeywords, updateTopicMemory, getTopicMemoryBiasStrength } from "@/core/topicMemory";
 
 
 // Maximum length of discord message
@@ -84,7 +86,10 @@ const processMessage = async (message: StandardMessage): Promise<ProcessResults>
 
    const processed: InteractionResult = await InteractionRouter.process(message);
    await InteractionRouter.registerCommands(platform);
-   log(`Interaction results: ${JSON.stringify(processed)}`, "debug");
+   log({
+      message: "Interaction results",
+      data: summarizeInteractionResultForLog(processed)
+   }, "debug");
 
    if (processed.error) {
       log(processed.error.message, "error");
@@ -224,6 +229,15 @@ const processPersonalityResponse = async (
       saveKnownUser(message.authorId, user, { bump: false });
 
       let response = "";
+      const rememberedTopicKeywords = consumeTopicMemoryKeywords({
+         userId: message.authorId,
+         channelId: message.channelId
+      });
+      if (rememberedTopicKeywords.length > 0 && Math.random() < getTopicMemoryBiasStrength(Brain.settings)) {
+         const lexiconKeywords = rememberedTopicKeywords.filter((keyword) => Brain.lexicon.has(keyword));
+         const rememberedSeed = randFrom(lexiconKeywords);
+         if (rememberedSeed) seed = rememberedSeed;
+      }
       if (!seed) seed = await Brain.getSeed(preBrainText);
       for (let attempt = 0; attempt < 5; attempt++) {
          response = await Brain.getResponse(seed);
@@ -244,6 +258,11 @@ const processPersonalityResponse = async (
       } else {
          await sendMessage(message, { contents: response }, mods);
       }
+
+      updateTopicMemory({
+         userId: message.authorId,
+         channelId: message.channelId
+      }, preBrainText, Brain.settings);
 
       /* Learn what it just created, to create a feedback */
       const cleanResponse = await cleanMessage(response, { Case: "lower", UseEndearments: true }, memberContext);
