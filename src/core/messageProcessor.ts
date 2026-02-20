@@ -1,20 +1,16 @@
-import { MessageAttachment, MessageEmbed, ClientUser, Message, TextChannel } from "discord.js";
-import { getEndearment, getDisplayName, interpolateUsers, KnownUsers } from "./user";
+import { getEndearment, interpolateUsers } from "./user";
 import { Brain } from "./brain";
-import { Swap } from "../controllers/swap";
-import { TriggerResult, Triggers } from "./triggerProcessor";
+import { log } from "./log";
+import { Filters } from "@/filters";
+import { InteractionRouter } from "./interactionRouter";
+import type { ModificationType, InteractionResult } from "./interactionTypes";
+import { summarizeInteractionResultForLog } from "./interactionLogSummary";
+import { shouldRespond as shouldRespondDecision, shouldYell as shouldYellDecision } from "./responseDecision";
+import { envFlag, escapeRegExp, newRX, randFrom } from "@/utils";
+import type { StandardMessage, StandardOutgoingMessage, StandardOutgoingMessage as PlatformOutgoingMessage } from "@/contracts";
+import { touchKnownUser, saveKnownUser } from "@/core/knownUsers";
+import { consumeTopicMemoryKeywords, updateTopicMemory, getTopicMemoryBiasStrength } from "@/core/topicMemory";
 
-const memoizedRX: Map<string, RegExp> = new Map<string, RegExp>();
-
-const newRX = (expr: string, flags?: string) => {
-   if (!memoizedRX.has(expr)) {
-      const rx = flags ? new RegExp(expr, flags) : new RegExp(expr);
-      memoizedRX.set(expr, rx);
-      return rx;
-   } else {
-      return memoizedRX.get(expr) as RegExp;
-   }   
-}
 
 // Maximum length of discord message
 const MAX_LENGTH = 1950;
@@ -24,298 +20,427 @@ interface ProcessResults {
    triggeredBy?: string;
    processedText: string;
    response?: string;
+   directedTo?: string;
 }
 
-type ModificationType = {
-   Case?: "upper" | "lower" | "unchanged",
-   KeepOriginal?: boolean,
-   ProcessSwaps?: boolean,
-   UseEndearments?: boolean,
-   TTS?: boolean,
-   Balance?: boolean,
-   StripFormatting?: boolean
-}
+type MemberContext = Parameters<typeof interpolateUsers>[1];
 
-const escapeRegExp = (rxString: string) => rxString.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
 
-const emoticonRXs = [
-   `:-)`, `:)`, `:-]`, `:]`, `:-3`, `:3`,	`:->`, `:>`, `8-)`, `8)`, `:-}`, `:}`, `:o)`, `:c)`, `:^)`, `=]`, `=)`,
-   `:-D`, `:D`, `8-D`, `8D`, `x-D`, `xD`, `X-D`, `XD`, `=D`, `=3`, `B^D`, `:-))`, `:-(`, `:(`, `:-c`, `:c`,`:-<`,
-   `:<`, `:-[`, `:[`, `:-||`, `>:[`, `:{`, `:@`, `>:(`, `:'-(`, `:'(`, `:'-)`, `:')`, `D-':`, `D:<`, `D:`, `D8`,
-   `D;`, `D=`, `DX`, `:-O`, `:O`, `:-o`, `:o`, `:-0`, `8-0`, `>:O`, `:-*`, `:*`, `:×`, `;-)`, `;)`, `*-)`, `*)`,
-   `;-]`, `;]`, `;^)`, `:-,`, `;D`, `:-P`, `:P`, `X-P`, `XP`, `x-p`, `xp`, `:-p`, `:p`, `:-Þ`, `:Þ`, `:-þ`, `:þ`,
-   `:-b`, `:b`, `d:`, `=p`, `>:P`, `:-/`, `:/`, `:-.`, `>:\\`, `>:/`, `:\\`, `=/`, `=\\`, `:L`, `=L`, `:S`,`:-|`,
-   `:|`, `:$`, `://)`, `://3`, `:-X`, `:X`, `:-#`, `:#`, `:-&`, `:&`, `O:-)`, `O:)`, `0:-3`, `0:3`, `0:-)`, `0:)`,
-   `;^)`, `>:-)`, `>:)`, `}:-)`, `}:)`, `3:-)`, `3:)`, `>;)`, `>:3`, `>;3`, `|;-)`, `|-O`, `:-J`, `#-)`, `%-)`, `%)`,
-   `:-###..`, `:###..`, `<:-|`, `',:-|`, `',:-l`, `</3`, `<\\3`, `<3` 
-].map(emoticon => escapeRegExp(emoticon)).join('|');
+const LINE_BREAK_RX = newRX(`\\r?\\n`, "musig");
+const GREENTEXT_START_RX = newRX(`^\\s*>`, "u");
+const GREENTEXT_SPLIT_RX = newRX(`(?=>)`, "u");
+const CHANNEL_MENTION_RX = newRX(`<#\\d+>`, "musig");
+const CODE_BLOCK_FENCE_RX = newRX(`\\\`{3}`, "g");
 
-//erx = [`:-)`, `:)`, `:-]`, `:]`, `:-3`, `:3`, `:->`, `:>`, `8-)`, `8)`, `:-}`, `:}`, `:o)`, `:c)`, `:^)`, `=]`, `=)`, `:-D`, `:D`, `8-D`, `8D`, `x-D`, `xD`, `X-D`, `XD`, `=D`, `=3`, `B^D`, `:-))`, `:-(`, `:(`, `:-c`, `:c`,`:-<`, `:<`, `:-[`, `:[`, `:-||`, `>:[`, `:{`, `:@`, `>:(`, `:'-(`, `:'(`, `:'-)`, `:')`, `D-':`, `D:<`, `D:`, `D8`, `D;`, `D=`, `DX`, `:-O`, `:O`, `:-o`, `:o`, `:-0`, `8-0`, `>:O`, `:-*`, `:*`, `:×`, `;-)`, `;)`, `*-)`, `*)`, `;-]`, `;]`, `;^)`, `:-,`, `;D`, `:-P`, `:P`, `X-P`, `XP`, `x-p`, `xp`, `:-p`, `:p`, `:-Þ`, `:Þ`, `:-þ`, `:þ`, `:-b`, `:b`, `d:`, `=p`, `>:P`, `:-/`, `:/`, `:-.`, `>:\\`, `>:/`, `:\\`, `=/`, `=\\`, `:L`, `=L`, `:S`,`:-|`, `:|`, `:$`, `://)`, `://3`, `:-X`, `:X`, `:-#`, `:#`, `:-&`, `:&`, `O:-)`, `O:)`, `0:-3`, `0:3`, `0:-)`, `0:)`, `;^)`, `>:-)`, `>:)`, `}:-)`, `}:)`, `3:-)`, `3:)`, `>;)`, `>:3`, `>;3`, `|;-)`, `|-O`, `:-J`, `#-)`, `%-)`, `%)`, `:-###..`, `:###..`, `<:-|`, `',:-|`, `',:-l`, `</3`, `<\\3`, `<3` ].map(emoticon => emoticon.replace(/[.*+?^${}()|[\]\\\-]/ug, '\\$&')).join('|');
+const DEFAULT_SECRET_PLACES = [
+   "my secret place",
+   "the quiet side room",
+   "a tucked-away nook",
+   "the hidden corner",
+   "the back hallway",
+   "a little hideaway"
+];
+const traceFlow = envFlag("TRACE_FLOW");
+const trace = (message: string, data?: unknown): void => {
+   if (traceFlow) log(data ? { message: `Flow: ${message}`, data } : `Flow: ${message}`, "trace");
+};
 
-const processMessage = async (client: ClientUser, message: Message): Promise<ProcessResults> => {
+const getSecretPlace = (): string => {
+   const configured = Brain.settings?.secretPlaces;
+   const places = Array.isArray(configured) && configured.length > 0
+      ? configured
+      : DEFAULT_SECRET_PLACES;
+   return randFrom(places) ?? "my secret place";
+};
+
+const processMessage = async (message: StandardMessage): Promise<ProcessResults> => {
    const results: ProcessResults = { learned: false, processedText: "" }
-   if (!(message.channel instanceof TextChannel) || message.type !== "DEFAULT") return results;
+   const memberContext = message as MemberContext;
+   const platform = message.platform;
+   const canSend = platform?.canSend ? await platform.canSend(message.channelId, message.guildId) : true;
+   trace(
+      "processMessage start",
+      {
+         author: message.authorId,
+         channel: message.channelId,
+         type: message.channel?.type ?? "unknown",
+         isBot: Boolean(message.isBot),
+         isSelf: Boolean(message.isSelf),
+         mentionsBot: Boolean(message.mentionsBot),
+         canSend,
+         platform: platform
+      }
+   );
    
-   /* TODO: Process server-specific blacklists to prevent users from responding */
-
    /* Do not process own messages */
-   if (message.author.id === client.id) return results;
+   if (message.isSelf) {
+      trace(`skip: isSelf=true`);
+      return results;
+   }
    
-   let cleanText = cleanMessage(message, { Case: "lower", UseEndearments: true });
+   let cleanText = await cleanMessage(message.content, { Case: "lower", UseEndearments: true }, memberContext);
 
    /* Remove initial references to self (e.g. "charlies learn this text" -> "learn this text", "charlies: hi" -> "hi") */
-   cleanText = cleanText.replace(newRX(`^\s*\b${escapeRegExp(client.username)}\b[:,]?\s*`, "uig"), "");
-   cleanText = cleanText.replace(newRX(`^\s*\b${escapeRegExp(Brain.botName)}\b[:,]?\s*`, "uig"), "");
+   cleanText = cleanText.replace(newRX(`^\\s*\\b${escapeRegExp(Brain.botName)}\\b[:,]?\\s*`, "uig"), "");
+   const preBrainText = Filters.apply("preBrain", cleanText, message, "learn");
 
-   const processed: TriggerResult = await Triggers.process(message);
+   const processed: InteractionResult = await InteractionRouter.process(message);
+   await InteractionRouter.registerCommands(platform);
+   log({
+      message: "Interaction results",
+      data: summarizeInteractionResultForLog(processed)
+   }, "debug");
 
-   if (!processed.triggered) {      
-      
-      /* Detect whether a conversation with the person is ongoing or if a response is appropriate */
-      let shouldRespond: boolean = message.mentions.has(client) || Brain.shouldRespond(Brain.botName, message.content);
-      let seed: string = "";
+   if (processed.error) {
+      log(processed.error.message, "error");
+   }
 
-      // TODO: Populate and maintain KnownUsers
-      const user = KnownUsers.get(message.author.id)!;         
-      if (user) {         
-         const conversation = user.conversations.get(message.channel.id);
-         if (conversation) {
-            // Optimal time is roughly 7 seconds delay for a conversation
-            if (Date.now() - conversation.lastSpokeAt < Brain.settings.conversationTimeLimit) {
-               shouldRespond = true;
-               seed = [cleanText, conversation.lastTopic].join(" ");
-            }
-         };
-      }           
+   const isDirectMessage = message.channel?.scope === "dm";
+   const isGroupDm = Boolean(message.channel?.isGroupDm)
+      || (isDirectMessage && typeof message.channel?.memberCount === "number" && message.channel.memberCount > 1);
+   const shouldPrefixResponse = !(isDirectMessage && !isGroupDm);
 
-      if (shouldRespond) {
-         if (message.channel instanceof TextChannel) message.channel.startTyping();
-         if (user) {
-            user.conversations.set(message.channel.id, {
-               lastSpokeAt: Date.now(),
-               lastTopic: cleanText
-            });
-         }
-
-         let response = "";
-         if (!seed) seed = await Brain.getSeed(cleanText);
-         /* Try up to 5 times to get a unique response */
-         for (let attempt = 0; attempt < 5; attempt++) {    
-            response = await Brain.getResponse(seed);
-            if (response.toLowerCase() !== cleanText.toLowerCase()) break;
-            seed = await Brain.getSeed();
-         }         
-         // If it still repeats, get a random response with a random seed
-         if (response.toLowerCase() === cleanText.toLowerCase()) response = await Brain.getResponse(await Brain.getRandomSeed());
-         // If it STILL repeats, return a "confounded" emoji 
-         if (response.toLowerCase() === cleanText.toLowerCase()) response = '😖';
-
-         const mods: ModificationType = { ...processed.modifications };
-         
-         if (message.tts) mods.TTS = true;
-         if (Brain.shouldYell(message.content)) mods.Case = "upper";
-
-         const directedTo = getDisplayName(message.member?.user ?? message.author, message.guild?.members);
-         await sendMessage(client, message.channel, `${directedTo}: ${response}`, mods);
-
-         /* Learn what it just created, to create a feedback */
-         const cleanResponse = cleanMessage(response, { Case: "lower", UseEndearments: true });
-         await Brain.learn(cleanResponse);
-         
-         results.response = response;
-      }
-
-      results.learned = await Brain.learn(cleanText);
-      
-
+   if (!processed.triggered) {
+      const personalityResults = await processPersonalityResponse(
+         message,
+         processed,
+         preBrainText,
+         memberContext,
+         canSend,
+         shouldPrefixResponse
+      );
+      results.response = personalityResults.response;
+      results.directedTo = personalityResults.directedTo;
+      results.learned = personalityResults.learned;
    } else {
       
-      if (message.channel instanceof TextChannel) message.channel.startTyping();
+      trace("triggered", { canSend, platform: platform, resultsCount: processed.results.length });
+      if (canSend && platform) await platform.sendTyping(message.channelId);
       results.triggeredBy = processed.triggeredBy;
-      const mods: ModificationType = { ... processed.modifications };
-      mods.Balance = true;
+      const mods: ModificationType = processed.modifications;
+      if (!mods.KeepOriginal) mods.Balance = true;
       
-      if (Brain.shouldYell(message.content)) mods.Case = "upper";
+      if (!(mods.KeepOriginal || mods.Case === "unchanged") && shouldYellDecision(message.content, Brain.settings)) mods.Case = "upper";
 
-      if (processed.directedTo) {
-         if (processed.results.length > 1) {
-            // Only say the "directed to" name once if there is more than one line of response
-            processed.results.unshift(`${processed.directedTo}:`);
-         } else {
-            processed.results[0] = `${processed.directedTo}: ${processed.results[0]}`
+      if (processed.directedTo && shouldPrefixResponse) {
+         processed.results[0].contents = `${processed.directedTo}: ${processed.results[0].contents}`;
+         results.directedTo = processed.directedTo;
+      }
+      
+      const outgoingPayload: StandardOutgoingMessage = { contents: "", embeds: [], attachments: [] };
+      results.response = "";
+      for (const resultsPayload of processed.results as PlatformOutgoingMessage[]) {
+         outgoingPayload.contents = resultsPayload.contents;
+         if (resultsPayload.attachments) {
+            results.response += resultsPayload.attachments.map(attachment => `[attachment ${attachment.name}]`).join("\n");
+            //log(`Interaction results contain attachments; including attachments in message`);
+            outgoingPayload.attachments = resultsPayload.attachments;
+         }
+         if (resultsPayload.embeds) {
+            results.response += resultsPayload.embeds.map(embed => `[embed ${embed.title}]`).join("\n");
+            //log(`Interaction results contain embeds; including embeds in message`);
+            outgoingPayload.embeds = resultsPayload.embeds;
+         }
+
+         // The results.response is really for debugging purposes, and is only used in the 'on message received' event in the main index.ts file
+         results.response += `${outgoingPayload.contents}\n`;
+
+         // Send any message payload that is not yet sent
+         if (outgoingPayload.contents !== "" || (outgoingPayload.attachments?.length ?? 0) > 0  || (outgoingPayload.embeds?.length ?? 0) > 0) {
+            await sendMessage(message, outgoingPayload, mods);
          }
       }
-      let linesToSend: string[] = [];
-      let outputLength: number = 0;
-      for (const line of processed.results) {
-         if (line instanceof MessageEmbed || line instanceof MessageAttachment) {
-            // Do not process anything on RichEmbeds -- this allows triggers to be somewhat insecure, be careful!            
-            await message.channel.send(line);
-         } else {
-            // If the line will make the overall message too long, send what is in the queue and then clear it 
-            if (outputLength + line.length > MAX_LENGTH) {
-               await sendMessage(client, message.channel, linesToSend.join('\n'), mods);
-               linesToSend = [];
-            }
-            linesToSend.push(line);
-            outputLength += line.length;
-         }
-      }
-      if (linesToSend.length > 0) {         
-         await sendMessage(client, message.channel, linesToSend.join('\n'), mods);
-      }      
-      results.response = processed.results.join('\n');
+
+      results.response = results.response.trimEnd();
    }
-   results.processedText = cleanText.trim();
-   message.channel.stopTyping(true);
+   results.processedText = preBrainText.trim();
    return results;
 }
 
+const processPersonalityResponse = async (
+   message: StandardMessage,
+   processed: InteractionResult,
+   preBrainText: string,
+   memberContext: MemberContext | undefined,
+   canSend: boolean,
+   shouldPrefixResponse: boolean
+): Promise<Pick<ProcessResults, "response" | "directedTo" | "learned">> => {
+   const platform = message.platform;
+   const isDirectMessage = message.channel?.scope === "dm";
+   const isGroupDm = Boolean(message.channel?.isGroupDm)
+      || (isDirectMessage && typeof message.channel?.memberCount === "number" && message.channel.memberCount > 1);
+   const mentionsBot = Boolean(message.mentionsBot);
+   const matchesBotName = (text: string): boolean => {
+      if (!Brain.botName) return false;
+      return Boolean(text.match(newRX(escapeRegExp(Brain.botName), "giu")));
+   };
+
+   let shouldRespond = false;
+   if (isDirectMessage && !isGroupDm) {
+      shouldRespond = true;
+   } else if (isDirectMessage && isGroupDm) {
+      const groupSize = Math.max(2, message.channel?.memberCount ?? 2);
+      const baseOutburst = Brain.settings.outburstThreshold;
+      const groupOutburst = Math.min(1, baseOutburst * groupSize);
+      shouldRespond = Math.random() < groupOutburst || mentionsBot || matchesBotName(preBrainText);
+   } else {
+      shouldRespond = mentionsBot || shouldRespondDecision(Brain.botName, preBrainText, Brain.settings);
+   }
+
+   /* If the message is a reference (reply) then check if the referenced message should be responded to */
+   if (message.referencedContent) {
+      if (message.referencedMentionsBot || matchesBotName(message.referencedContent)) shouldRespond = true;
+   }
+
+   trace("shouldRespond", { mentionsBot, shouldRespond, isDirectMessage, isGroupDm });
+
+   const lexiconSize = Brain.lexicon?.size ?? 0;
+   const ngramSize = Brain.nGrams?.size ?? 0;
+   if (lexiconSize === 0 || ngramSize === 0) {
+      trace("brain empty; skipping response", { lexicon: lexiconSize, ngrams: ngramSize });
+      return { learned: await Brain.learn(preBrainText) };
+   }
+
+   let seed: string = "";
+   let conversationActive = false;
+   const user = touchKnownUser(message.authorId, message.authorName);
+   const conversation = user.conversations.get(message.channelId);
+   if (conversation) {
+      if (Date.now() - conversation.lastSpokeAt < Brain.settings.conversationTimeLimit) {
+         shouldRespond = true;
+         conversationActive = true;
+         seed = [preBrainText, conversation.lastTopic].join(" ");
+      }
+   }
+
+   if (shouldRespond && canSend && platform) {
+      trace("respond", {
+         shouldRespond,
+         canSend,
+         platform: platform,
+         conversationActive,
+         seedProvided: seed !== ""
+      });
+      await platform.sendTyping(message.channelId);
+      user.conversations.set(message.channelId, {
+         lastSpokeAt: Date.now(),
+         lastTopic: preBrainText
+      });
+      saveKnownUser(message.authorId, user, { bump: false });
+
+      let response = "";
+      const rememberedTopicKeywords = consumeTopicMemoryKeywords({
+         userId: message.authorId,
+         channelId: message.channelId
+      });
+      if (rememberedTopicKeywords.length > 0 && Math.random() < getTopicMemoryBiasStrength(Brain.settings)) {
+         const lexiconKeywords = rememberedTopicKeywords.filter((keyword) => Brain.lexicon.has(keyword));
+         const rememberedSeed = randFrom(lexiconKeywords);
+         if (rememberedSeed) seed = rememberedSeed;
+      }
+      if (!seed) seed = await Brain.getSeed(preBrainText);
+      for (let attempt = 0; attempt < 5; attempt++) {
+         response = await Brain.getResponse(seed);
+         if (response.toLowerCase() !== preBrainText.toLowerCase()) break;
+         seed = await Brain.getSeed();
+      }
+      if (response.toLowerCase() === preBrainText.toLowerCase()) response = await Brain.getResponse(await Brain.getRandomSeed());
+      if (response.toLowerCase() === preBrainText.toLowerCase()) response = "😖";
+
+      const mods: ModificationType = { ...processed.modifications };
+
+      if (message.tts) mods.TTS = true;
+      if (shouldYellDecision(message.content, Brain.settings)) mods.Case = "upper";
+
+      const directedTo = shouldPrefixResponse ? message.authorName : undefined;
+      if (directedTo) {
+         await sendMessage(message, { contents: `${directedTo}: ${response}` }, mods);
+      } else {
+         await sendMessage(message, { contents: response }, mods);
+      }
+
+      updateTopicMemory({
+         userId: message.authorId,
+         channelId: message.channelId
+      }, preBrainText, Brain.settings);
+
+      /* Learn what it just created, to create a feedback */
+      const cleanResponse = await cleanMessage(response, { Case: "lower", UseEndearments: true }, memberContext);
+      await Brain.learn(cleanResponse);
+
+      return {
+         learned: await Brain.learn(preBrainText),
+         response,
+         directedTo
+      };
+   }
+
+   trace("not responding", {
+      shouldRespond,
+      canSend,
+      platform: platform,
+      conversationActive
+   });
+
+   return { learned: await Brain.learn(preBrainText) };
+};
+
+const splitTextForSending = (text: string, maxLength: number): string[] => {
+   if (text.length <= maxLength) return [text];
+   const chunks: string[] = [];
+   let remaining = text;
+   while (remaining.length > maxLength) {
+      let chunk = remaining.slice(0, maxLength);
+      remaining = remaining.slice(maxLength);
+      const fenceCount = (chunk.match(CODE_BLOCK_FENCE_RX) ?? []).length;
+      if (fenceCount % 2 !== 0) {
+         if (chunk.length + 4 > maxLength) {
+            const trimSize = chunk.length + 4 - maxLength;
+            remaining = chunk.slice(chunk.length - trimSize) + remaining;
+            chunk = chunk.slice(0, chunk.length - trimSize);
+         }
+         chunk = `${chunk}\n\`\`\``;
+         remaining = `\`\`\`\n${remaining}`;
+      }
+      chunks.push(chunk);
+   }
+   if (remaining.length > 0) chunks.push(remaining);
+   return chunks;
+};
+
 /* Utility functions for bot interface */
-const sendMessage = async (client: ClientUser, channel: TextChannel, text: string, mods?: ModificationType): Promise<boolean> => {
-   const permissions = channel.permissionsFor(client);
-   if (!permissions || !permissions.has('SEND_MESSAGES')) return false;
-   if (!channel.guild) return false;
-
-   text = interpolateUsers(text, channel.guild.members, !!(mods?.UseEndearments));
-   text = cleanMessage(text, mods);
-
-   /* Processing swaps should always be done AFTER cleaning the message.
-      This prevents swap rules causing usernames or channels to accidentally leak 
-   */
-   if (mods?.ProcessSwaps) text = Swap.process(channel.guild.id, text);
-   
-   // TODO: Balance code blocks and such accounting for max length, if necessary
-   while (text !== "") {      
-      await channel.send(text.substring(0, MAX_LENGTH), { tts: !!(mods?.TTS), split: true });
-      text = text.substring(MAX_LENGTH);
+const sendMessage = async (context: StandardMessage, message: StandardOutgoingMessage, mods?: ModificationType): Promise<boolean> => {
+   const platform = context.platform;
+   if (!platform) {
+      trace(`sendMessage skipped: platform=false channel=${context.channelId}`);
+      return false;
+   }
+   const memberContext = context.memberContext as MemberContext | undefined;
+   const workingMods = mods ? { ...mods } : undefined;
+   if (workingMods?.KeepOriginal) {
+      // Reset all other mods
+      workingMods.Balance = false;
+      workingMods.Case = "unchanged";
+      workingMods.ProcessSwaps = false;
+      workingMods.UseEndearments = false;
+   }
+   let text = message.contents;
+   text = await cleanMessage(text, workingMods, memberContext);
+   const skipFilters = workingMods?.ProcessSwaps === false ? ["swaps"] : undefined;
+   text = Filters.apply("postBrain", text, context, "respond", { skipIds: skipFilters });
+   const embeds = message.embeds ?? [];
+   const files = message.attachments ?? [];
+   if (text === "" && embeds.length === 0 && files.length === 0) return true;
+   // Can't send empty message with embeds to discord, hack around it
+   if ((embeds.length > 0 || files.length > 0) && text === "") text = " ";
+   const chunks = splitTextForSending(text, MAX_LENGTH);
+   for (let index = 0; index < chunks.length; index++) {
+      await platform.sendMessage(context.channelId, {
+         contents: chunks[index],
+         embeds: index === 0 ? embeds : [],
+         attachments: index === 0 ? files : [],
+         tts: Boolean(workingMods?.TTS)
+      });
    }
    return true;
 }
 
-const cleanMessage = (message: Message | string, mods?: ModificationType): string => {
-
-   // TODO: Memoize all regexps
+const cleanMessage = async (text: string, mods?: ModificationType, members?: MemberContext): Promise<string> => {
 
    let fullText: string;
 
-   if (message instanceof Message) {
-      fullText = message.content.trim();
-      fullText = interpolateUsers(fullText, message.guild?.members, !!(mods?.UseEndearments));      
-   } else {
-      fullText = message.trim();
-      fullText = interpolateUsers(fullText, undefined, !!(mods?.UseEndearments));
+   const workingMods = mods ? { ...mods } : undefined;
+   if (workingMods?.KeepOriginal) {
+      // Reset all other mods
+      workingMods.Balance = false;
+      workingMods.Case = "unchanged";
+      workingMods.ProcessSwaps = false;
+      workingMods.UseEndearments = false;
+   }
+   const botNameCleaner = (text: string): string => {
+      /* Ensure no rogue RegExp-breaking characters in the bot name */
+      const cleanBotName = escapeRegExp(Brain.botName);
+      /* Strip initial use of the bot's name (most common usage being "botname: text text text" with or without the ":") */
+      text = text.replace(newRX(`^\\s*${cleanBotName}:?\\s*`, "musig"), "");
+      /* Replace any remaining references to the bot's name with 'my friend' or similar generic endearment */
+      return text.replace(newRX(cleanBotName, "musig"), getEndearment());
    }
 
-   /* Quick bug fix for broken brains that stored "greentext" (>words) in a single line by accident
-      words words>more words>even more words ->
-         words words
-         >more words
-         >even more words
-   */
-   // fullText = fullText.replace(/(\D+?)>(.+?)/muig, "$1\n>$2");
-   /* Fix any broken custom emojis */
-   fullText = fullText.replace(/<:(\w+?):(\d+?)\s+>/muig, "<:$1:$2>");
-  
+   fullText = botNameCleaner(text.trim());
+   fullText = await interpolateUsers(fullText, members, Boolean(workingMods?.UseEndearments));
 
-   /* Remove ANSI control characters and RTL marks (skipping CR and LF) */      
-   fullText = fullText.replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u200f\u061c\u00ad]/muig, '');
+   /* Fix any broken custom emojis (<:name:00000000>) where a space before the > was accidentally saved */
+   fullText = fullText.replace(newRX(`<:(\\w+?):(\\d+?)\\s+>`, "musig"), "<:$1:$2>");
+
+   /* Remove ANSI control characters and RTL marks (skipping CR and LF) */
+   fullText = fullText.replace(newRX(`[\\u0000-\\u0009\\u000b\\u000c\\u000e-\\u001f\\u200f\\u061c\\u00ad]`, "musig"), "");
       
-   const formatCodes = {
-      underline: "_",
-      bold: "*",
-      italic: "**",
-      spoiler: "||",
-      strikethrough: "~~"
-   }
-
    const blockCodes = {
-      URLs: '🔗',
-      emoticons: '☻',
-      codeBlocks: '⎁',                  
-      injections: '⚿'
+      URLs: "🔗",
+      codeBlocks: "⎁",
+      injections: "⚿"
    }
 
    /* Prevent injection of block escaping (someone maliciously putting '<[CODE]-[NUMBER]>' in the origin text */
-   const blocksRX = newRX(`<[${Object.values(blockCodes).join('')}]\-\d+>`, 'mug');
+   const blocksRX = newRX(`<[${Object.values(blockCodes).join("")}]-\\d+>`, "muigs");
    const injectionBlocks = extractBlocks(fullText, blockCodes.injections, blocksRX);
    const injected: string[] = injectionBlocks.blocks;
    fullText = injectionBlocks.text;
 
    /* Capture code blocks (between pairs of ```) as case insensitive and as-is regarding line breaks */
-   const codeRX = /```.+?```/muigs;
+   const codeRX = newRX("```[\\s\\S]+?```", "muigs");
    const extractedCode = extractBlocks(fullText, blockCodes.codeBlocks, codeRX);
    const codeBlocks: string[] = extractedCode.blocks;
    fullText = extractedCode.text;
 
    /* Capture URLs, case-sensitive */
-   const urlRX = /((((?:http|https|ftp|sftp):(?:\/\/)?)(?:[-;:&=\+\$,\w]+@)?[A-Za-z0-9\.-]+|(?:www\.|[-;:&=\+\$,\w]+@)[A-Za-z0-9\.-]+)((?:\/[-\+~%\/\.\w_]*)?\??(?:[-\+=&;%@\.\w_]*)#?(?:[\.!\/\\\w]*))?)/mug;
+   const urlRX = newRX(`((((?:http|https|ftp|sftp):(?:\\/\\/)?)(?:[-;:&=\\+\\$,\\w]+@)?[A-Za-z0-9\\.-]+|(?:www\\.|[-;:&=\\+\\$,\\w]+@)[A-Za-z0-9\\.-]+)((?:\\/[-\\+~%\\/\\.\\w_]*)?\\??(?:[-\\+=&;%@\\.\\w_]*)#?(?:[\\.!\\/\\\\\\w]*))?)`, "mug");
    const extractedURLs = extractBlocks(fullText, blockCodes.URLs, urlRX);
    const urls: string[] = extractedURLs.blocks;
    fullText = extractedURLs.text;
 
-   /* Capture emoticons, case-sensitive, NO UNICODE (will cause 'invalid escape') */
-   const emoticonRX = newRX(emoticonRXs, 'mg');
-   const extractedEmoticons = extractBlocks(fullText, blockCodes.emoticons, emoticonRX);
-   const emoticons: string[] = extractedEmoticons.blocks;
-   fullText = extractedEmoticons.text;
-
-   /* Prepare regexp for stripping formatting if required */
-   const codes = `(?:${escapeRegExp(Object.values(formatCodes).join('|'))})`;
-   const formatRX = newRX(`${codes}(?<Text>)${codes}`, 'ug');
-
    /* Split lines for further line-level processing */
-   const lines = fullText.split(/\r?\n/ug);
+   const lines = fullText.split(LINE_BREAK_RX);
+   
 
-   let results: string[] = [];
+   const results: string[] = [];
    for (const line of lines) {
 
       let text = line;
 
-      /* Replace bot name with 'my friend' (and strip initial) */
-      text = text.replace(newRX(`^${Brain.botName}:?\s*`, "ui"), "");
-      text = text.replace(newRX(Brain.botName, "uig"), getEndearment());
 
-      /* Replace all channel mentions with 'my secret place' */
-      // TODO: Change this to a rotating list of secret places
-      text = text.replace(/<#\d+>/uig, "my secret place");
 
-      /* Mild bug fix for broken brains: replace periods/other characters in the middle of full words (more than 1 characters) with a period then a space.
-         This should avoid causing problems with regular abbreviations (Dr., N.A.S.A, Mrs., etc.), and doing it after URLs should avoid breaking those */
-      text = text.replace(/([^\s\.)]{2,}?)([\.")\]?!,])([^\s\.")\]?!,])/uig, "$1$2 $3");
-      /* TODO: fix edge cases where comma should not have a space (for numbers, i.e. 2,000,000) */
-      /* TODO: fix edge cases where period is between things that aren't detected as URL but should be (i.e. sub.example.com) - period should not have space after */
-      /* TODO: fix edge cases where it is appropriate to have a character followed immediately by a quotation mark  */      
-
-      // Fix broken discord mentions caused by the above
-      text = text.replace(/<@!\s+(\d+)>/muig, "<@!$1>");
-
-      // TODO: test if this is broken or necessary
-      //text = text.replace(/"?(.+?)([\.)\]?!,])\s+"/uig, '"$1$2"');
-      
-      switch (mods?.Case) {
+      /* Replace all channel mentions with a rotating list of secret places */
+      text = text.replace(CHANNEL_MENTION_RX, () => getSecretPlace());
+   
+    
+      switch (workingMods?.Case) {
          case "unchanged":
             break;
          case "upper":
             text = text.toUpperCase();
             break;
          case "lower":
-         default: 
+         default:
             text = text.toLowerCase();
             break;
       }
       
-      if (mods?.StripFormatting) text = text.replace(formatRX, '$<Text>');
+      const greentextParts = text.match(GREENTEXT_START_RX) ? text.split(GREENTEXT_SPLIT_RX) : null;
+      if (greentextParts && greentextParts.length > 1) {
+         greentextParts.forEach((part) => results.push(part));
+         continue;
+      }
 
       results.push(text);
    }
    let result = results.join("\n");
 
-   /* Restore emoticons */
-   if (emoticons.length > 0) result = restoreBlocks(result, blockCodes.emoticons, emoticons);
-
    /* Restore URLs */
    if (urls.length > 0) result = restoreBlocks(result, blockCodes.URLs, urls);
+   
+   /* Balance brackets and quotation marks and such. Do this before restoring code blocks to avoid counting ``` as 3x ` */
+   if (workingMods?.Balance) result = balanceText(result);
 
    /* Restore code blocks */
    if (codeBlocks.length > 0) result = restoreBlocks(result, blockCodes.codeBlocks, codeBlocks);
@@ -323,8 +448,7 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
    /* Restore injected block escape attempts */
    if (injected.length > 0) result = restoreBlocks(result, blockCodes.injections, injected);
 
-   // Last step: balance brackets and quotation marks and such
-   if (mods?.Balance) result = balanceText(result);
+
    
    return result;
 }
@@ -332,19 +456,41 @@ const cleanMessage = (message: Message | string, mods?: ModificationType): strin
 const extractBlocks = (text: string = "", symbol: string = "", regEx: RegExp | null = null): { text: string, blocks: string[] } => {
    /* "Extracts" text matching the provided regular expression, saving it "as-is" and replacing
        it with a <[symbol]-[index]> where index is each instance of the text matching the regular expression */
-   if (!text || !symbol || !regEx) return { text: text, blocks: [] };   
+       
+   /* NOTE: There should be only one match per <[symbol]-[index]>. Do not use matchAll/replaceAll for this.
+            Let the regexp decide if the match is global, since this will work itself out in the number of matches found. */
+   if (!text || !symbol || !regEx) return { text: text, blocks: [] };
    const blocks: string[] = [];
-   const matches = text.match(regEx);
-   if (matches) {
-      for (let i = 0; i < matches.length; i++) {
-         blocks.push(matches[i]);
-         text = text.replace(matches[i], `<${symbol}-${i}>`);
+   if (regEx.global) {
+      const workingRX = new RegExp(regEx.source, regEx.flags);
+      const matches = Array.from(text.matchAll(workingRX));
+      if (matches.length > 0) {
+         let rebuilt = "";
+         let lastIndex = 0;
+         matches.forEach((match, index) => {
+            const matchText = match[0];
+            const matchIndex = match.index ?? 0;
+            rebuilt += text.slice(lastIndex, matchIndex);
+            rebuilt += `<${symbol}-${index}>`;
+            blocks.push(matchText);
+            lastIndex = matchIndex + matchText.length;
+         });
+         rebuilt += text.slice(lastIndex);
+         text = rebuilt;
+      }
+   } else {
+      const match = text.match(regEx);
+      if (match && match.index !== undefined) {
+         blocks.push(match[0]);
+         text = text.slice(0, match.index) + `<${symbol}-0>` + text.slice(match.index + match[0].length);
       }
    }
-   return { text: text, blocks: blocks }
+   return { text: text, blocks: blocks };
 }
 const restoreBlocks = (text: string = "", symbol: string = "", blocks: string[] = []): string => {
-   if (!text || !symbol || blocks.length === 0) return text;   
+   /* NOTE: There should be only one match per <[symbol]-[index]>. Do not use RegExp or replaceAll for this.
+            The data that is being restored is plain text, not to be evaluated any further. */
+   if (!text || !symbol || blocks.length === 0) return text;
    for (let i = 0; i < blocks.length; i++) {
       text = text.replace(`<${symbol}-${i}>`, blocks[i]);
    }
@@ -352,37 +498,37 @@ const restoreBlocks = (text: string = "", symbol: string = "", blocks: string[] 
 }
 
 const balanceText = (text: string): string => {
-               
-   const isCodeSegmentsUnbalanced: boolean = (text.match(/`/mug) ?? []).length % 2 !== 0;
-   const numParenthesisStarted: number = (text.match(/\(/mug) ?? []).length;
-   const numParenthesisEnded: number = (text.match(/\)/mug) ?? []).length;
-   const isDoubleQuoteUnbalanced: boolean = (text.match(/"/mug) ?? []).length % 2 !== 0;
    
-   if (isDoubleQuoteUnbalanced) {
-      if (text.endsWith('"')) {
-         text = '"' + text;
-      } else {
-         text = text + '"';
-      }
-   }
-   if (numParenthesisStarted < numParenthesisEnded) {
-      text = "(".repeat(numParenthesisEnded - numParenthesisStarted) + text;
-   } else if (numParenthesisStarted > numParenthesisEnded) {
-      text = text + ")".repeat(numParenthesisStarted - numParenthesisEnded);
-   }
-   if (isCodeSegmentsUnbalanced) {
-      if (text.endsWith('`')) {
-         text = '`' + text;
-      } else { 
-         text = text + '`';
-      }
-   }
-   return text; 
+   const lines = text.split(LINE_BREAK_RX);
+   const results: string[] = [];
+   const CODE_SEGMENT_RX = newRX(`\``, "musig");
 
+   for (let line of lines) {
+   
+      const isCodeSegmentsUnbalanced: boolean = (line.match(CODE_SEGMENT_RX) ?? []).length % 2 !== 0;
+
+      if (isCodeSegmentsUnbalanced) {
+         line = `${line}\``;
+      }
+      results.push(line);
+   }
+   let fixedText = results.join("\n");
+
+   /* Split any instances of ``` being next to each other by inserting a space after the first ``` */
+   const ADJACENT_CODE_BLOCK_RX = newRX(`\`{3}(\\S)`, "musig");
+   fixedText = fixedText.replace(ADJACENT_CODE_BLOCK_RX, "``` $1");
+   
+   /* Check for unbalanced code blocks (```) */
+   const CODE_BLOCK_RX = newRX(`\`{3}`, "musig");
+   const isCodeBlockUnbalanced: boolean = (fixedText.match(CODE_BLOCK_RX) ?? []).length % 2 !== 0;
+
+   if (isCodeBlockUnbalanced) {
+      fixedText = `${fixedText}\`\`\``;
+   }
+
+   return fixedText;
 }
 
 
-export { ProcessResults, processMessage, cleanMessage, ModificationType }
-
-
-
+export { ProcessResults, processMessage, cleanMessage }
+export type { ModificationType }

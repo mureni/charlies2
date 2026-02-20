@@ -1,6 +1,7 @@
 {
    "name": "charlies",
-   "version": "2.1.0",
+   "description": "chaotically harmonized archival recursed linguistics interpretative exposition system",
+   "version": "2.2.0",
    "main": "./dist/index.js",
    "author": "mureni <mureni.leijona@gmail.com>",
    "license": "MIT",
@@ -9,23 +10,35 @@
       "./resources"
    ],
    "dependencies": {
-      "app-root-path": "^3.0.0",
-      "better-sqlite3": "^7.1.2",
-      "canvas": "^2.6.1",
-      "cli-progress": "^3.9.0",
-      "discord.js": "^12.5.1",
-      "winston": "^3.3.3",
-      "winston-daily-rotate-file": "^4.5.0",
-      "dotenv": "^8.2.0"
+      "app-root-path": "3.1.0",
+      "better-sqlite3": "12.6.2",
+      "canvas": "3.2.0",
+      "discord.js": "14.25.1",
+      "dotenv": "17.2.3",
+      "rimraf": "^6.1.2",
+      "source-map-support": "0.5.21",
+      "tsconfig-paths": "4.2.0",
+      "winston": "3.19.0"
+   },
+   "overrides": {
+      "undici": "^6.23.0"
    },
    "devDependencies": {
-      "@types/cli-progress": "^3.8.0",
-      "@types/ws": "^7.4.0",
-      "@types/app-root-path": "^1.2.4",
-      "@types/better-sqlite3": "^5.4.1",
-      "@types/node": "^14.14.6",
-      "ts-node": "^9.1.1",
-      "typescript": "^4.1.3"
+      "@types/better-sqlite3": "7.6.13",
+      "@types/node": "25.1.0",
+      "@types/ws": "8.18.1",
+      "@swc/core": "1.15.11",
+      "@eslint/js": "9.39.0",
+      "@typescript-eslint/eslint-plugin": "8.54.0",
+      "@typescript-eslint/parser": "8.54.0",
+      "@vitest/coverage-v8": "^4.0.18",
+      "dependency-cruiser": "17.3.7",
+      "eslint": "9.39.2",
+      "jscpd": "4.0.5",
+      "knip": "5.83.1",
+      "ts-node": "10.9.2",
+      "typescript": "^6.0.0-dev.20260131",
+      "vitest": "4.0.18"
    },
    "scripts": {
       "clean": "rimraf dist",
@@ -33,7 +46,12 @@
       "build": "tsc",
       "build:watch": "tsc --watch",
       "dev": "npm run build && npm run start",
-      "start": "node ./dist/index.js"
+      "start": "node ./dist/index.js",
+      "update": "bash ./tools/update.sh",
+      "generate:trainer": "bash ./tools/generate-trainer.sh"
+   },
+   "engines": {
+      "node": ">=24"
    },
    "repository": {
       "type": "git",

@@ -1,13 +1,12 @@
-import { Presets, SingleBar } from "cli-progress";
-import { DBMap } from "../core/DBMap";
-import { createReadStream, readFileSync, existsSync, writeFileSync, statSync } from 'fs';
+import { SQLiteMap } from "@/core/SQLiteCollections";
+import { createReadStream, existsSync, statSync } from "fs";
+import { log } from "./log";
 import readline from "readline";
 import { resolve } from "path";
-import { env, checkFilePath } from "../utils"; 
+import { env, envFlag, getBotName, checkFilePath, clamp, randFrom, weightedRandFromWithTrace } from "@/utils";
+import type { BrainSettings } from "./botSettings";
+import { loadSettings, saveSettings, getSettings, setSettings } from "./botSettings";
 
-const escapeRegExp = (rxString: string) => rxString.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
-const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
-function randFrom<T>(array: T[]): T { return array[Math.floor(Math.random() * array.length)] };
 
 
 const SENTENCE_REGEX = /\n/;
@@ -16,17 +15,73 @@ const WORD_SEPARATOR = "│";
 const STACK_MAX = 192;
 const EMPTY_BRAIN = "huh";
 const MAX_RECURSION = 5;
-
-interface BrainSettings {      
-   outburstThreshold: number,          /* 0..1 chance of speaking without being spoken to */
-   numberOfLines: number,              /* # of lines to speak at once */
-   angerLevel: number,                 /* 0..1 chance of yelling */
-   angerIncrease: number,              /* multiplier to increase anger if yelled at */
-   angerDecrease: number,              /* multiplier to decrease anger if not yelled at */
-   recursion: number,                  /* # of times to think about a line before responding */
-   conversationTimeLimit: number,      /* number of seconds to wait for a response */
-   learnFromBots: boolean
+const DEFAULT_SURPRISE = 0.5;
+const INSIGHT_CANDIDATE_LIMIT = 6;
+const TRACE_BRAIN = envFlag("TRACE_BRAIN");
+const TRACE_SURPRISE = envFlag("TRACE_SURPRISE");
+const TRACE_SURPRISE_TOP_CANDIDATES = 3;
+const traceBrain = (message: string): void => {
+   if (TRACE_BRAIN) log(`Brain: ${message}`, "debug");
+};
+interface SurpriseTraceCandidate {
+   token: unknown;
+   weight: number;
+   logWeight: number;
+   gumbel: number;
+   score: number;
 }
+interface SurpriseTraceStart {
+   phase: "response.start";
+   recursiveThought: number;
+   surprise: number;
+   rawSurprise: unknown;
+   usedDefaultSurprise: boolean;
+}
+interface SurpriseTraceStep {
+   phase: "next" | "previous";
+   step: number;
+   surprise: number;
+   candidateCount: number;
+   weightedChoice: unknown;
+   chosen: unknown;
+   usedFallback: boolean;
+   topCandidates: SurpriseTraceCandidate[];
+}
+type SurpriseTracePayload = SurpriseTraceStart | SurpriseTraceStep;
+const formatNumber = (value: number, digits: number = 4): string => {
+   if (!Number.isFinite(value)) return String(value);
+   return value.toFixed(digits);
+};
+const formatToken = (value: unknown): string => {
+   if (value === null || value === undefined) return "<none>";
+   const text = String(value).replace(/\s+/gu, " ").trim();
+   if (!text) return "<empty>";
+   return text.length > 24 ? `"${text.slice(0, 21)}..."` : `"${text}"`;
+};
+const formatCandidates = (candidates: SurpriseTraceCandidate[]): string => {
+   const limited = candidates.slice(0, TRACE_SURPRISE_TOP_CANDIDATES);
+   if (limited.length === 0) return "none";
+   return limited
+      .map((candidate, index) =>
+         `#${index + 1} ${formatToken(candidate.token)} w=${formatNumber(candidate.weight, 2)} lw=${formatNumber(candidate.logWeight)} g=${formatNumber(candidate.gumbel)} s=${formatNumber(candidate.score)}`
+      )
+      .join(" | ");
+};
+const traceSurprise = (payload: SurpriseTracePayload): void => {
+   if (!TRACE_SURPRISE) return;
+   if (payload.phase === "response.start") {
+      log(
+         `Brain surprise start: recursion=${payload.recursiveThought} surprise=${formatNumber(payload.surprise, 3)} raw=${String(payload.rawSurprise)} defaulted=${payload.usedDefaultSurprise ? "yes" : "no"}`,
+         "debug"
+      );
+      return;
+   }
+   log(
+      `Brain surprise ${payload.phase}#${payload.step}: surprise=${formatNumber(payload.surprise, 3)} candidates=${payload.candidateCount} weighted=${formatToken(payload.weightedChoice)} chosen=${formatToken(payload.chosen)} fallback=${payload.usedFallback ? "yes" : "no"} top=[${formatCandidates(payload.topCandidates)}]`,
+      "debug"
+   );
+};
+const BOT_NAME = getBotName();
 
 interface nGram {
    tokens: string[];
@@ -35,33 +90,53 @@ interface nGram {
    nextTokens: Map<string, number>;
    previousTokens: Map<string, number>;
 }
-interface FrequencyJSON {
-   [word: string]: number;
-}
-interface nGramJSON {
-   [hash: string]: {
-      t: string[],
-      s: boolean,
-      e: boolean,
-      n: FrequencyJSON | string[],
-      p: FrequencyJSON | string[]
-   }
+
+interface BrainChoiceCandidate {
+   token: string;
+   weight: number;
+   logWeight: number;
+   gumbel: number;
+   score: number;
 }
 
-interface LexiconJSON {
-   [word: string]: string[];
+interface BrainChoiceStep {
+   phase: "next" | "previous";
+   step: number;
+   surprise: number;
+   candidateCount: number;
+   weightedChoice?: string;
+   chosen?: string;
+   usedFallback: boolean;
+   candidates: BrainChoiceCandidate[];
 }
 
-interface BrainJSON {
-   Lexicon: LexiconJSON;
-   nGrams: nGramJSON;
-   Settings: BrainSettings;
+interface BrainGenerationInsight {
+   createdAt: number;
+   requestedSeed: string;
+   response: string;
+   surprise: number;
+   recursion: number;
+   recursiveThought: number;
+   initialHash: string;
+   initialTokens: string[];
+   steps: BrainChoiceStep[];
 }
 
+const buildNextHash = (tokens: string[], nextWord: string): string => {
+   const nextSet = tokens.slice(1, Brain.chainLength);
+   nextSet.push(nextWord);
+   return nextSet.join(WORD_SEPARATOR);
+};
+
+const buildPrevHash = (tokens: string[], prevWord: string): string => {
+   const prevSet = tokens.slice(0, Brain.chainLength - 1);
+   prevSet.unshift(prevWord);
+   return prevSet.join(WORD_SEPARATOR);
+};
 class Brain {
    /*
    lexicon: {
-      "word": ["word|something|something", "word|something|somethings"];      
+      "word": ["word|something|something", "word|something|somethings"];
    }
    nGrams: {
       "word|something|something": {
@@ -78,53 +153,84 @@ class Brain {
       }
    }
    */
-   public static lexicon: DBMap<string, Set<string>> = new DBMap<string, Set<string>>(checkFilePath("data", env("BOT_NAME") + ".sql"), "lexicon", false);
-   public static nGrams: DBMap<string, nGram> = new DBMap<string, nGram>(checkFilePath("data", env("BOT_NAME") + ".sql"), "ngrams", false);
+   public static lexicon: SQLiteMap<string, Set<string>> = new SQLiteMap<string, Set<string>>({
+      filename: checkFilePath("data", `${BOT_NAME}.sqlite`),
+      table: "lexicon",
+      cacheSize: 128,
+      allowSchemaMigration: env("NODE_ENV") !== "production",
+      debug: envFlag("TRACE_SQL")
+   });
+   public static nGrams: SQLiteMap<string, nGram> = new SQLiteMap<string, nGram>({
+      filename: checkFilePath("data", `${BOT_NAME}.sqlite`),
+      table: "ngrams",
+      cacheSize: 64,
+      allowSchemaMigration: env("NODE_ENV") !== "production",
+      debug: envFlag("TRACE_SQL")
+   });
    public static chainLength: number = 3;
-   public static botName: string = env("BOT_NAME") ?? "chatbot";
-   public static settings: BrainSettings;
+   public static botName: string = BOT_NAME;
+   private static lastGenerationInsight: BrainGenerationInsight | null = null;
+   public static get settings(): BrainSettings {
+      return getSettings();
+   }
+   public static set settings(value: BrainSettings) {
+      setSettings(value);
+   }
+   public static getLastGenerationInsight(): BrainGenerationInsight | null {
+      if (!Brain.lastGenerationInsight) return null;
+      return {
+         ...Brain.lastGenerationInsight,
+         initialHash: Brain.lastGenerationInsight.initialHash,
+         initialTokens: Brain.lastGenerationInsight.initialTokens.slice(),
+         steps: Brain.lastGenerationInsight.steps.map((step) => ({
+            ...step,
+            candidates: step.candidates.map((candidate) => ({ ...candidate }))
+         }))
+      };
+   }
+   // TODO: Global consciousness project — periodically set Brain.settings.surprise based on GCP dot index (normalize so 0/1 -> 0, 0.5 -> 1).
+   // TODO: Future feature — reintroduce a maintainable "reveal" reasoning-graph plugin once layout/UX design is finalized.
 
    public static saveSettings(brainName: string = "default"): boolean | Error {
-      try {
-         const brainFile = resolve(checkFilePath("data", `${brainName}-settings.json`));
-         const json = JSON.stringify(Brain.settings);
-         writeFileSync(brainFile, json, "utf8");         
-         return true;
-      } catch (error: unknown) {
-         if (error instanceof Error) return error;
-         return false;
-      }
+      return saveSettings(brainName);
    }
 
-   public static async trainFromFile(trainerName: string = "default", filetype: "json" | "txt" = "txt"): Promise<boolean | Error> {
+   public static async trainFromFile(
+      trainerName: string = "default",
+      filetype: "txt" = "txt",
+      verbose: boolean = Boolean(env("NODE_ENV") === "development")
+   ): Promise<boolean | Error> {
       try {
          const trainerFile = resolve(checkFilePath("resources", `${trainerName}-trainer.${filetype}`));
          if (!existsSync(trainerFile)) throw new Error(`Unable to load brain data from file '${trainerFile}': file does not exist.`);
+         traceBrain(`trainFromFile start: file=${trainerFile} type=${filetype} lexicon=${Brain.lexicon.size} ngrams=${Brain.nGrams.size}`);
          
-         if (filetype === "json") {
-            const data = readFileSync(trainerFile, "utf8");
-            return await Brain.fromJSON(JSON.parse(data));
-         } else if (filetype === "txt") {            
+         if (filetype === "txt") {
             
-            const size = statSync(trainerFile).size;            
-            let counter = 0;
+            const size = statSync(trainerFile).size;
+            traceBrain(`trainFromFile size: bytes=${size}`);
+            
 
             const readInterface = readline.createInterface({
-               input: createReadStream(trainerFile, { encoding: "utf8" })
+               input: createReadStream(trainerFile, { encoding: "utf8" }),
+               crlfDelay: Infinity
             });
-            
-            readInterface.on("line", async line => {
-               await Brain.learn(line);
-               counter += line.length + 1;
-               console.log(`Learned ${counter} of ${size} bytes...`);
-            });
-            readInterface.on("close", () => {
-               console.log(`Finished learning!`);               
-            });
-         
+
+            const percentMark = Math.max(1, Math.floor(size / 100));
+            let counter = 0;
+
+            for await (const line of readInterface) {
+               const normalized = String(line).trim().toLowerCase();
+               if (normalized) await Brain.learn(normalized, { silent: true });
+               counter += String(line).length;
+               if (verbose && ((counter % percentMark) === 0 || counter < percentMark)) log(`Learned ${counter} of ${size} bytes`);
+            }
+
+            log(`Finished learning!`);
+            traceBrain(`trainFromFile done: file=${trainerFile} lexicon=${Brain.lexicon.size} ngrams=${Brain.nGrams.size}`);
             return true;
          } else {
-            throw new Error(`Unable to load brain data from file '${trainerFile}': unknown file type. Must be plain text or JSON with proper schema.`);
+            throw new Error(`Unable to load brain data from file '${trainerFile}': unknown file type. Must be plain text.`);
          }
       } catch (error: unknown) {
          if (error instanceof Error) return error;
@@ -133,141 +239,10 @@ class Brain {
    }
 
    public static loadSettings(brainName: string = "default"): boolean | Error {
-      try {
-         const settingsFile = resolve(checkFilePath("resources", `${brainName}-settings.json`));
-         if (!existsSync(settingsFile)) throw new Error(`Unable to load settings from file ${settingsFile}: file does not exist.`);
-
-         const json = readFileSync(settingsFile, "utf8");
-         Brain.settings = JSON.parse(json) as BrainSettings;         
-
-         return true;
-      } catch (error: unknown) {
-         if (error instanceof Error) return error;
-         return false;
-      }
+      return loadSettings(brainName);
    }
 
-   public static async fromJSON(json: BrainJSON, verbose: boolean = !!(process.env.NODE_ENV === "development")): Promise<boolean> {
-      const hasLexicon = Reflect.has(json, "Lexicon");
-      const hasNGrams = Reflect.has(json, "nGrams");
-      
-      // Wrong JSON format
-      // TODO: Better error handling
-      if (!hasLexicon && !hasNGrams) return false;
-      
-      // Parse lexicon if it exists
-      if (hasLexicon) {         
-
-         const lexiconData = Reflect.get(json, "Lexicon") as { [word: string]: string[] };
-         const size = Object.keys(lexiconData).length;
-         const percentMark = Math.floor(size / 100);
-         const progress = new SingleBar({
-            format: 'Learning Lexicon: {bar} {percentage}% || {value}/{total} Words Learned || ETA: {eta_formatted}',
-         }, Presets.shades_classic);
-         if (verbose) progress.start(size, 0);
-         let counter = 0;
-         for (const word of Object.keys(lexiconData)) {
-            const hashes: Set<string> = Brain.lexicon.get(word) ?? new Set<string>();
-            const newHashes: string[] = Reflect.get(lexiconData, word) ?? [];
-            newHashes.forEach(hash => hashes.add(hash));                           
-            Brain.lexicon.set(word, hashes);
-            counter++;
-            if (verbose && ((counter % percentMark) === 0 || counter < percentMark)) progress.update(counter);            
-         }
-         if (verbose) progress.stop();
-      }
-
-      // Parse ngram data if it exists
-      if (hasNGrams) {
-         const ngramData = Reflect.get(json, "nGrams") as nGramJSON;
-
-         const size = Object.keys(ngramData).length;
-         const percentMark = Math.floor(size / 100);
-         const progress = new SingleBar({
-            format: 'Learning Trigrams: {bar} {percentage}% || {value}/{total} Trigrams Learned || ETA: {eta_formatted}',
-         }, Presets.shades_classic);
-
-         if (verbose) progress.start(size, 0);
-         let counter = 0;
-
-         for (const hash of Object.keys(ngramData)) {
-            
-            // Ensure ngram matches the expected format, or skip if it doesn't
-            if (!Reflect.has(ngramData[hash], "e")
-             || !Reflect.has(ngramData[hash], "n")
-             || !Reflect.has(ngramData[hash], "p")
-             || !Reflect.has(ngramData[hash], "t")
-             || !Reflect.has(ngramData[hash], "s")) continue;
-            
-            const curNGram = Brain.nGrams.get(hash) ?? {
-               canEnd: false,
-               canStart: false,
-               nextTokens: new Map<string, number>(),
-               previousTokens: new Map<string, number>(),
-               tokens: []
-            };
-            
-            // Sanity check to see if incoming tokens matches existing tokens for the same hash
-            if (curNGram.tokens.length > 0 && (JSON.stringify(curNGram.tokens) !== JSON.stringify(ngramData[hash].t))) {               
-               // This is an existing ngram with mismatched tokens, which means that the incoming ngram may be malformed (hash doesn't match tokens)
-               // In this case, do not add the incoming token.
-               continue;
-            }
-
-            const next = curNGram.nextTokens;
-            const prev = curNGram.previousTokens;
-            
-            // Older brain formats used string[], rather than a map of { [word: string]: number }            
-            if (Reflect.getPrototypeOf(ngramData[hash].n) === Array.prototype) {
-               // Parse old brain format (no frequency for previous/next words)      
-               for (const word in Reflect.get(ngramData[hash], "n")) {
-                  const curFreq = next.get(word) ?? 0;
-                  next.set(word, curFreq + 1);
-               }
-            } else {
-               // Add frequency of word to existing database
-               for (const word of Object.keys(ngramData[hash].n)) {
-                  const curFreq = next.get(word) ?? 0;
-                  const newFreq = Reflect.get(ngramData[hash].n, word) ?? 1;
-                  next.set(word, curFreq + newFreq);
-               }
-            }
-
-            if (Reflect.getPrototypeOf(ngramData[hash].p) === Array.prototype) {
-               // Parse old brain format (no frequency for previous/next words)      
-               for (const word in Reflect.get(ngramData[hash], "p")) {
-                  const curFreq = prev.get(word) ?? 0;
-                  prev.set(word, curFreq + 1);
-               }
-            } else {
-               // Add frequency of word to existing database
-               for (const word of Object.keys(ngramData[hash].p)) {
-                  const curFreq = prev.get(word) ?? 0;
-                  const newFreq = Reflect.get(ngramData[hash].p, word) ?? 1;
-                  prev.set(word, curFreq + newFreq);
-               }
-            }
-
-            // Combine existing ngram data (or empty ngram) with new ngram data
-            Brain.nGrams.set(hash, {
-               canEnd: ngramData[hash].e || curNGram.canEnd,
-               canStart: ngramData[hash].s || curNGram.canStart,
-               nextTokens: next,
-               previousTokens: prev,
-               tokens: ngramData[hash].t
-            });
-
-            counter++;
-            
-            if (verbose && ((counter % percentMark) === 0 || counter < percentMark)) progress.update(counter);          
-         }
-         if (verbose) progress.stop();
-      }
-
-      return true;
-   }
-
-   public static async learn(text: string = ""): Promise<boolean> {
+   public static async learn(text: string = "", options: { silent?: boolean } = {}): Promise<boolean> {
       /* Learn a line */
       let learned: boolean = false;
       if (!text) return learned;
@@ -282,7 +257,7 @@ class Brain {
          for (let c = 0; c < words.length - (Brain.chainLength - 1); c++) {
             const slice = words.slice(c, c + Brain.chainLength);
             const hash = slice.join(WORD_SEPARATOR);
-            let nGram: nGram = Brain.nGrams.get(hash) ?? {
+            const nGram: nGram = Brain.nGrams.get(hash) ?? {
                canStart: c === 0,
                canEnd: c === words.length - Brain.chainLength,
                tokens: slice,
@@ -298,42 +273,70 @@ class Brain {
             if (c < words.length - Brain.chainLength) {
                /* Get and increase frequency of next token */
                const word = words[c + Brain.chainLength];
-               const frequency = nGram.nextTokens.get(word) ?? 0;               
+               const frequency = nGram.nextTokens.get(word) ?? 0;
                nGram.nextTokens.set(word, frequency + 1);
             }
 
             Brain.nGrams.set(hash, nGram);
 
-            for (const word of slice) {               
+            for (const word of slice) {
                const ngrams = (Brain.lexicon.get(word) as Set<string>) ?? new Set<string>();
                ngrams.add(hash);
-               Brain.lexicon.set(word, ngrams);               
+               Brain.lexicon.set(word, ngrams);
             }
          }
          learned = true;
-      }      
+      }
+      if (learned && !options.silent) {
+         traceBrain(`learn: chars=${text.length} lexicon=${Brain.lexicon.size} ngrams=${Brain.nGrams.size}`);
+      }
       return learned;
    }
 
    public static async getResponse(seed: string): Promise<string> {
+      log(`Generating response with seed '${seed}'`, "debug");
       let response = EMPTY_BRAIN;
       if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) return "my brain is empty";
-      for (let recursiveThought = 0; recursiveThought < clamp(Brain.settings.recursion, 1, MAX_RECURSION); recursiveThought++) {
+      const recursionLimit = clamp(Brain.settings.recursion, 1, MAX_RECURSION);
+      let latestInsight: BrainGenerationInsight | null = null;
+      for (let recursiveThought = 0; recursiveThought < recursionLimit; recursiveThought++) {
+         const rawSurprise = Number(Brain.settings.surprise);
+         const surprise = Number.isFinite(rawSurprise) ? clamp(rawSurprise, 0, 1) : DEFAULT_SURPRISE;
+         const steps: BrainChoiceStep[] = [];
+         traceSurprise({
+            phase: "response.start",
+            recursiveThought: recursiveThought + 1,
+            surprise,
+            rawSurprise: Brain.settings.surprise,
+            usedDefaultSurprise: !Number.isFinite(rawSurprise)
+         });
          
          let hashes: string[] = [];
+         let initialNGram: nGram | null = null;
+         let initialNGramHash = "";
          for (let seedAttempt = 0; seedAttempt < 3; seedAttempt++) {
             if (!Brain.lexicon.has(seed)) seed = await Brain.getRandomSeed();
-            let hashset = Brain.lexicon.get(seed);
+            const hashset = Brain.lexicon.get(seed);
+            log(`Seed attempt ${seedAttempt + 1}: seed='${seed}' hashes=${hashset?.size ?? 0}`, "debug");
                         
             hashes = Array.from(hashset ?? new Set<string>());
             if (hashes.length === 0) seed = await Brain.getRandomSeed();
+            while (hashes.length > 0 && initialNGram === null) {
+               const seedHash = randFrom<string>(hashes);
+               const candidate = Brain.nGrams.get(seedHash);
+               log(`Inspecting hash candidate:\n\t${JSON.stringify(candidate, null, 2)}`, "debug");
+               if (candidate && candidate.tokens) {
+                  initialNGram = candidate;
+                  initialNGramHash = seedHash;
+                  break;
+               }
+               hashes = hashes.filter(hash => hash !== seedHash);
+            }
+            if (initialNGram !== null) break;
          }
          
-         if (hashes.length === 0) return "couldn't find a seed";
-
-         const seedHash = randFrom<string>(hashes);
-         const initialNGram = Brain.nGrams.get(seedHash);
-         if (!initialNGram || !initialNGram.tokens) return "I do not know enough information";
+         if (initialNGram === null) return "I do not know enough information";
+         const insightSeed = seed;
 
          const reply: string[] = initialNGram.tokens.slice(0);
          let stack = 0;
@@ -341,18 +344,47 @@ class Brain {
 
          while (!ngram.canEnd && (stack++ <= STACK_MAX)) {
 
-            /* TODO: Replace random selection with weighted frequency choice */
-            const nextWords = Array.from(ngram.nextTokens.keys());            
-            const nextWord = randFrom<string>(nextWords);
+            const nextWords = Array.from(ngram.nextTokens.keys());
+            const nextSelection = weightedRandFromWithTrace(ngram.nextTokens, { surprise });
+            const nextWord = nextSelection.value ?? randFrom<string>(nextWords);
+            const nextCandidates = nextSelection.trace.candidates.slice(0, INSIGHT_CANDIDATE_LIMIT).map((candidate) => ({
+               token: String(candidate.value),
+               weight: candidate.weight,
+               logWeight: candidate.logWeight,
+               gumbel: candidate.gumbel,
+               score: candidate.score
+            }));
+            steps.push({
+               phase: "next",
+               step: stack,
+               surprise,
+               candidateCount: nextSelection.trace.candidateCount,
+               weightedChoice: nextSelection.value ? String(nextSelection.value) : undefined,
+               chosen: nextWord ? String(nextWord) : undefined,
+               usedFallback: nextSelection.value === undefined && nextWord !== undefined,
+               candidates: nextCandidates
+            });
+            traceSurprise({
+               phase: "next",
+               step: stack,
+               surprise: nextSelection.trace.surprise,
+               candidateCount: nextSelection.trace.candidateCount,
+               weightedChoice: nextSelection.value ?? null,
+               chosen: nextWord ?? null,
+               usedFallback: nextSelection.value === undefined && nextWord !== undefined,
+               topCandidates: nextCandidates.map((candidate) => ({
+                  token: candidate.token,
+                  weight: Number(candidate.weight.toFixed(4)),
+                  logWeight: Number(candidate.logWeight.toFixed(4)),
+                  gumbel: Number(candidate.gumbel.toFixed(4)),
+                  score: Number(candidate.score.toFixed(4))
+               }))
+            });
+            if (!nextWord) break;
 
             reply.push(nextWord);
-            // TODO: here is where it doesn't use the 'next' word properly
-            // it adds the next word to a new hash instead, which
-            // increases the likelihood of never adjusting based on 
-            // other uses of the word. 
-            const nextSet = ngram.tokens.slice(1, Brain.chainLength);
-            nextSet.push(nextWord);
-            const nextHash = nextSet.join(WORD_SEPARATOR);
+            // Build the next hash by shifting the current token window and appending the selected word.
+            const nextHash = buildNextHash(ngram.tokens, nextWord);
             if (!Brain.nGrams.has(nextHash)) break;
             ngram = Brain.nGrams.get(nextHash) as nGram;
             if (!ngram || !ngram.tokens) break;
@@ -361,26 +393,70 @@ class Brain {
          ngram = initialNGram;
          while (!ngram.canStart && (stack++ <= STACK_MAX)) {
 
-            /* TODO: Replace random selection with weighted frequency choice */
-            const prevWords = Array.from(ngram.previousTokens.keys());            
-            const prevWord = randFrom<string>(prevWords);
+            const prevWords = Array.from(ngram.previousTokens.keys());
+            const prevSelection = weightedRandFromWithTrace(ngram.previousTokens, { surprise });
+            const prevWord = prevSelection.value ?? randFrom<string>(prevWords);
+            const prevCandidates = prevSelection.trace.candidates.slice(0, INSIGHT_CANDIDATE_LIMIT).map((candidate) => ({
+               token: String(candidate.value),
+               weight: candidate.weight,
+               logWeight: candidate.logWeight,
+               gumbel: candidate.gumbel,
+               score: candidate.score
+            }));
+            steps.push({
+               phase: "previous",
+               step: stack,
+               surprise,
+               candidateCount: prevSelection.trace.candidateCount,
+               weightedChoice: prevSelection.value ? String(prevSelection.value) : undefined,
+               chosen: prevWord ? String(prevWord) : undefined,
+               usedFallback: prevSelection.value === undefined && prevWord !== undefined,
+               candidates: prevCandidates
+            });
+            traceSurprise({
+               phase: "previous",
+               step: stack,
+               surprise: prevSelection.trace.surprise,
+               candidateCount: prevSelection.trace.candidateCount,
+               weightedChoice: prevSelection.value ?? null,
+               chosen: prevWord ?? null,
+               usedFallback: prevSelection.value === undefined && prevWord !== undefined,
+               topCandidates: prevCandidates.map((candidate) => ({
+                  token: candidate.token,
+                  weight: Number(candidate.weight.toFixed(4)),
+                  logWeight: Number(candidate.logWeight.toFixed(4)),
+                  gumbel: Number(candidate.gumbel.toFixed(4)),
+                  score: Number(candidate.score.toFixed(4))
+               }))
+            });
+            if (!prevWord) break;
 
             reply.unshift(prevWord);
-            const prevSet = ngram.tokens.slice(0, Brain.chainLength - 1);
-            prevSet.unshift(prevWord);
-            const prevHash = prevSet.join(WORD_SEPARATOR);
+            const prevHash = buildPrevHash(ngram.tokens, prevWord);
             if (!Brain.nGrams.has(prevHash)) break;
             ngram = Brain.nGrams.get(prevHash) as nGram;
             if (!ngram || !ngram.tokens) break;
          }
-         response = reply.join(' ').trim();
+         response = reply.join(" ").trim();
+         latestInsight = {
+            createdAt: Date.now(),
+            requestedSeed: insightSeed,
+            response,
+            surprise,
+            recursion: recursionLimit,
+            recursiveThought: recursiveThought + 1,
+            initialHash: initialNGramHash || initialNGram.tokens.join(WORD_SEPARATOR),
+            initialTokens: initialNGram.tokens.slice(),
+            steps
+         };
          seed = await Brain.getSeed(response);
       }
+      if (latestInsight) Brain.lastGenerationInsight = latestInsight;
       return response;
    }
 
-   public static async getRandomSeed(): Promise<string> {      
-      const lexiconWords: string[] = Array.from(Brain.lexicon.keys());      
+   public static async getRandomSeed(): Promise<string> {
+      const lexiconWords: string[] = Array.from(Brain.lexicon.keys());
       if (lexiconWords.length === 0) return "I know no words";
       return randFrom<string>(lexiconWords);
    }
@@ -393,37 +469,6 @@ class Brain {
       return randFrom<string>(words);
    }
 
-   // TODO: Decouple this from the brain -- the settings should be at the bot level (higher than brain)
-   public static shouldYell(text: string): boolean {
-      
-      let newAngerLevel: number = Brain.settings.angerLevel;
-      
-      // If incoming text is caps, increase anger level; otherwise, decrease it
-      newAngerLevel *= (text === text.toUpperCase()) ? Brain.settings.angerIncrease : Brain.settings.angerDecrease;
-      Brain.settings.angerLevel = clamp(newAngerLevel, 0.01, 10);
-      
-      // If random number between 0 and 1 is less than anger level, then should yell is true
-      return (Math.random() < Brain.settings.angerLevel);
-   }
-
-   // TODO: Decouple this from the brain -- the settings should be at the bot level (higher than brain) and might need to be chat protocol specific
-   public static shouldRespond(respondsTo: string | RegExp, text: string): boolean {            
-
-      // Respond if random outburst is true
-      if (Math.random() < Brain.settings.outburstThreshold) return true;
-
-      // Respond if mentioned
-      if (respondsTo instanceof RegExp) {
-         if (text.match(respondsTo)) return true;
-      } else {
-         if (!respondsTo) return false;
-         // TODO: Memoize this regexp
-         if (text.match(new RegExp(escapeRegExp(respondsTo), "giu"))) return true;
-      }
-
-      // Otherwise, do not respond
-      return false;      
-   }
 }
 
 export { Brain };

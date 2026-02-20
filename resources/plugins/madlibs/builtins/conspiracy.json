@@ -1,0 +1,339 @@
+{
+  "meta": {
+    "id": "conspiracy",
+    "name": "Conspiracy",
+    "description": "Generates a secret from the deep bureaucratic morass.",
+    "usage": "conspiracy",
+    "matcher": "conspiracy",
+    "matcherFlags": "ui"
+  },
+
+  "vocab": {
+    "[nThey]": [
+      "they",
+      "the same people",
+      "certain interests",
+      "connected parties",
+      "the ones with the calendar",
+      "the ones with the budget",
+      "the people who never miss the meeting"
+    ],
+
+    "[nInstitution]": [
+      "the media",
+      "the government",
+      "big tech",
+      "the agencies",
+      "the foundations",
+      "the platforms",
+      "the compliance office",
+      "the risk team",
+      "the consultants"
+    ],
+
+    "[nEvent]": [
+      "the blackout",
+      "the leak",
+      "the vote",
+      "the crash",
+      "the rollout",
+      "the update",
+      "the recall",
+      "the announcement",
+      "the emergency change",
+      "the surprise reorg"
+    ],
+
+    "[nEvidence]": [
+      "the timing",
+      "the calendar overlap",
+      "the identical phrasing",
+      "the procurement trail",
+      "the version history",
+      "the redactions",
+      "the deleted posts",
+      "the oddly specific denial",
+      "the sudden silence"
+    ],
+
+    "[nClaim]": [
+      "a coincidence",
+      "an accident",
+      "a clerical error",
+      "a misunderstanding",
+      "bad luck",
+      "human error",
+      "a glitch",
+      "a one-off",
+      "nothingburger"
+    ],
+
+    "[nAbstract]": [
+      "control",
+      "power",
+      "narrative",
+      "influence",
+      "perception",
+      "trust",
+      "consent",
+      "credibility",
+      "legibility",
+      "plausible deniability",
+      "institutional memory",
+      "the official story",
+      "the permitted imagination"
+    ],
+
+    "[nMechanism]": [
+      "incentive design",
+      "selection pressure",
+      "bureaucratic gravity",
+      "procedural drift",
+      "policy laundering",
+      "risk transfer",
+      "narrative containment",
+      "manufactured ambiguity",
+      "compliance theater",
+      "metrics-as-reality"
+    ],
+
+    "[nPipeline]": [
+      "the PR pipeline",
+      "the procurement pipeline",
+      "the moderation pipeline",
+      "the legal pipeline",
+      "the HR pipeline",
+      "the incident pipeline",
+      "the independent-review pipeline"
+    ],
+
+    "[nArtifact]": [
+      "memo",
+      "policy update",
+      "fact-check",
+      "press release",
+      "dashboard",
+      "report",
+      "committee",
+      "task force",
+      "transparency page",
+      "clarification"
+    ],
+
+    "[nRitual]": [
+      "the apology tour",
+      "the public hearing",
+      "the controlled leak",
+      "the choreographed outrage",
+      "the sacrificial firing",
+      "the accountability ritual",
+      "the lessons-learned ceremony",
+      "the timeline scrub"
+    ],
+
+    "[nVibe]": [
+      "vibes",
+      "optics",
+      "tone",
+      "acceptable framing",
+      "the discourse weather",
+      "the permission structure"
+    ],
+
+    "[adjSoft]": [
+      "interesting",
+      "weird",
+      "curious",
+      "odd",
+      "unexpected",
+      "convenient",
+      "unfortunate",
+      "a little too clean",
+      "almost scripted"
+    ],
+
+    "[adjHard]": [
+      "coordinated",
+      "manufactured",
+      "scripted",
+      "stage-managed",
+      "engineered",
+      "synthetic",
+      "curated",
+      "pre-approved",
+      "risk-managed"
+    ],
+
+    "[verbSuggest]": [
+      "suggests",
+      "raises questions",
+      "doesn't add up",
+      "doesn't sit right",
+      "makes you wonder",
+      "points somewhere",
+      "feels intentional",
+      "reads like a template"
+    ],
+
+    "[verbDeny]": [
+      "deny",
+      "downplay",
+      "dismiss",
+      "explain away",
+      "fact-check",
+      "memory-hole",
+      "reframe",
+      "clarify",
+      "quietly edit"
+    ],
+
+    "[verbNotice]": [
+      "notice",
+      "remember",
+      "revisit",
+      "compare",
+      "connect",
+      "trace back",
+      "read the footnotes",
+      "watch the language"
+    ],
+
+    "[advHedge]": [
+      "probably",
+      "maybe",
+      "technically",
+      "officially",
+      "on paper",
+      "allegedly",
+      "supposedly",
+      "as we're told"
+    ],
+
+    "[fixedPlausible]": [
+      "I'm not saying anything",
+      "just asking questions",
+      "could be nothing",
+      "make of that what you will",
+      "draw your own conclusions",
+      "I'm just noticing patterns",
+      "do your own research",
+      "I could be wrong"
+    ],
+
+    "[fixedHook]": [
+      "Here's the part nobody explains",
+      "The funny thing is",
+      "What gets me is",
+      "The part that sticks out is",
+      "If you zoom out for a second",
+      "If you listen to the wording",
+      "If you track who benefits"
+    ],
+
+    "[ticketId]": [
+      "INC-[####]",
+      "REQ-[####]",
+      "POL-[###]-[A-Z]",
+      "CASE-[####]",
+      "JIRA-[A-Z]{2}-[####]"
+    ],
+
+    "[meetingName]": [
+      "Emergency Sync",
+      "Cross-Functional Review",
+      "Risk Alignment Call",
+      "Incident Debrief",
+      "Stakeholder Touchpoint",
+      "Post-Event Review",
+      "Policy Clarification Session"
+    ],
+
+    "[committeeName]": [
+      "Risk Oversight Committee",
+      "Ethics & Compliance Group",
+      "Trust and Safety Council",
+      "External Review Panel",
+      "Independent Governance Board",
+      "Advisory Working Group"
+    ],
+
+    "[policyClause]": [
+      "Section [##].[#]",
+      "Clause [#].[##]",
+      "Appendix [A-Z]",
+      "Footnote [#]",
+      "Paragraph [##]"
+    ],
+
+    "[calendarSlot]": [
+      "Q[#]",
+      "Q[#] planning",
+      "end of quarter",
+      "next review cycle",
+      "after the audit",
+      "post-approval window"
+    ],
+
+    "[docVersion]": [
+      "v[#].[#]",
+      "v[#].[#].[#]",
+      "rev [A-Z]",
+      "draft [#]"
+    ]
+  },
+
+  "patterns": [
+    "[fixedPlausible], but [fixedHook] how [nEvent] shows up right when [nInstitution] needs the [nVibe] to change.",
+    "[fixedHook] the [nEvidence] around [nEvent]. It [verbSuggest] [nMechanism], not [nClaim].",
+    "According to [nInstitution], it was [nClaim]. According to the [nEvidence], it was [adjSoft] and worth [verbNotice]ing.",
+    "It's wild how fast [nArtifact] appears after [nEvent], like it was already queued in [nPipeline].",
+    "[fixedHook] how everyone lands on the same phrasing. That's not consensus; that's [nMechanism].",
+    "[advHedge], it's nothing, but the [nEvidence] reads like a template somebody reused.",
+    "You can call it [nClaim], but you don't get that level of [adjHard] response without [nMechanism].",
+    "[nThey] don't have to control everything; they just have to control the defaults around [nAbstract].",
+    "People imagine conspiracies as villains in a room. It's usually [nPipeline] plus [nMechanism] plus nobody wanting blame.",
+    "[fixedPlausible], but [fixedHook] how [nInstitution] [verbDeny] questions about the [nEvidence] faster than they explain the event.",
+    "If [nEvent] was really [nClaim], why does it require [meetingName] and three separate [nArtifact]s?",
+    "The [nEvidence] isn't proof of a cabal; it's proof of a workflow. Workflows beat intentions every time.",
+    "You ever notice how [nAbstract] gets redefined right after [nEvent]? That's [nMechanism] in plain sight.",
+    "[fixedHook] the procurement trail. When the same vendors show up after every [nEvent], it stops feeling random.",
+    "It's always [nClaim] until you [verbNotice] the calendar overlap and the identical talking points.",
+    "The impressive trick isn't hiding [nEvent]. It's making people argue about [nVibe] instead of the [nEvidence].",
+    "[fixedPlausible], but [nInstitution] runs [nRitual]s the way old religions ran seasons.",
+    "Everyone argues about what happened. I'm watching what got approved before it happened.",
+    "The official story is less about truth and more about maintaining [nAbstract] with minimal disruption.",
+    "[fixedHook] how [nEvent] becomes a reason to expand [nPipeline]. That's the pattern I can't unsee.",
+    "When the [nEvidence] points one way and the [nArtifact] points another, you're watching [nMechanism] do damage control.",
+    "Maybe it's [nClaim]. Or maybe the system is doing what systems do: protecting [nAbstract] through [nMechanism].",
+    "People ask who did this. Better question: what incentives make this the stable outcome?",
+    "[fixedPlausible], but [fixedHook] how [nInstitution] reacts faster than they investigate.",
+    "The weird part isn't that [nThey] exist. The weird part is how predictable the sequence has become.",
+    "Watch the language shift: impossible, unlikely, always known, resolved.",
+    "You don't need forbidden knowledge. You need version history, a calendar, and ten minutes of attention.",
+    "The [nEvidence] doesn't scream mastermind; it whispers process, risk, containment.",
+    "Every time [nEvent] happens, [nAbstract] gets fenced off a little more, and everyone calls it maturity.",
+    "[fixedHook] the edits. Quiet changes, loud certainty. That's how the story trains itself.",
+    "[advHedge], it's not malicious. It's just [nMechanism] doing what it was built to do.",
+    "[fixedPlausible], but if you can predict the next [nArtifact] after [nEvent], you're not guessing anymore.",
+    "People laugh at conspiracies and then accept [nMechanism] as how things work.",
+    "The scariest version isn't a villain. It's a machine that rewards the same lie forever.",
+    "[fixedHook] how questioning the [nEvidence] becomes harm, while rewriting [nAbstract] becomes safety.",
+    "You don't need a hidden hand to see the visible choreography of [nRitual].",
+    "The pattern is simple: [nEvent] triggers [nRitual], which justifies [nPipeline], which reshapes [nAbstract].",
+    "[fixedPlausible], but the cleanest scams are the ones called policy and filed under best practices.",
+    "The moment I saw [ticketId] attached to [nEvent], it stopped feeling spontaneous.",
+    "If this was random, it wouldn't already have [docVersion] approved by the [committeeName].",
+    "[nEvent] hit the news after [meetingName], not before. That's a tell.",
+    "You don't spin up [meetingName] for a one-off; you do it when [policyClause] is about to move.",
+    "Nothing says coincidence like [ticketId] created before the public announcement.",
+    "People argue online while the real decisions get logged under [policyClause] and scheduled for [calendarSlot].",
+    "[fixedHook] how [committeeName] convened before anyone admitted [nEvent] existed.",
+    "It's informal until it gets a [ticketId], then it's suddenly process.",
+    "Once something has [docVersion], it has history. History doesn't come from accidents.",
+    "[advHedge], but when an issue gets tagged [ticketId], it's already inside the machine.",
+    "Watch the wording change after [meetingName]; that's when [nAbstract] gets redefined.",
+    "The cleanest tell is when [nEvent] immediately spawns [ticketId] and a standing meeting.",
+    "People fight about the headline while the real action happens in [policyClause] after [calendarSlot].",
+    "[fixedPlausible], but seeing [ticketId] was enough to know this wasn't organic."
+  ]
+}

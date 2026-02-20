@@ -8,6 +8,13 @@
 |                      | (NB: Avoid using non-ascii characters to prevent unexpected behavior)  |
 | NODE_ENV             | Node Environment: "production" or "development"                        |
 
+# Optional environmental variables
+
+| Variable          | Type of Value                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| TOPIC_MEMORY_SALT | Salt used to anonymize user IDs in temporal topic memory; if unset, topic memory is disabled (fail-closed). |
+| TRACE_SURPRISE    | Enable debug traces for surprise-based next/previous token selection in response generation (`true`/`1`).    |
+
 
 
 
@@ -26,19 +33,117 @@ The following are the required values for the bot settings:
 | angerDecrease         | 0.01 - 10.0      | 0.8           | Value that the AngerLevel will be multipled by if the bot does not witness yelling                    |
 | recursion             | 0 - 100          | 1             | Number of times the output of the bot is sent back in as input (for self-reinforcement learning)      |
 | conversationTimeLimit | 0 - 100000       | 7000          | Number of milliseconds the bot will wait for a additional input without requiring its name to be said |
+| topicMemoryTtlMinutes | 1 - 1440         | 20            | Minutes a remembered topic stays active for a user+channel                                              |
+| topicMemoryMaxInteractions | 1 - 1000    | 8             | Maximum number of personality-response generations before topic memory expires                           |
+| topicMemoryBiasStrength | 0.0 - 1.0      | 0.8           | Chance to bias seed selection toward remembered topic keywords while memory is active                   |
+| topicMemoryKeywordCount | 1 - 5          | 3             | Number of ranked keywords extracted from user input when refreshing topic memory                         |
 | learnFromBots         | true / false     | false         | Whether the bot will learn from other bots, or ignore them                                            |
+
+# Validation
+
+- `npm run build` compiles TypeScript into `dist/`.
+- `npm run dev` builds and starts the bot locally.
+- `npm run start` starts from an existing `dist/` build.
+
+Note: this branch does not currently define `npm test`, `test:*`, or `lint` scripts.
 
 # Steps to deploy initially (no pretrained brain) without git
 1. Copy the following files and directories:
     - `./resources/*`
     - `./src/*`
+    - `./tools/*` (NOTE: you should also run `chmod +x ./tools/*` for the scripts to properly execute)
     - `./Dockerfile`
+    - `./docker-compose.yml`
     - `./package.json`
     - `./tsconfig.json`
     - `./README.md`
     - `./.gitattributes`
-2. Create the following files and directories:
+    - `./.dockerignore`
+ 2. Create the following files and directories:
     - `./.env` (See [Required environment variables](#required-environmental-variables))
     - `./data/`
     - (Optional) `./resources/{bot-name}-settings.json` (See [Bot settings](#bot-settings))
-    - (Optional) `./data/{bot-name}-trainer.json` (See [Example trainer schema](https://github.com/mureni/charlies2/issues/1#issuecomment-774998882) - NB: Format expected to be deprecated in favor of raw text and/or other pre-processors)
+    - (Optional) `./resources/{bot-name}-trainer.{txt|json}` (See [Example trainer schema](https://github.com/mureni/charlies2/issues/1#issuecomment-774998882) 
+        - You can also create a default trainer by running the following commands:
+            - `cd ./tools/`
+            - `./generate-trainer.sh`
+        - This will create the file `./resources/default-trainer.txt` based off of data from the [ConvAI2 competition](https://convai.io)
+        - WARNING: This requires the `curl` and `jq` programs to be installed
+3. Install dependencies via `npm`:
+    - `npm install`
+4. Build a distribution version of the source:
+    - `npm run build`
+    - `docker-compose build`
+5. Run `docker-compose` as a daemon:
+    - `docker-compose up -d`
+
+# Steps to install when using git
+1. Create a directory for the project to exist in:
+    - `mkdir -p ~/charlies`
+    - `cd ~/charlies`
+2. Clone the project:
+    `git clone https://github.com/mureni/charlies2.git ~/charlies`
+3. Create the following files and directories:
+    - `./.env` (See [Required environment variables](#required-environmental-variables))
+    - `./data/`
+    - (Optional) `./resources/{bot-name}-settings.json` (See [Bot settings](#bot-settings))
+    - (Optional) `./resources/{bot-name}-trainer.{txt|json}` (See [Example trainer schema](https://github.com/mureni/charlies2/issues/1#issuecomment-774998882) 
+        - You can also create a default trainer by running the following commands:
+            - `cd ./tools/`
+            - `./generate-trainer.sh`
+        - This will create the file `./resources/default-trainer.txt` based off of data from the [ConvAI2 competition](https://convai.io)
+        - WARNING: This requires the `curl` and `jq` programs to be installed
+4. Install dependencies via `npm`:
+    - `npm install`
+5. Build a distribution version of the source:
+    - `npm run build`
+    - `docker-compose build`
+6. Run `docker-compose` as a daemon:
+    - `docker-compose up -d`
+
+# Steps to update when using git
+1. Run the `update` script:
+    - `./tools/update.sh`
+    - Optional: `./tools/update.sh origin private-dev` to target a specific remote/branch
+
+The update script, if not present, can be made as follows:
+```bash
+#!/bin/sh
+set -eu
+
+if [ -n "${1:-}" ] && [ -n "${2:-}" ]; then
+  REMOTE="$1"
+  BRANCH="$2"
+elif [ -n "${1:-}" ]; then
+  case "$1" in
+    */*)
+      REMOTE="${1%%/*}"
+      BRANCH="${1#*/}"
+      ;;
+    *)
+      REMOTE="origin"
+      BRANCH="$1"
+      ;;
+  esac
+else
+  UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name "@{u}" 2>/dev/null || true)
+  if [ -n "$UPSTREAM" ] && [ "$UPSTREAM" != "@{u}" ]; then
+    REMOTE="${UPSTREAM%%/*}"
+    BRANCH="${UPSTREAM#*/}"
+  else
+    REMOTE="origin"
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+  fi
+fi
+
+echo "Stopping docker container for charlies..."
+docker-compose down
+echo "Retrieving most recent code from remote '$REMOTE', branch '$BRANCH'..."
+git pull "$REMOTE" "$BRANCH"
+echo "Rebuilding charlies docker image as needed..."
+docker-compose build
+echo "Starting docker container based off of charlies docker image..."
+docker-compose up -d
+```
+
+This will pull the most recent code from the remote git repo

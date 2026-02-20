@@ -1,0 +1,53 @@
+# Local-only and private-development assets
+.vscode
+.devcontainer
+.github
+.review
+.tmp/
+coverage/
+report/
+reports/
+dev/
+eslint.config.js
+vitest.config.ts
+tsconfig.eslint.json
+tsconfig.test.json
+tsconfig.sqlite-test.json
+charlies2.zip
+
+# Data directory (should contain information at runtime only, not part of the container)
+data
+
+# Allow package.json and package-lock.json 
+!package-lock.json
+!package.json
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+node_modules/
+dist/
+sourcemaps/
+build/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# dotenv environment variables file
+.env
+.env*
+*.env
