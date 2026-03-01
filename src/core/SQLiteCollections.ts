@@ -42,6 +42,7 @@ export interface SQLiteCollectionOptions {
    objectKeyTracking?: SQLiteObjectKeyTracking;
    indexes?: SQLiteIndexDefinition[];
    allowSchemaMigration?: boolean;
+   keepLegacyTables?: boolean;
 }
 
 const DEFAULT_PRAGMAS = ["journal_mode = WAL", "synchronous = NORMAL"];
@@ -284,6 +285,18 @@ abstract class SQLiteCollectionBase {
    protected readonly cacheSize: number;
    protected sizeCache: number;
 
+   private failSqlite(operation: string, error: unknown): never {
+      const code = typeof error === "object" && error !== null && "code" in error
+         ? String((error as { code?: unknown }).code ?? "")
+         : "";
+      const detail = error instanceof Error ? error.message : String(error);
+      const prefix = `SQLite ${operation} failed (file='${this.filename}', table='${this.table}'${code ? `, code=${code}` : ""})`;
+      if (error instanceof Error) {
+         throw new Error(`${prefix}: ${detail}`, { cause: error });
+      }
+      throw new Error(`${prefix}: ${detail}`);
+   }
+
    protected constructor(options: SQLiteCollectionOptions | undefined, tableFallback: string) {
       const filename = options?.filename ?? ":memory:";
       this.table = sanitizeTableName(options?.table ?? tableFallback);
@@ -306,7 +319,12 @@ abstract class SQLiteCollectionBase {
 
       this.ensureSchema(options);
 
-      const countRow = this.db.prepare(`SELECT COUNT(*) as count FROM ${this.table}`).get() as { count: number };
+      let countRow: { count: number };
+      try {
+         countRow = this.db.prepare(`SELECT COUNT(*) as count FROM ${this.table}`).get() as { count: number };
+      } catch (error: unknown) {
+         this.failSqlite("row count", error);
+      }
       this.sizeCache = Number.isFinite(countRow.count) ? countRow.count : 0;
 
       SQLiteCollectionBase.closeables.add(this.db);
@@ -357,38 +375,43 @@ abstract class SQLiteCollectionBase {
    }
 
    private ensureSchema(options: SQLiteCollectionOptions | undefined): void {
-      const tableExists = this.db
-         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
-         .get(this.table);
+      try {
+         const tableExists = this.db
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+            .get(this.table);
 
-      if (!tableExists) {
-         this.createTable();
-         this.createIndexes(options);
-         return;
-      }
-
-      const columns = this.db.prepare(`PRAGMA table_info(${this.table})`).all() as Array<{ name: string }>;
-      const hasKeyHash = columns.some((column) => column.name === "key_hash");
-      if (hasKeyHash) {
-         this.createIndexes(options);
-         if (options?.purgeStaleObjectKeys ?? true) {
-            this.db.prepare(`DELETE FROM ${this.table} WHERE key_hash LIKE 'object:%' OR key_hash LIKE 'symbol:%'`).run();
+         if (!tableExists) {
+            this.createTable();
+            this.createIndexes(options);
+            return;
          }
-         return;
-      }
 
-      const hasLegacyKey = columns.some((column) => column.name === "key");
-      if (hasLegacyKey) {
-         if (!options?.allowSchemaMigration) {
-            throw new Error(
-               `Table '${this.table}' uses legacy schema; set allowSchemaMigration to migrate it.`
-            );
+         const columns = this.db.prepare(`PRAGMA table_info(${this.table})`).all() as Array<{ name: string }>;
+         const hasKeyHash = columns.some((column) => column.name === "key_hash");
+         if (hasKeyHash) {
+            this.createIndexes(options);
+            if (options?.purgeStaleObjectKeys ?? true) {
+               this.db.prepare(`DELETE FROM ${this.table} WHERE key_hash LIKE 'object:%' OR key_hash LIKE 'symbol:%'`).run();
+            }
+            this.dropLegacyTables(options);
+            return;
          }
-         this.migrateLegacyTable(options);
-         return;
-      }
 
-      throw new Error(`Table '${this.table}' has an incompatible schema.`);
+         const hasLegacyKey = columns.some((column) => column.name === "key");
+         if (hasLegacyKey) {
+            if (!options?.allowSchemaMigration) {
+               throw new Error(
+                  `Table '${this.table}' uses legacy schema; set allowSchemaMigration to migrate it.`
+               );
+            }
+            this.migrateLegacyTable(options);
+            return;
+         }
+
+         throw new Error(`Table '${this.table}' has an incompatible schema.`);
+      } catch (error: unknown) {
+         this.failSqlite("schema initialization", error);
+      }
    }
 
    private createTable(): void {
@@ -436,6 +459,20 @@ abstract class SQLiteCollectionBase {
       this.createIndexes(options);
       if (options?.purgeStaleObjectKeys ?? true) {
          this.db.prepare(`DELETE FROM ${this.table} WHERE key_hash LIKE 'object:%' OR key_hash LIKE 'symbol:%'`).run();
+      }
+      this.dropLegacyTables(options);
+   }
+
+   private dropLegacyTables(options: SQLiteCollectionOptions | undefined): void {
+      if (options?.keepLegacyTables === true) return;
+      const pattern = `${this.table}_legacy_%`;
+      const tables = this.db
+         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE ?")
+         .all(pattern) as Array<{ name: string }>;
+      for (const row of tables) {
+         if (!row?.name || !row.name.startsWith(`${this.table}_legacy_`)) continue;
+         const legacyName = sanitizeTableName(row.name);
+         this.db.prepare(`DROP TABLE IF EXISTS ${legacyName}`).run();
       }
    }
 

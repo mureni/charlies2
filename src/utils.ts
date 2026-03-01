@@ -16,7 +16,7 @@ const initEnvConfig = (raw: NodeJS.ProcessEnv = process.env): EnvConfig => {
 const getEnvConfig = (): EnvConfig => envConfig ?? initEnvConfig();
 
 const checkFilePath = (path: "code" | "resources" | "data" | "logs" = "code", file: string = "", createFile: boolean = true): string => {
-   const dataOverride = path === "data" ? getEnvConfig().CHARLIES_DATA_DIR : undefined;
+   const dataOverride = path === "data" ? getEnvConfig().DATA_DIR : undefined;
    const typePath: string = path === "code" ? distPath : path;
    const basePath = dataOverride
       ? (isAbsolute(dataOverride) ? dataOverride : resolve(rootPath, dataOverride))

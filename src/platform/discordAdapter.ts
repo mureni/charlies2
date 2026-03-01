@@ -33,6 +33,7 @@ import {
    AttachmentBuilder,
    ApplicationCommandOptionType,
    ChannelType,
+   MessageType,
    PermissionFlagsBits,
    PermissionsBitField,
    resolveColor
@@ -595,13 +596,22 @@ const toStandardMessage = async (message: Message): Promise<StandardMessage> => 
    const botUser = message.client.user ?? undefined;
    const authorName = await getDisplayName(message.member?.user ?? message.author, message.guild?.members);
    const mentionsBot = botUser ? message.mentions.has(botUser) : false;
+   const isReplyMessage = message.type === MessageType.Reply;
+   const repliedUserId = message.mentions.repliedUser?.id;
    let referencedContent: string | undefined;
    let referencedMentionsBot: boolean | undefined;
-   if (message.reference) {
+   let referencedAuthorId: string | undefined;
+   let referencedIsSelf: boolean | undefined;
+   if (isReplyMessage && message.reference?.messageId) {
+      referencedAuthorId = repliedUserId;
+      referencedIsSelf = botUser ? repliedUserId === botUser.id : false;
+      referencedMentionsBot = referencedIsSelf;
       try {
          const referencedMessage = await message.fetchReference();
          referencedContent = referencedMessage.content;
+         referencedAuthorId = referencedMessage.author?.id;
          referencedMentionsBot = botUser ? referencedMessage.mentions.has(botUser) : false;
+         referencedIsSelf = botUser ? referencedMessage.author?.id === botUser.id : false;
       } catch {
          referencedContent = undefined;
       }
@@ -624,6 +634,8 @@ const toStandardMessage = async (message: Message): Promise<StandardMessage> => 
       mentionsBot,
       referencedContent,
       referencedMentionsBot,
+      referencedAuthorId,
+      referencedIsSelf,
       isAdmin,
       isBotOwner: message.author.id === env("BOT_OWNER_DISCORD_ID"),
       isSelf: botUser ? message.author.id === botUser.id : false,

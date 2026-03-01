@@ -41,6 +41,7 @@ const DEFAULT_SECRET_PLACES = [
    "a little hideaway"
 ];
 const traceFlow = envFlag("TRACE_FLOW");
+const ambientBotNameTrigger = envFlag("AMBIENT_BOT_NAME_TRIGGER", true);
 const trace = (message: string, data?: unknown): void => {
    if (traceFlow) log(data ? { message: `Flow: ${message}`, data } : `Flow: ${message}`, "trace");
 };
@@ -170,9 +171,18 @@ const processPersonalityResponse = async (
    const isGroupDm = Boolean(message.channel?.isGroupDm)
       || (isDirectMessage && typeof message.channel?.memberCount === "number" && message.channel.memberCount > 1);
    const mentionsBot = Boolean(message.mentionsBot);
+   const repliedToBot = Boolean(message.referencedIsSelf);
+   const rawText = message.content ?? "";
    const matchesBotName = (text: string): boolean => {
       if (!Brain.botName) return false;
       return Boolean(text.match(newRX(escapeRegExp(Brain.botName), "giu")));
+   };
+   const ambientBotNameMatch = ambientBotNameTrigger && matchesBotName(rawText);
+   const composeResponseInput = async (): Promise<string> => {
+      if (!repliedToBot || !message.referencedContent) return preBrainText;
+      const cleanReferencedText = await cleanMessage(message.referencedContent, { Case: "lower", UseEndearments: true }, memberContext);
+      const preBrainReferenced = Filters.apply("preBrain", cleanReferencedText, message, "learn").trim();
+      return [preBrainReferenced, preBrainText].filter((part) => part.length > 0).join(" ").trim() || preBrainText;
    };
 
    let shouldRespond = false;
@@ -182,17 +192,22 @@ const processPersonalityResponse = async (
       const groupSize = Math.max(2, message.channel?.memberCount ?? 2);
       const baseOutburst = Brain.settings.outburstThreshold;
       const groupOutburst = Math.min(1, baseOutburst * groupSize);
-      shouldRespond = Math.random() < groupOutburst || mentionsBot || matchesBotName(preBrainText);
+      shouldRespond = Math.random() < groupOutburst || mentionsBot || ambientBotNameMatch;
    } else {
-      shouldRespond = mentionsBot || shouldRespondDecision(Brain.botName, preBrainText, Brain.settings);
+      shouldRespond = mentionsBot || shouldRespondDecision(
+         ambientBotNameTrigger ? Brain.botName : "",
+         rawText,
+         Brain.settings
+      );
    }
+   if (repliedToBot) shouldRespond = true;
 
    /* If the message is a reference (reply) then check if the referenced message should be responded to */
    if (message.referencedContent) {
-      if (message.referencedMentionsBot || matchesBotName(message.referencedContent)) shouldRespond = true;
+      if (message.referencedMentionsBot || (ambientBotNameTrigger && matchesBotName(message.referencedContent))) shouldRespond = true;
    }
 
-   trace("shouldRespond", { mentionsBot, shouldRespond, isDirectMessage, isGroupDm });
+   trace("shouldRespond", { mentionsBot, ambientBotNameTrigger, ambientBotNameMatch, repliedToBot, shouldRespond, isDirectMessage, isGroupDm });
 
    const lexiconSize = Brain.lexicon?.size ?? 0;
    const ngramSize = Brain.nGrams?.size ?? 0;
@@ -201,6 +216,7 @@ const processPersonalityResponse = async (
       return { learned: await Brain.learn(preBrainText) };
    }
 
+   const responseInput = await composeResponseInput();
    let seed: string = "";
    let conversationActive = false;
    const user = touchKnownUser(message.authorId, message.authorName);
@@ -209,7 +225,7 @@ const processPersonalityResponse = async (
       if (Date.now() - conversation.lastSpokeAt < Brain.settings.conversationTimeLimit) {
          shouldRespond = true;
          conversationActive = true;
-         seed = [preBrainText, conversation.lastTopic].join(" ");
+         seed = [responseInput, conversation.lastTopic].join(" ");
       }
    }
 
@@ -224,7 +240,7 @@ const processPersonalityResponse = async (
       await platform.sendTyping(message.channelId);
       user.conversations.set(message.channelId, {
          lastSpokeAt: Date.now(),
-         lastTopic: preBrainText
+         lastTopic: responseInput
       });
       saveKnownUser(message.authorId, user, { bump: false });
 
@@ -238,14 +254,14 @@ const processPersonalityResponse = async (
          const rememberedSeed = randFrom(lexiconKeywords);
          if (rememberedSeed) seed = rememberedSeed;
       }
-      if (!seed) seed = await Brain.getSeed(preBrainText);
+      if (!seed) seed = await Brain.getSeed(responseInput);
       for (let attempt = 0; attempt < 5; attempt++) {
          response = await Brain.getResponse(seed);
-         if (response.toLowerCase() !== preBrainText.toLowerCase()) break;
+         if (response.toLowerCase() !== responseInput.toLowerCase()) break;
          seed = await Brain.getSeed();
       }
-      if (response.toLowerCase() === preBrainText.toLowerCase()) response = await Brain.getResponse(await Brain.getRandomSeed());
-      if (response.toLowerCase() === preBrainText.toLowerCase()) response = "😖";
+      if (response.toLowerCase() === responseInput.toLowerCase()) response = await Brain.getResponse(await Brain.getRandomSeed());
+      if (response.toLowerCase() === responseInput.toLowerCase()) response = "😖";
 
       const mods: ModificationType = { ...processed.modifications };
 
@@ -262,14 +278,14 @@ const processPersonalityResponse = async (
       updateTopicMemory({
          userId: message.authorId,
          channelId: message.channelId
-      }, preBrainText, Brain.settings);
+      }, responseInput, Brain.settings);
 
       /* Learn what it just created, to create a feedback */
       const cleanResponse = await cleanMessage(response, { Case: "lower", UseEndearments: true }, memberContext);
       await Brain.learn(cleanResponse);
 
       return {
-         learned: await Brain.learn(preBrainText),
+         learned: await Brain.learn(responseInput),
          response,
          directedTo
       };

@@ -58,9 +58,22 @@ interface HarnessResponse {
 const DEFAULT_PROXY_PORT = Number(env("HARNESS_PROXY_PORT", "3141"));
 const DEFAULT_PROXY_HOST = env("HARNESS_PROXY_HOST", "127.0.0.1");
 const DEFAULT_PROXY_MAX_BODY_BYTES = Number(env("HARNESS_PROXY_MAX_BODY_BYTES", "1048576"));
+const DEFAULT_PROXY_RATE_LIMIT_WINDOW_MS = Number(env("HARNESS_PROXY_RATE_LIMIT_WINDOW_MS", "60000"));
+const DEFAULT_PROXY_RATE_LIMIT_MAX_REQUESTS = Number(env("HARNESS_PROXY_RATE_LIMIT_MAX_REQUESTS", "120"));
 const MAX_PROXY_BODY_BYTES = Number.isFinite(DEFAULT_PROXY_MAX_BODY_BYTES) && DEFAULT_PROXY_MAX_BODY_BYTES > 0
    ? DEFAULT_PROXY_MAX_BODY_BYTES
    : 1048576;
+const PROXY_RATE_LIMIT_WINDOW_MS = Number.isFinite(DEFAULT_PROXY_RATE_LIMIT_WINDOW_MS) && DEFAULT_PROXY_RATE_LIMIT_WINDOW_MS > 0
+   ? Math.floor(DEFAULT_PROXY_RATE_LIMIT_WINDOW_MS)
+   : 60000;
+const PROXY_RATE_LIMIT_MAX_REQUESTS = Number.isFinite(DEFAULT_PROXY_RATE_LIMIT_MAX_REQUESTS) && DEFAULT_PROXY_RATE_LIMIT_MAX_REQUESTS > 0
+   ? Math.floor(DEFAULT_PROXY_RATE_LIMIT_MAX_REQUESTS)
+   : 120;
+const TRUST_CALLER_ROLE_FLAGS = envFlag("HARNESS_PROXY_TRUST_CALLER_ROLES", false);
+const DEFAULT_PROXY_IP_ALLOWLIST = (env("HARNESS_PROXY_IP_ALLOWLIST", "") ?? "")
+   .split(",")
+   .map(value => value.trim())
+   .filter(value => value.length > 0);
 
 class HarnessHttpError extends Error {
    public readonly status: number;
@@ -73,10 +86,52 @@ class HarnessHttpError extends Error {
    }
 }
 
+interface RateLimitBucket {
+   windowStart: number;
+   count: number;
+}
+
+const rateLimitBuckets = new Map<string, RateLimitBucket>();
+
+const normalizeAddress = (address: string | undefined): string => {
+   if (!address) return "";
+   if (address.startsWith("::ffff:")) return address.slice(7);
+   return address;
+};
+
 const isLocalAddress = (address: string | undefined): boolean => {
-   if (!address) return false;
-   if (address === "127.0.0.1" || address === "::1") return true;
-   return address.startsWith("::ffff:127.0.0.1");
+   const normalized = normalizeAddress(address);
+   if (!normalized) return false;
+   return normalized === "127.0.0.1" || normalized === "::1";
+};
+
+const isAddressAllowed = (address: string | undefined, allowRemote: boolean, ipAllowlist: string[]): boolean => {
+   const normalized = normalizeAddress(address);
+   if (!allowRemote) return isLocalAddress(normalized);
+   if (!normalized) return false;
+   if (ipAllowlist.length === 0) return true;
+   return ipAllowlist.includes(normalized);
+};
+
+const isRateLimited = (address: string | undefined): boolean => {
+   if (PROXY_RATE_LIMIT_MAX_REQUESTS <= 0) return false;
+   const normalized = normalizeAddress(address) || "unknown";
+   const now = Date.now();
+   const current = rateLimitBuckets.get(normalized);
+   if (!current || now - current.windowStart >= PROXY_RATE_LIMIT_WINDOW_MS) {
+      rateLimitBuckets.set(normalized, { windowStart: now, count: 1 });
+      return false;
+   }
+   current.count += 1;
+   if (current.count > PROXY_RATE_LIMIT_MAX_REQUESTS) return true;
+   if (rateLimitBuckets.size > 10000) {
+      for (const [key, bucket] of rateLimitBuckets) {
+         if (now - bucket.windowStart >= PROXY_RATE_LIMIT_WINDOW_MS) {
+            rateLimitBuckets.delete(key);
+         }
+      }
+   }
+   return false;
 };
 
 const getBearerToken = (req: http.IncomingMessage): string => {
@@ -198,8 +253,8 @@ const buildMessage = (payload: HarnessMessagePayload, adapter: PlatformAdapter):
       guildId: payload.guildId,
       guildName: payload.guildName,
       mentionsBot: Boolean(payload.mentionsBot),
-      isAdmin: payload.isAdmin,
-      isBotOwner: payload.isBotOwner,
+      isAdmin: TRUST_CALLER_ROLE_FLAGS ? Boolean(payload.isAdmin) : false,
+      isBotOwner: TRUST_CALLER_ROLE_FLAGS ? Boolean(payload.isBotOwner) : false,
       platform: adapter
    };
 };
@@ -231,8 +286,8 @@ const handleCommand = async (payload: HarnessCommandPayload): Promise<HarnessRes
       userId: payload.userId ?? "user-1",
       channelId: payload.channelId ?? "channel-1",
       guildId: payload.guildId,
-      isAdmin: Boolean(payload.isAdmin),
-      isBotOwner: Boolean(payload.isBotOwner),
+      isAdmin: TRUST_CALLER_ROLE_FLAGS ? Boolean(payload.isAdmin) : false,
+      isBotOwner: TRUST_CALLER_ROLE_FLAGS ? Boolean(payload.isBotOwner) : false,
       reply: async (message) => {
          replies.push(serializeOutgoing(message));
       }
@@ -253,10 +308,15 @@ const createProxyServer = (token: string): http.Server =>
       const url = new URL(req.url ?? "/", "http://localhost");
       const pathname = url.pathname;
       const allowRemote = envFlag("HARNESS_PROXY_ALLOW_REMOTE");
-      const isLocal = isLocalAddress(req.socket.remoteAddress ?? undefined);
+      const ipAllowlist = DEFAULT_PROXY_IP_ALLOWLIST;
+      const remoteAddress = normalizeAddress(req.socket.remoteAddress ?? undefined);
 
-      if (!allowRemote && !isLocal) {
+      if (!isAddressAllowed(remoteAddress, allowRemote, ipAllowlist)) {
          sendJson(res, 403, { error: "harness proxy is restricted to localhost" });
+         return;
+      }
+      if (isRateLimited(remoteAddress)) {
+         sendJson(res, 429, { error: "rate limit exceeded" });
          return;
       }
       if (getBearerToken(req) !== token) {
@@ -304,8 +364,6 @@ const createProxyServer = (token: string): http.Server =>
    });
 
 const startHarnessProxyServer = (): { stop: () => Promise<void> } | null => {
-   // TODO: Add IP allowlist support for proxy requests.
-   // TODO: Add rate limiting for proxy requests.
    // TODO: Add read-only vs mutating proxy mode switch.
    if (!envFlag("HARNESS_PROXY_ENABLED")) return null;
    const isProd = env("NODE_ENV", "development") === "production";
@@ -317,6 +375,13 @@ const startHarnessProxyServer = (): { stop: () => Promise<void> } | null => {
    if (!token) {
       log(`Harness proxy disabled: HARNESS_PROXY_TOKEN is required.`, "warn");
       return null;
+   }
+   const allowRemote = envFlag("HARNESS_PROXY_ALLOW_REMOTE");
+   if (allowRemote && DEFAULT_PROXY_IP_ALLOWLIST.length === 0) {
+      log(`Harness proxy remote mode enabled without HARNESS_PROXY_IP_ALLOWLIST; all remote IPs are allowed.`, "warn");
+   }
+   if (TRUST_CALLER_ROLE_FLAGS) {
+      log(`Harness proxy is trusting caller-supplied role flags (HARNESS_PROXY_TRUST_CALLER_ROLES=1).`, "warn");
    }
 
    const server = createProxyServer(token);

@@ -12,8 +12,19 @@
 
 | Variable          | Type of Value                                                                                                  |
 | ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| DATA_DIR          | Optional absolute or project-relative override for the bot data directory (defaults to `./data`).            |
+| AMBIENT_BOT_NAME_TRIGGER | Toggle ambient name-based replies in non-DM channels (`true`/`1` by default, set `false`/`0` to disable). |
 | TOPIC_MEMORY_SALT | Salt used to anonymize user IDs in temporal topic memory; if unset, topic memory is disabled (fail-closed). |
 | TRACE_SURPRISE    | Enable debug traces for surprise-based next/previous token selection in response generation (`true`/`1`).    |
+| HARNESS_PROXY_ENABLED | Enable local harness HTTP proxy endpoints (`true`/`1` to enable). |
+| HARNESS_PROXY_TOKEN | Bearer token required by harness proxy when enabled. |
+| HARNESS_PROXY_ALLOW_PROD | Allow harness proxy in production (`false` by default). |
+| HARNESS_PROXY_ALLOW_REMOTE | Allow non-localhost access to harness proxy (`false` by default). |
+| HARNESS_PROXY_IP_ALLOWLIST | Optional comma-separated source IP allowlist for harness proxy when remote access is enabled. |
+| HARNESS_PROXY_MAX_BODY_BYTES | Maximum request payload size accepted by harness proxy (default `1048576`). |
+| HARNESS_PROXY_RATE_LIMIT_MAX_REQUESTS | Maximum requests per source IP per rate-limit window (default `120`). |
+| HARNESS_PROXY_RATE_LIMIT_WINDOW_MS | Rate-limit window size in milliseconds (default `60000`). |
+| HARNESS_PROXY_TRUST_CALLER_ROLES | Trust caller-provided `isAdmin`/`isBotOwner` flags in harness payloads (default `false`). |
 
 
 

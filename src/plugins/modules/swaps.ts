@@ -236,12 +236,14 @@ const handleCommand = async (interaction: StandardCommandInteraction): Promise<v
          return;
       }
       const modeRaw = String(interaction.options.mode ?? "").trim().toLowerCase();
+      const allowRegex = Boolean(interaction.isAdmin || interaction.isBotOwner);
       const rule = Swaps.saveRule({
          scope: resolved.scope,
          scopeId: resolved.scopeId,
          pattern,
          replacement,
          mode: modeRaw === "regex" ? "regex" : "word",
+         allowRegex,
          caseSensitive: Boolean(interaction.options.case_sensitive ?? interaction.options.caseSensitive),
          applyLearn: (interaction.options.apply_learn ?? interaction.options.applyLearn) === undefined
             ? true

@@ -40,31 +40,18 @@ const buildRuleRegex = (rule: SwapRule): RegExp | null => {
    if (!rule.pattern) return null;
    const flags = rule.caseSensitive ? "gu" : "giu";
    if (rule.mode === "regex") {
-      const safe = buildSafeRegex(rule.pattern, flags);
-      if (safe instanceof Error) {
+      const compiled = validateRegexPattern(rule.pattern, flags);
+      if (compiled instanceof Error) {
          return null;
       }
-      return safe;
+      return compiled;
    }
    return buildWordRegex(rule.pattern, flags);
 };
 
-const buildSafeRegex = (pattern: string, flags: string): RegExp | Error => {
+const validateRegexPattern = (pattern: string, flags: string): RegExp | Error => {
    if (pattern.length > MAX_REGEX_PATTERN_LENGTH) {
       return new Error(`regex pattern too long (max ${MAX_REGEX_PATTERN_LENGTH} characters)`);
-   }
-   // Reject high-risk constructs to avoid regex DoS on message traffic.
-   if (/(^|[^\\])\\[1-9]/u.test(pattern)) {
-      return new Error("regex pattern contains backreferences, which are not allowed");
-   }
-   if (/\(\?<[=!]/u.test(pattern)) {
-      return new Error("regex pattern contains lookbehind, which is not allowed");
-   }
-   if (/\((?:[^()\\]|\\.)*[+*{](?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/u.test(pattern)) {
-      return new Error("regex pattern appears to use nested quantifiers and may be unsafe");
-   }
-   if (/\.\*(?:[+*]|\{\d+(?:,\d*)?\})/u.test(pattern) || /\.\+(?:[+*]|\{\d+(?:,\d*)?\})/u.test(pattern)) {
-      return new Error("regex pattern appears to use repeated wildcard quantifiers and may be unsafe");
    }
    try {
       return new RegExp(pattern, flags);
@@ -154,6 +141,7 @@ class Swaps {
       pattern: string;
       replacement: string;
       mode?: SwapMode;
+      allowRegex?: boolean;
       caseSensitive?: boolean;
       applyLearn?: boolean;
       applyRespond?: boolean;
@@ -170,9 +158,12 @@ class Swaps {
       const mode: SwapMode = payload.mode ?? existing?.mode ?? "word";
       const caseSensitive = payload.caseSensitive ?? existing?.caseSensitive ?? false;
       if (mode === "regex") {
+         if (!payload.allowRegex) {
+            return new Error("regex swap rules require admin or bot owner permissions");
+         }
          const flags = caseSensitive ? "gu" : "giu";
-         const safe = buildSafeRegex(pattern, flags);
-         if (safe instanceof Error) return safe;
+         const compiled = validateRegexPattern(pattern, flags);
+         if (compiled instanceof Error) return compiled;
       }
       const base: SwapRule = existingIndex >= 0 ? record.rules[existingIndex] : {
          id: payload.id ?? createRuleId(),

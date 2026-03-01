@@ -1,54 +1,41 @@
-# Local-only and private-development assets
-/.vscode
-/.devcontainer
-/.github
-/.review
-/.tmp
-/coverage/
-/report/
-/reports/
-/dev/
-/eslint.config.js
-/vitest.config.ts
-/tsconfig.eslint.json
-/tsconfig.test.json
-/tsconfig.sqlite-test.json
-charlies2.zip
+# Dependencies and build output
+node_modules/
+dist/
+build/
+sourcemaps/
 
-# Data directory (should contain information at runtime only)
-/data
-
-# Allow package.json and package-lock.json
-!package.json
-!package-lock.json
-
-# Logs and runtime files
-/logs
+# Runtime data and logs
+data/
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pids
+pids/
 *.pid
-*.seed
 *.pid.lock
+*.seed
 
-# Dependency directories
-/node_modules/
-/dist/
-/sourcemaps/
-/build/
+# Coverage and generated reports
+coverage/
+report/
+reports/
 
-# Optional npm cache directory
-/.npm
+# Local workspace/config artifacts
+.vscode/
+.devcontainer/
+.tmp/
+.review/
+dev/
+.npm/
+.eslintcache
+.DS_Store
 
-# Optional eslint cache
-/.eslintcache
-
-# dotenv environment variables file
-/.env
-/.env*
-/*.env
-
-# Allow example env only
+# Secrets and env files
+.env
+.env.*
+*.env
 !example.env
+
+# Archives
+*.zip

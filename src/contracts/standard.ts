@@ -162,6 +162,8 @@ export interface StandardMessage {
    mentionsBot?: boolean;
    referencedContent?: string;
    referencedMentionsBot?: boolean;
+   referencedAuthorId?: string;
+   referencedIsSelf?: boolean;
    isAdmin?: boolean;
    isBotOwner?: boolean;
    isSelf?: boolean;

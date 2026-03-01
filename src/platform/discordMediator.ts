@@ -39,6 +39,41 @@ const startDiscordMediator = (): PlatformMediatorHandle => {
    const trace = (message: string, data?: unknown): void => {
       if (traceFlow) log(data ? { message: `Flow: ${message}`, data } : `Flow: ${message}`, "trace");
    };
+   const SHARD_RECONNECT_WINDOW_MS = 2 * 60 * 60 * 1000;
+   const SHARD_RECONNECT_WARN_THRESHOLD = 3;
+   const shardReconnectState = new Map<number, {
+      windowStart: number;
+      count: number;
+      warned: boolean;
+      suppressed: number;
+   }>();
+   const logShardReconnect = (shardId: number): void => {
+      const now = Date.now();
+      const state = shardReconnectState.get(shardId);
+      if (!state || now - state.windowStart > SHARD_RECONNECT_WINDOW_MS) {
+         shardReconnectState.set(shardId, { windowStart: now, count: 1, warned: false, suppressed: 0 });
+         log(`Discord shard reconnecting: shard=${shardId}`, "general");
+         return;
+      }
+
+      state.count += 1;
+      if (state.count >= SHARD_RECONNECT_WARN_THRESHOLD && !state.warned) {
+         const windowMinutes = Math.floor(SHARD_RECONNECT_WINDOW_MS / 60000);
+         const suppressedSuffix = state.suppressed > 0 ? ` suppressed=${state.suppressed}` : "";
+         log(
+            `Discord shard reconnecting frequently: shard=${shardId} reconnects=${state.count}/${windowMinutes}m${suppressedSuffix}`,
+            "warn"
+         );
+         state.warned = true;
+         state.suppressed = 0;
+         return;
+      }
+
+      state.suppressed += 1;
+      if (envFlag("DISCORD_DEBUG")) {
+         log(`Discord shard reconnecting: shard=${shardId} reconnects_in_window=${state.count}`, "debug");
+      }
+   };
    const emitPlatformEvent = <TPayload>(type: StandardEventType, payload?: TPayload, context?: {
       guildId?: string;
       channelId?: string;
@@ -140,7 +175,7 @@ const startDiscordMediator = (): PlatformMediatorHandle => {
 
    });
    client.on("shardReconnecting", (shardId) => {
-      log(`Discord shard reconnecting: shard=${shardId}`, "warn");
+      logShardReconnect(shardId);
    });
    client.on("warn", info => {
       log(`Warning information received: ${info}`, "warn");
