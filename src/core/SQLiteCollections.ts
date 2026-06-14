@@ -43,6 +43,7 @@ export interface SQLiteCollectionOptions {
    indexes?: SQLiteIndexDefinition[];
    allowSchemaMigration?: boolean;
    keepLegacyTables?: boolean;
+   deferInitialSize?: boolean;
 }
 
 const DEFAULT_PRAGMAS = ["journal_mode = WAL", "synchronous = NORMAL"];
@@ -291,10 +292,13 @@ abstract class SQLiteCollectionBase {
          : "";
       const detail = error instanceof Error ? error.message : String(error);
       const prefix = `SQLite ${operation} failed (file='${this.filename}', table='${this.table}'${code ? `, code=${code}` : ""})`;
+      const lockHint = code === "SQLITE_BUSY"
+         ? " Another process is holding a lock on this database file. Stop the other bot instance or use a separate DATA_DIR/BOT_NAME before retrying."
+         : "";
       if (error instanceof Error) {
-         throw new Error(`${prefix}: ${detail}`, { cause: error });
+         throw new Error(`${prefix}: ${detail}${lockHint}`, { cause: error });
       }
-      throw new Error(`${prefix}: ${detail}`);
+      throw new Error(`${prefix}: ${detail}${lockHint}`);
    }
 
    protected constructor(options: SQLiteCollectionOptions | undefined, tableFallback: string) {
@@ -318,14 +322,7 @@ abstract class SQLiteCollectionBase {
       }
 
       this.ensureSchema(options);
-
-      let countRow: { count: number };
-      try {
-         countRow = this.db.prepare(`SELECT COUNT(*) as count FROM ${this.table}`).get() as { count: number };
-      } catch (error: unknown) {
-         this.failSqlite("row count", error);
-      }
-      this.sizeCache = Number.isFinite(countRow.count) ? countRow.count : 0;
+      this.sizeCache = options?.deferInitialSize ? -1 : this.countRows();
 
       SQLiteCollectionBase.closeables.add(this.db);
       if (!SQLiteCollectionBase.exitHookRegistered) {
@@ -343,7 +340,28 @@ abstract class SQLiteCollectionBase {
    }
 
    public get size(): number {
+      if (this.sizeCache < 0) {
+         this.sizeCache = this.countRows();
+      }
       return this.sizeCache;
+   }
+
+   public hasEntries(): boolean {
+      try {
+         return Boolean(this.db.prepare(`SELECT 1 as present FROM ${this.table} LIMIT 1`).get());
+      } catch (error: unknown) {
+         this.failSqlite("row existence check", error);
+      }
+   }
+
+   protected countRows(): number {
+      let countRow: { count: number };
+      try {
+         countRow = this.db.prepare(`SELECT COUNT(*) as count FROM ${this.table}`).get() as { count: number };
+      } catch (error: unknown) {
+         this.failSqlite("row count", error);
+      }
+      return Number.isFinite(countRow.count) ? countRow.count : 0;
    }
 
    public close(): void {
@@ -393,7 +411,6 @@ abstract class SQLiteCollectionBase {
             if (options?.purgeStaleObjectKeys ?? true) {
                this.db.prepare(`DELETE FROM ${this.table} WHERE key_hash LIKE 'object:%' OR key_hash LIKE 'symbol:%'`).run();
             }
-            this.dropLegacyTables(options);
             return;
          }
 
@@ -472,7 +489,15 @@ abstract class SQLiteCollectionBase {
       for (const row of tables) {
          if (!row?.name || !row.name.startsWith(`${this.table}_legacy_`)) continue;
          const legacyName = sanitizeTableName(row.name);
-         this.db.prepare(`DROP TABLE IF EXISTS ${legacyName}`).run();
+         try {
+            this.db.prepare(`DROP TABLE IF EXISTS ${legacyName}`).run();
+         } catch (error: unknown) {
+            const code = typeof error === "object" && error !== null && "code" in error
+               ? String((error as { code?: unknown }).code ?? "")
+               : "";
+            if (code === "SQLITE_BUSY") return;
+            throw error;
+         }
       }
    }
 
@@ -548,7 +573,7 @@ export class SQLiteMap<K, V> extends SQLiteCollectionBase {
       const keyHash = this.encodeKey(key);
       const existed = Boolean(this.selectExists.get(keyHash));
       this.insertOrUpdate.run({ key: keyHash, value: this.serializer(value) });
-      if (!existed) this.sizeCache += 1;
+      if (!existed && this.sizeCache >= 0) this.sizeCache += 1;
       this.cache?.set(keyHash, { present: true, hasValue: true, value });
       return this;
    }
@@ -557,7 +582,7 @@ export class SQLiteMap<K, V> extends SQLiteCollectionBase {
       const keyHash = this.encodeKey(key);
       const result = this.deleteKey.run(keyHash);
       if (result.changes > 0) {
-         this.sizeCache -= 1;
+         if (this.sizeCache >= 0) this.sizeCache -= 1;
          this.cache?.set(keyHash, { present: false, hasValue: true });
          return true;
       }
@@ -713,7 +738,7 @@ export class SQLiteSet<T> extends SQLiteCollectionBase {
    public add(value: T): this {
       const keyHash = this.encodeKey(value);
       const result = this.insertIgnore.run({ key: keyHash });
-      if (result.changes > 0) this.sizeCache += 1;
+      if (result.changes > 0 && this.sizeCache >= 0) this.sizeCache += 1;
       this.cache?.set(keyHash, true);
       return this;
    }
@@ -722,7 +747,7 @@ export class SQLiteSet<T> extends SQLiteCollectionBase {
       const keyHash = this.encodeKey(value);
       const result = this.deleteKey.run(keyHash);
       if (result.changes > 0) {
-         this.sizeCache -= 1;
+         if (this.sizeCache >= 0) this.sizeCache -= 1;
          this.cache?.set(keyHash, false);
          return true;
       }

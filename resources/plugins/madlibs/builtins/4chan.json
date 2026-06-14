@@ -1,0 +1,375 @@
+{
+  "meta": {
+    "id": "4chan",
+    "name": "4chan",
+    "description": "Generates greentexts and schizopost walls.",
+    "usage": "4chan or greentext or schizopost",
+    "matcher": "^[greentext|4chan|schizopost]\\b",
+    "matcherFlags": "ui"
+  },
+
+  "vocab": {
+    "[nPoster]": [
+      "anon",
+      "broke anon",
+      "nightshift anon",
+      "paranoid anon",
+      "unwashed anon",
+      "sleep-deprived anon",
+      "tripfriend anon",
+      "doomscroll anon",
+      "garage anon",
+      "basement anon",
+      "fedwatch anon",
+      "catalog anon"
+    ],
+
+    "[nBoard]": [
+      "/pol/",
+      "/x/",
+      "/b/",
+      "/g/",
+      "/biz/",
+      "/tv/",
+      "/mu/",
+      "/fit/",
+      "/k/",
+      "/lit/",
+      "/v/",
+      "/trash/"
+    ],
+
+    "[nArtifact]": [
+      "screencap",
+      "jpeg",
+      "webm",
+      "post dump",
+      "bait thread",
+      "tripcode rant",
+      "schizo wall",
+      "archive link",
+      "leak folder",
+      "timestamp collage",
+      "reply cap",
+      "dead thread"
+    ],
+
+    "[nAbstract]": [
+      "the pattern",
+      "the script",
+      "the op",
+      "the fedposting",
+      "the lie",
+      "the cleanup",
+      "the glow",
+      "the timeline",
+      "the cover story",
+      "the dead internet",
+      "the ritual",
+      "the catalog"
+    ],
+
+    "[nConspiracy]": [
+      "glowie op",
+      "honeypot",
+      "astroturf ring",
+      "containment board",
+      "cleanup crew",
+      "bot swarm",
+      "narrative laundering",
+      "controlled leak",
+      "data scrape",
+      "psyop",
+      "engagement trap",
+      "tripcode farm"
+    ],
+
+    "[nEnemy]": [
+      "glowies",
+      "tourists",
+      "jannies",
+      "paid posters",
+      "reply pigs",
+      "bugmen",
+      "office drones",
+      "lurkers",
+      "limpwrists",
+      "content farmers",
+      "parasites",
+      "cleanup freaks"
+    ],
+
+    "[nObject]": [
+      "burner phone",
+      "hard drive",
+      "receipt pile",
+      "energy drink",
+      "sticky note map",
+      "browser tabs",
+      "ashtray",
+      "archive folder",
+      "garage laptop",
+      "sleep meds",
+      "security cam clip",
+      "dented usb stick"
+    ],
+
+    "[nReason]": [
+      "for free",
+      "for clout",
+      "for cleanup",
+      "because the board was dead",
+      "because the bait was easy",
+      "because nobody reads timestamps",
+      "because the tripcode glows",
+      "because the jpeg hash repeats",
+      "because the janitor left it up",
+      "because the catalog never forgets",
+      "because the archive mirror vanished",
+      "because mom says so"
+    ],
+
+    "[adjPoster]": [
+      "broke",
+      "fried",
+      "sleep deprived",
+      "paranoid",
+      "unwashed",
+      "terminally online",
+      "sunless",
+      "off meds",
+      "tinfoil",
+      "three-monitor",
+      "garage",
+      "basement"
+    ],
+
+    "[adjBad]": [
+      "fake",
+      "cucked",
+      "cursed",
+      "rigged",
+      "glowing",
+      "busted",
+      "dogshit",
+      "fried",
+      "bait",
+      "moldy",
+      "radioactive",
+      "botched"
+    ],
+
+    "[adjSchizo]": [
+      "tinfoil",
+      "red-string",
+      "wall-sized",
+      "sleep-deprived",
+      "off-meds",
+      "paint-fume",
+      "numerology",
+      "tripcode",
+      "string-and-thumbtack",
+      "garage-lit",
+      "conspiracy-maxxed",
+      "kabbalistic"
+    ],
+
+    "[verbDo]": [
+      "shitpost",
+      "refresh",
+      "reload the catalog",
+      "open 40 tabs",
+      "dump receipts",
+      "archive everything",
+      "circle timestamps",
+      "connect dots",
+      "stare at the jpeg",
+      "quote the same line",
+      "screen cap it",
+      "bump the thread"
+    ],
+
+    "[verbNotice]": [
+      "notice",
+      "clock",
+      "spot",
+      "catch",
+      "see",
+      "track",
+      "map",
+      "count",
+      "smell",
+      "recognize",
+      "mark",
+      "pin"
+    ],
+
+    "[verbRuin]": [
+      "derail",
+      "poison",
+      "torch",
+      "bury",
+      "smother",
+      "flatten",
+      "glow up",
+      "hose",
+      "contaminate",
+      "railroad",
+      "turn into slop",
+      "blow up"
+    ],
+
+    "[verbPost]": [
+      "post",
+      "reply",
+      "bump",
+      "dump",
+      "rehost",
+      "archive",
+      "screencap",
+      "quote",
+      "spam",
+      "leak",
+      "pin",
+      "cap"
+    ],
+
+    "[reaction]": [
+      "many such cases",
+      "its over",
+      "never began",
+      "obvious bait is obvious",
+      "take your meds",
+      "read the timestamps",
+      "op is glowing",
+      "nothing ever happens huh",
+      "same script every night",
+      "not beating the allegations",
+      "thread over",
+      "the glow is unreal"
+    ],
+
+    "[curse]": [
+      "fuck",
+      "fucking",
+      "shit",
+      "bullshit",
+      "dogshit",
+      "goddamn",
+      "garbage",
+      "brain poison",
+      "trash",
+      "piss",
+      "slop",
+      "filth"
+    ],
+
+    "[insult]": [
+      "idiot",
+      "moron",
+      "dipshit",
+      "brainlet",
+      "larper",
+      "tourist",
+      "janny pet",
+      "reply pig",
+      "bugman",
+      "drooler",
+      "attention whore",
+      "mouthbreather"
+    ],
+
+    "[slurish]": [
+      "degenerate",
+      "freak",
+      "mutant",
+      "creep",
+      "worm",
+      "parasite",
+      "burnout",
+      "animal",
+      "trash fire",
+      "shameless pig",
+      "sewer goblin",
+      "queer",
+      "jogger",
+      "pervert",
+      "sicko",
+      "lowlife"
+    ],
+
+    "[stamp]": [
+      "[##]:[##]",
+      "[##]:[##]:[##]",
+      "[##]/[##]/[##]",
+      "[##]/[##]/[##] [##]:[##]",
+      "no.[####]{2}",
+      "file [####]{2}"
+    ],
+
+    "[idTag]": [
+      "id:[a-z]{8}",
+      "id:[a-z]{6}",
+      "trip [a-z]{8}",
+      "hash [a-z]{8}",
+      "serial [####]{2}",
+      "flag [a-z]{3}"
+    ],
+
+    "[fileTag]": [
+      "[####]kb",
+      "[####]x[####]",
+      "[####]{2}.jpg",
+      "[####]{2}.png",
+      "[####]{2}.webm",
+      "md5 [a-z]{8}",
+      "mirror [a-z]{6}",
+      "cap [####]{2}"
+    ],
+
+    "[schizoCue]": [
+      "the timestamps line up",
+      "the typo repeats every time",
+      "the jpeg hash matches",
+      "the archive mirror vanished again",
+      "the deleted replies were the honest ones",
+      "the file name changed but the pixels didnt",
+      "the tripcode slipped",
+      "the same three posters keep rotating",
+      "the captcha popped right after",
+      "the catalog is too clean"
+    ]
+  },
+
+  "patterns": [
+    ">be [adjPoster] [nPoster]\n>[verbDo] on [nBoard] [stamp] [idTag]\n>see [nArtifact] [fileTag]\n>[verbNotice] [schizoCue]\n>[reaction]",
+    ">open [nArtifact]\n>[verbNotice] [nAbstract]\n>[verbNotice] [nConspiracy]\n>whole [nBoard] full of [nEnemy]\n>[reaction]",
+    ">[nArtifact] drops on [nBoard]\n>[nEnemy] instantly [verbPost]\n>thread gets [verbRuin]\n>[nReason]\n>[curse]",
+    ">desk covered in [nObject]\n>browser full of [nArtifact]\n>[verbNotice] [schizoCue]\n>cant unsee [nAbstract] now",
+    ">[stamp] [idTag]\n>[nArtifact] [fileTag]\n>[verbNotice] [schizoCue]\n>[verbNotice] [nConspiracy]",
+    ">[nEnemy] call it [adjBad] bait\n>still hover in the thread all night\n>still cant explain [schizoCue]\n>[reaction]",
+    ">one [adjSchizo] [nArtifact]\n>one [nObject]\n>one dead thread\n>suddenly [nAbstract] clicks",
+    ">[verbDo]\n>find [adjBad] [nArtifact]\n>[verbPost] it to [nBoard]\n>watch every [insult] start to [verbRuin] the thread",
+    ">be [nPoster]\n>say [reaction]\n>drop [nArtifact]\n>refuse to elaborate\n>vanish",
+    ">whole board says [reaction]\n>same board ignores [schizoCue]\n>same board full of [nEnemy]\n>many such cases",
+    ">[nArtifact] [fileTag]\n>[nArtifact] [fileTag]\n>[nArtifact] [fileTag]\n>same typo every time\n>[nConspiracy]",
+    ">[nEnemy] swarm\n>mods sleep\n>[verbNotice] [schizoCue]\n>thread turns into [adjBad] slop",
+    ">be [adjPoster] anon\n>no food\n>no sleep meds\n>just [nObject] and [nArtifact]\n>[verbNotice] [nAbstract]",
+    ">[nEnemy] show up\n>every [slurish] pretends not to see [schizoCue]\n>thread gets [verbRuin]\n>[reaction]",
+    "[nBoard] is just [nEnemy], [adjBad] slop, and [nAbstract] mutating into [nConspiracy]",
+    "[nArtifact] [fileTag], [stamp], [idTag], [schizoCue], [nConspiracy], none of this is random",
+    "[adjSchizo] [nArtifact] + [stamp] + [idTag] + [nEnemy] = [nConspiracy]",
+    "[nEnemy] always [verbRuin] the board right after [nArtifact] lands because [nReason]",
+    "look at [nArtifact] [fileTag] and tell me with a straight face this [nConspiracy] is accidental",
+    "[schizoCue], [schizoCue], [nAbstract], [nEnemy], [nReason], and you still want to call it [adjBad] bait",
+    "every [nArtifact] on [nBoard] turns into [nConspiracy] once the [nEnemy] show up",
+    ">[nBoard] [stamp]\n>[nEnemy] arrive\n>thread gets [verbRuin]\n>call it cleanup\n>leave",
+    ">see [nArtifact]\n>check [fileTag]\n>check [stamp]\n>check [schizoCue]\n>[reaction]",
+    ">[nEnemy] say log off\n>post for twelve straight hours\n>thread still full of [adjBad] [nArtifact]\n>[reaction]",
+    ">[verbNotice] [schizoCue]\n>[verbNotice] [schizoCue]\n>[verbNotice] [schizoCue]\n>normal people do not post like this",
+    ">[nArtifact] was [adjBad]\n>reply chain was [adjBad]\n>the cleanup was [adjBad]\n>still more honest than [nEnemy]",
+    ">one more [nArtifact]\n>one more [nObject]\n>[reaction]\n>thread becomes [nConspiracy]",
+    "thread rhythm is always the same: [nArtifact], [nEnemy], [adjBad] slop, [nConspiracy], repeat until sunrise",
+    ">[nEnemy] want you bored\n>[nEnemy] want you blind\n>[nEnemy] want [nAbstract] buried\n>so of course they [verbRuin] every [nArtifact]"
+  ]
+}

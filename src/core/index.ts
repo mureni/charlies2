@@ -3,10 +3,9 @@ import { log } from "./log";
 import { ProcessResults, processMessage, cleanMessage } from "./messageProcessor";
 import { InteractionResult, ModificationType } from "./interactionTypes";
 import { InteractionRouter } from "./interactionRouter";
-import { Conversation, KnownUsers, interpolateUsers, getEndearment } from "./user";
+import { KnownUsers, interpolateUsers, getEndearment } from "./user";
 
 export {
-   Conversation,
    KnownUsers,
    Brain,
    log,

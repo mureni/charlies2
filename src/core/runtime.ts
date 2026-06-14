@@ -118,7 +118,7 @@ const initBrainSettings = (): void => {
 };
 
 const initBrainData = async (): Promise<void> => {
-   if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) {
+   if (!Brain.hasCorpusData()) {
       log(`Brain is apparently empty. Loading from trainer file '../resources/${Brain.botName}-trainer.txt'. This may take a very long time, be patient.`);
       if (!brainTrainingPromise) {
          brainTrainingPromise = (async (): Promise<void> => {
@@ -140,7 +140,7 @@ const initBrainData = async (): Promise<void> => {
             });
       }
    }
-   if (Brain.lexicon.size === 0 || Brain.nGrams.size === 0) {
+   if (!Brain.hasCorpusData()) {
       if (brainTrainingPromise) {
          log(`Brain training in progress; responses will be limited until data is available.`, "warn");
       } else {

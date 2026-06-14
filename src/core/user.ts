@@ -1,7 +1,7 @@
 import { newRX, escapeRegExp } from "@/utils";
 import { isCommonWord } from "@/core/dictionary";
 import type { StandardMember, StandardMessage, PlatformAdapter, StandardMemberQuery } from "@/contracts";
-import { KnownUsers, KnownUser, Conversation, getKnownUsersSnapshot } from "@/core/knownUsers";
+import { KnownUsers, KnownUser, getKnownUsersSnapshot } from "@/core/knownUsers";
 
 const getEndearment = (plural: boolean = false): string => {
    const synonyms = ["pal", plural ? "buddie" : "buddy", "chum", "compadre", "comrade", "friend", "my friend", "mate", "amigo", "fella", "bro", "broseph", "darling", "sweetheart", "sweetpea", plural ? "honie" : "honey", "sweetie"];
@@ -115,4 +115,4 @@ const interpolateUsers = async (text: string, context: StandardMessage | undefin
    return (directedTo !== "") ? `${directedTo}` + text : text;
 }
 
-export { interpolateUsers, getEndearment, KnownUser, KnownUsers, Conversation }
+export { interpolateUsers, getEndearment, KnownUser, KnownUsers }

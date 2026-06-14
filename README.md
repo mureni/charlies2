@@ -38,15 +38,14 @@ The following are the required values for the bot settings:
 | Value                 | Acceptable Range | Default Value | Description                                                                                           |
 | --------------------- | ---------------- | ------------- | ----------------------------------------------------------------------------------------------------- |
 | outburstThreshold     | 0.0 - 1.0        | 0.005         | Chance that the bot will respond without being explicitly triggered                                   |
-| numberOfLines         | 1 - 100          | 1             | Number of lines the bot will generate each time                                                       |
 | angerLevel            | 0.01 - 10.0      | 0.5           | Chance that the bot will yell. Values above 1.0 will cause the bot to always yell                     |
+| surprise              | 0.0 - 1.0        | 0.25          | Randomness factor for weighted next/previous token selection                                           |
 | angerIncrease         | 0.01 - 10.0      | 1.75          | Value that the angerLevel will be multiplied by if the bot witnesses yelling (all capitalized input)  |
 | angerDecrease         | 0.01 - 10.0      | 0.8           | Value that the AngerLevel will be multipled by if the bot does not witness yelling                    |
-| recursion             | 0 - 100          | 1             | Number of times the output of the bot is sent back in as input (for self-reinforcement learning)      |
-| conversationTimeLimit | 0 - 100000       | 7000          | Number of milliseconds the bot will wait for a additional input without requiring its name to be said |
+| recursion             | 1 - 5            | 1             | Number of response-generation passes before the final output is chosen                                 |
 | topicMemoryTtlMinutes | 1 - 1440         | 20            | Minutes a remembered topic stays active for a user+channel                                              |
 | topicMemoryMaxInteractions | 1 - 1000    | 8             | Maximum number of personality-response generations before topic memory expires                           |
-| topicMemoryBiasStrength | 0.0 - 1.0      | 0.8           | Chance to bias seed selection toward remembered topic keywords while memory is active                   |
+| topicMemoryBiasStrength | 0.0 - 1.0      | 0.8           | Multiplier applied to remembered topic weights when they are overlaid onto response generation          |
 | topicMemoryKeywordCount | 1 - 5          | 3             | Number of ranked keywords extracted from user input when refreshing topic memory                         |
 | learnFromBots         | true / false     | false         | Whether the bot will learn from other bots, or ignore them                                            |
 

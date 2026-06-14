@@ -1,15 +1,11 @@
 import { SQLiteMap } from "@/core/SQLiteCollections";
 import { checkFilePath, env, envFlag, getBotName } from "@/utils";
 
-interface Conversation {
-   lastSpokeAt: number;
-   lastTopic: string;
-}
-
 interface KnownUser {
    name: string;
    aliases: Set<string>;
-   conversations: Map<string, Conversation>;
+   topicMemoryByChannel?: Map<string, KnownUserTopicMemoryEntry>;
+   topicProfile?: KnownUserTopicProfileEntry;
 }
 
 interface KnownUserProfile {
@@ -19,11 +15,25 @@ interface KnownUserProfile {
    aliases?: string[];
 }
 
+interface KnownUserTopicMemoryEntry {
+   keywords: string[];
+   updatedAt: number;
+   expiresAt: number;
+   remainingInteractions: number;
+}
+
+interface KnownUserTopicProfileEntry {
+   keywords: string[];
+   scores: Record<string, number>;
+   updatedAt: number;
+}
+
 const BOT_NAME = getBotName();
 const KnownUsers = new SQLiteMap<string, KnownUser>({
    filename: checkFilePath("data", `${BOT_NAME}-known-users.sqlite`),
    table: "known_users",
    cacheSize: 64,
+   purgeStaleObjectKeys: false,
    allowSchemaMigration: env("NODE_ENV") !== "production",
    debug: envFlag("TRACE_SQL")
 });
@@ -51,8 +61,7 @@ const upsertKnownUser = (id: string, name: string, aliases: string[] = []): Know
    const existing = KnownUsers.get(id);
    const user: KnownUser = existing ?? {
       name: name || "<UNKNOWN USER>",
-      aliases: new Set<string>(),
-      conversations: new Map<string, Conversation>()
+      aliases: new Set<string>()
    };
    let changed = !existing;
    if (name && name !== user.name) {
@@ -90,5 +99,72 @@ const getKnownUsersSnapshot = (): KnownUsersSnapshot => {
    return snapshotCache;
 };
 
-export type { KnownUser, Conversation, KnownUserProfile };
-export { KnownUsers, touchKnownUser, upsertKnownUser, saveKnownUser, getKnownUsersSnapshot, syncKnownUserProfile };
+const getKnownUserTopicMemory = (id: string, channelId: string): KnownUserTopicMemoryEntry | undefined => {
+   if (!id || !channelId) return undefined;
+   const user = KnownUsers.get(id);
+   return user?.topicMemoryByChannel?.get(channelId);
+};
+
+const setKnownUserTopicMemory = (id: string, channelId: string, entry: KnownUserTopicMemoryEntry): void => {
+   if (!id || !channelId) return;
+   const user: KnownUser = KnownUsers.get(id) ?? {
+      name: "<UNKNOWN USER>",
+      aliases: new Set<string>()
+   };
+   if (!user.topicMemoryByChannel) user.topicMemoryByChannel = new Map<string, KnownUserTopicMemoryEntry>();
+   user.topicMemoryByChannel.set(channelId, entry);
+   saveKnownUser(id, user, { bump: false });
+};
+
+const deleteKnownUserTopicMemory = (id: string, channelId: string): void => {
+   if (!id || !channelId) return;
+   const user = KnownUsers.get(id);
+   if (!user?.topicMemoryByChannel) return;
+   if (!user.topicMemoryByChannel.delete(channelId)) return;
+   if (user.topicMemoryByChannel.size === 0) delete user.topicMemoryByChannel;
+   saveKnownUser(id, user, { bump: false });
+};
+
+const getKnownUserTopicProfile = (id: string): KnownUserTopicProfileEntry | undefined => {
+   if (!id) return undefined;
+   return KnownUsers.get(id)?.topicProfile;
+};
+
+const setKnownUserTopicProfile = (id: string, profile: KnownUserTopicProfileEntry): void => {
+   if (!id) return;
+   const user: KnownUser = KnownUsers.get(id) ?? {
+      name: "<UNKNOWN USER>",
+      aliases: new Set<string>()
+   };
+   user.topicProfile = profile;
+   saveKnownUser(id, user, { bump: false });
+};
+
+const deleteKnownUserTopicProfile = (id: string): void => {
+   if (!id) return;
+   const user = KnownUsers.get(id);
+   if (!user?.topicProfile) return;
+   delete user.topicProfile;
+   saveKnownUser(id, user, { bump: false });
+};
+
+export type {
+   KnownUser,
+   KnownUserProfile,
+   KnownUserTopicMemoryEntry,
+   KnownUserTopicProfileEntry
+};
+export {
+   KnownUsers,
+   touchKnownUser,
+   upsertKnownUser,
+   saveKnownUser,
+   getKnownUsersSnapshot,
+   syncKnownUserProfile,
+   getKnownUserTopicMemory,
+   setKnownUserTopicMemory,
+   deleteKnownUserTopicMemory,
+   getKnownUserTopicProfile,
+   setKnownUserTopicProfile,
+   deleteKnownUserTopicProfile
+};

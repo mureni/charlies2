@@ -36,6 +36,10 @@ import { envFlag, requireEnv } from "@/utils";
 
 const startDiscordMediator = (): PlatformMediatorHandle => {
    const traceFlow = envFlag("TRACE_FLOW");
+   const sanitizeDiscordDebugInfo = (info: string): string =>
+      info
+         .replace(/(Provided token:\s*)(\S+)/iu, "$1[redacted]")
+         .replace(/(Authorization:\s*Bot\s+)(\S+)/giu, "$1[redacted]");
    const trace = (message: string, data?: unknown): void => {
       if (traceFlow) log(data ? { message: `Flow: ${message}`, data } : `Flow: ${message}`, "trace");
    };
@@ -146,7 +150,7 @@ const startDiscordMediator = (): PlatformMediatorHandle => {
    });
    if (envFlag("DISCORD_DEBUG")) {
       client.on("debug", info => {
-         log(`Discord debug: ${info}`, "debug");
+         log(`Discord debug: ${sanitizeDiscordDebugInfo(info)}`, "debug");
       });
       client.on("shardDisconnect", (event, shardId) => {
          log(`Discord shard disconnect: shard=${shardId} code=${event.code} reason=${event.reason ?? "none"}`, "warn");

@@ -46,6 +46,8 @@
       "build:watch": "tsc --watch",
       "dev": "npm run build && npm run start",
       "start": "node ./dist/index.js",
+      "start:repl": "node ./dist/repl.js",
+      "repl": "npm run build && npm run start:repl",
       "update": "bash ./tools/update.sh",
       "generate:trainer": "bash ./tools/generate-trainer.sh"
    },

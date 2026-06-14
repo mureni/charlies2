@@ -105,7 +105,8 @@ class Madlibs {
       filename: ensureDataFile(),
       table: "categories",
       allowSchemaMigration: true,
-      cacheSize: 64
+      cacheSize: 64,
+      purgeStaleObjectKeys: false
    });
    private static builtinsLoaded = false;
    private static builtins = new Map<string, MadlibBuiltin>();

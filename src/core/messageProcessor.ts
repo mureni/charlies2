@@ -8,8 +8,7 @@ import { summarizeInteractionResultForLog } from "./interactionLogSummary";
 import { shouldRespond as shouldRespondDecision, shouldYell as shouldYellDecision } from "./responseDecision";
 import { envFlag, escapeRegExp, newRX, randFrom } from "@/utils";
 import type { StandardMessage, StandardOutgoingMessage, StandardOutgoingMessage as PlatformOutgoingMessage } from "@/contracts";
-import { touchKnownUser, saveKnownUser } from "@/core/knownUsers";
-import { consumeTopicMemoryKeywords, updateTopicMemory, getTopicMemoryBiasStrength } from "@/core/topicMemory";
+import { consumeTopicMemoryFocus, updateTopicMemory } from "@/core/topicMemory";
 
 
 // Maximum length of discord message
@@ -113,6 +112,7 @@ const processMessage = async (message: StandardMessage): Promise<ProcessResults>
       results.response = personalityResults.response;
       results.directedTo = personalityResults.directedTo;
       results.learned = personalityResults.learned;
+      results.processedText = personalityResults.processedText;
    } else {
       
       trace("triggered", { canSend, platform: platform, resultsCount: processed.results.length });
@@ -154,7 +154,7 @@ const processMessage = async (message: StandardMessage): Promise<ProcessResults>
 
       results.response = results.response.trimEnd();
    }
-   results.processedText = preBrainText.trim();
+   if (!results.processedText) results.processedText = preBrainText.trim();
    return results;
 }
 
@@ -165,7 +165,7 @@ const processPersonalityResponse = async (
    memberContext: MemberContext | undefined,
    canSend: boolean,
    shouldPrefixResponse: boolean
-): Promise<Pick<ProcessResults, "response" | "directedTo" | "learned">> => {
+): Promise<Pick<ProcessResults, "response" | "directedTo" | "learned" | "processedText">> => {
    const platform = message.platform;
    const isDirectMessage = message.channel?.scope === "dm";
    const isGroupDm = Boolean(message.channel?.isGroupDm)
@@ -209,58 +209,46 @@ const processPersonalityResponse = async (
 
    trace("shouldRespond", { mentionsBot, ambientBotNameTrigger, ambientBotNameMatch, repliedToBot, shouldRespond, isDirectMessage, isGroupDm });
 
-   const lexiconSize = Brain.lexicon?.size ?? 0;
-   const ngramSize = Brain.nGrams?.size ?? 0;
-   if (lexiconSize === 0 || ngramSize === 0) {
-      trace("brain empty; skipping response", { lexicon: lexiconSize, ngrams: ngramSize });
-      return { learned: await Brain.learn(preBrainText) };
+   const hasCorpusData = Brain.hasCorpusData();
+   const responseInput = (await composeResponseInput()).trim() || preBrainText.trim();
+   trace("responseInput", {
+      repliedToBot,
+      hasReferencedContent: Boolean(message.referencedContent),
+      preBrainLength: preBrainText.length,
+      responseInputLength: responseInput.length
+   });
+   if (!hasCorpusData) {
+      trace("brain empty; skipping response", { hasCorpusData });
+      return { learned: await Brain.learn(responseInput), processedText: responseInput };
    }
 
-   const responseInput = await composeResponseInput();
    let seed: string = "";
-   let conversationActive = false;
-   const user = touchKnownUser(message.authorId, message.authorName);
-   const conversation = user.conversations.get(message.channelId);
-   if (conversation) {
-      if (Date.now() - conversation.lastSpokeAt < Brain.settings.conversationTimeLimit) {
-         shouldRespond = true;
-         conversationActive = true;
-         seed = [responseInput, conversation.lastTopic].join(" ");
-      }
-   }
 
    if (shouldRespond && canSend && platform) {
       trace("respond", {
          shouldRespond,
          canSend,
          platform: platform,
-         conversationActive,
          seedProvided: seed !== ""
       });
       await platform.sendTyping(message.channelId);
-      user.conversations.set(message.channelId, {
-         lastSpokeAt: Date.now(),
-         lastTopic: responseInput
-      });
-      saveKnownUser(message.authorId, user, { bump: false });
 
       let response = "";
-      const rememberedTopicKeywords = consumeTopicMemoryKeywords({
+      const topicMemoryFocus = consumeTopicMemoryFocus({
          userId: message.authorId,
          channelId: message.channelId
-      });
-      if (rememberedTopicKeywords.length > 0 && Math.random() < getTopicMemoryBiasStrength(Brain.settings)) {
-         const lexiconKeywords = rememberedTopicKeywords.filter((keyword) => Brain.lexicon.has(keyword));
-         const rememberedSeed = randFrom(lexiconKeywords);
-         if (rememberedSeed) seed = rememberedSeed;
-      }
+      }, Brain.settings);
+      const responseOptions = {
+         focusText: responseInput,
+         overlays: topicMemoryFocus.size > 0 ? { tokens: topicMemoryFocus } : undefined
+      };
       if (!seed) seed = await Brain.getSeed(responseInput);
       for (let attempt = 0; attempt < 5; attempt++) {
-         response = await Brain.getResponse(seed);
+         response = await Brain.getResponse(seed, responseOptions);
          if (response.toLowerCase() !== responseInput.toLowerCase()) break;
          seed = await Brain.getSeed();
       }
-      if (response.toLowerCase() === responseInput.toLowerCase()) response = await Brain.getResponse(await Brain.getRandomSeed());
+      if (response.toLowerCase() === responseInput.toLowerCase()) response = await Brain.getResponse(await Brain.getRandomSeed(), responseOptions);
       if (response.toLowerCase() === responseInput.toLowerCase()) response = "😖";
 
       const mods: ModificationType = { ...processed.modifications };
@@ -287,18 +275,18 @@ const processPersonalityResponse = async (
       return {
          learned: await Brain.learn(responseInput),
          response,
-         directedTo
+         directedTo,
+         processedText: responseInput
       };
    }
 
    trace("not responding", {
       shouldRespond,
       canSend,
-      platform: platform,
-      conversationActive
+      platform: platform
    });
 
-   return { learned: await Brain.learn(preBrainText) };
+   return { learned: await Brain.learn(responseInput), processedText: responseInput };
 };
 
 const splitTextForSending = (text: string, maxLength: number): string[] => {

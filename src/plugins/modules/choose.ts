@@ -19,7 +19,7 @@ const execute = async (context: StandardMessage, matches?: RegExpMatchArray): Pr
 
    const selectedOption = options[Math.floor(Math.random() * options.length)];
    const seed = await Brain.getSeed(selectedOption);
-   const response = await Brain.getResponse(seed);
+   const response = await Brain.getResponse(seed, { focusText: selectedOption });
    output.directedTo = context.authorName;
    output.results = [{ contents: `${selectedOption}, because: ${response}` }];
    return output;

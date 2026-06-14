@@ -363,7 +363,7 @@ const createProxyServer = (token: string): http.Server =>
       }
    });
 
-const startHarnessProxyServer = (): { stop: () => Promise<void> } | null => {
+const startHarnessProxyServer = async (): Promise<{ stop: () => Promise<void> } | null> => {
    // TODO: Add read-only vs mutating proxy mode switch.
    if (!envFlag("HARNESS_PROXY_ENABLED")) return null;
    const isProd = env("NODE_ENV", "development") === "production";
@@ -387,10 +387,29 @@ const startHarnessProxyServer = (): { stop: () => Promise<void> } | null => {
    const server = createProxyServer(token);
    const host = DEFAULT_PROXY_HOST;
    const port = DEFAULT_PROXY_PORT;
-   server.listen(port, host, () => {
-      const address = server.address() as AddressInfo | null;
-      const resolvedPort = address?.port ?? port;
-      log(`Harness proxy listening on http://${host}:${resolvedPort}`, "debug");
+   const listenUrl = `http://${host}:${port}`;
+   await new Promise<void>((resolve, reject) => {
+      const handleListening = (): void => {
+         server.off("error", handleError);
+         const address = server.address() as AddressInfo | null;
+         const resolvedPort = address?.port ?? port;
+         log(`Harness proxy listening on http://${host}:${resolvedPort}`, "debug");
+         resolve();
+      };
+      const handleError = (error: NodeJS.ErrnoException): void => {
+         server.off("listening", handleListening);
+         const detail = error.code === "EADDRINUSE"
+            ? `${listenUrl} is already in use. Stop the other process using that port or set HARNESS_PROXY_PORT to a different value.`
+            : error.message;
+         reject(new Error(`Harness proxy failed to listen on ${listenUrl}: ${detail}`, { cause: error }));
+      };
+      server.once("listening", handleListening);
+      server.once("error", handleError);
+      server.listen(port, host);
+   });
+
+   server.on("error", (error: Error) => {
+      log(`Harness proxy server error: ${error.message}`, "error");
    });
 
    const stop = (): Promise<void> =>

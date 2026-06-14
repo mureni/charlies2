@@ -78,12 +78,12 @@
       "The [adj] [noun] likes to [verb] in [place].",
       "We [adverb] [verb] toward the [adj] [noun].",
       "A [animal] of [emotion] guards the [noun].",
-      "The [noun] begins to [verb] when the [adj] lights arrive.",
+      "The [noun] begins to [verb] when the [adj] [noun] arrives.",
       "Our [emotion] is a [adj] [noun] that refuses to [verb].",
       "In [place], the [animal] will [verb] [adverb].",
-      "Every [noun] carries a trace of [emotion].",
+      "Every [noun] carries a [adj] trace of [emotion].",
       "The [adj] path will [verb] if we listen.",
       "A [noun] and a [noun] [verb] together.",
-      "The [animal] keeps a [adj] [noun] in its pocket."
+      "The [animal] keeps a [adj] [noun] in its [noun]."
    ]
 }

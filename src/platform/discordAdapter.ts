@@ -606,6 +606,15 @@ const toStandardMessage = async (message: Message): Promise<StandardMessage> => 
       referencedAuthorId = repliedUserId;
       referencedIsSelf = botUser ? repliedUserId === botUser.id : false;
       referencedMentionsBot = referencedIsSelf;
+      const cachedReferenced = "messages" in message.channel
+         ? message.channel.messages.cache.get(message.reference.messageId)
+         : undefined;
+      if (cachedReferenced) {
+         referencedContent = cachedReferenced.content;
+         referencedAuthorId = cachedReferenced.author?.id;
+         referencedMentionsBot = botUser ? cachedReferenced.mentions.has(botUser) : false;
+         referencedIsSelf = botUser ? cachedReferenced.author?.id === botUser.id : false;
+      }
       try {
          const referencedMessage = await message.fetchReference();
          referencedContent = referencedMessage.content;
@@ -613,7 +622,7 @@ const toStandardMessage = async (message: Message): Promise<StandardMessage> => 
          referencedMentionsBot = botUser ? referencedMessage.mentions.has(botUser) : false;
          referencedIsSelf = botUser ? referencedMessage.author?.id === botUser.id : false;
       } catch {
-         referencedContent = undefined;
+         // Graceful fallback: keep any cache-derived metadata/content above.
       }
    }
    const isAdmin = Boolean(message.member && (

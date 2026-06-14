@@ -16,7 +16,7 @@ const execute = async (_context: StandardMessage): Promise<InteractionResult> =>
          color: "#ffffff",
          description: dot.data.explanation,
          imageAttachmentName: "gcpdot.png",
-         fields: [{ name: "Index value", value: `${(dot.data.index * 100).toFixed(1)}%` }]
+         fields: [{ name: dot.data.metric, value: dot.data.value }]
       };
       output.results = [{ contents: "", embeds: [embed], attachments: [attachment] }];
       return output;

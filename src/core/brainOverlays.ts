@@ -27,6 +27,7 @@ class BrainOverlays {
       filename: checkFilePath("data", `${BOT_NAME}-brain-overlays.sqlite`),
       table: "overlays",
       cacheSize: 32,
+      purgeStaleObjectKeys: false,
       allowSchemaMigration: env("NODE_ENV") !== "production",
       debug: envFlag("TRACE_SQL")
    });

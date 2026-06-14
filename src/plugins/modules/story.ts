@@ -14,7 +14,7 @@ const buildStory = async (seedInput: string, storyLength: number): Promise<strin
 
    for (let attempts = 0; attempts < maxAttempts && storySet.size < storyLength; attempts++) {
       topic = await Brain.getSeed(topic);
-      const line = await Brain.getResponse(topic);
+      const line = await Brain.getResponse(topic, { focusText: seedInput || topic });
       if (!line) continue;
       if (storySet.has(line)) {
          seed = await Brain.getSeed();

@@ -63,11 +63,13 @@ const validateRegexPattern = (pattern: string, flags: string): RegExp | Error =>
 class Swaps {
    private static rules = new SQLiteMap<string, SwapScopeRecord>({
       filename: swapDbPath,
-      table: "swap_rules"
+      table: "swap_rules",
+      purgeStaleObjectKeys: false
    });
    private static groups = new SQLiteMap<string, SwapGroup>({
       filename: swapDbPath,
-      table: "swap_groups"
+      table: "swap_groups",
+      purgeStaleObjectKeys: false
    });
 
    public static groupIdForDm(channelId: string): string {
