@@ -4,7 +4,7 @@
     "name": "4chan",
     "description": "Generates greentexts and schizopost walls.",
     "usage": "4chan or greentext or schizopost",
-    "matcher": "^[greentext|4chan|schizopost]\\b",
+    "matcher": "^(?:greentext|4chan|schizopost)\\b",
     "matcherFlags": "ui"
   },
 

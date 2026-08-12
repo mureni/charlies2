@@ -173,11 +173,6 @@ const processPersonalityResponse = async (
    const mentionsBot = Boolean(message.mentionsBot);
    const repliedToBot = Boolean(message.referencedIsSelf);
    const rawText = message.content ?? "";
-   const matchesBotName = (text: string): boolean => {
-      if (!Brain.botName) return false;
-      return Boolean(text.match(newRX(escapeRegExp(Brain.botName), "giu")));
-   };
-   const ambientBotNameMatch = ambientBotNameTrigger && matchesBotName(rawText);
    const composeResponseInput = async (): Promise<string> => {
       if (!repliedToBot || !message.referencedContent) return preBrainText;
       const cleanReferencedText = await cleanMessage(message.referencedContent, { Case: "lower", UseEndearments: true }, memberContext);
@@ -185,29 +180,21 @@ const processPersonalityResponse = async (
       return [preBrainReferenced, preBrainText].filter((part) => part.length > 0).join(" ").trim() || preBrainText;
    };
 
-   let shouldRespond = false;
-   if (isDirectMessage && !isGroupDm) {
-      shouldRespond = true;
-   } else if (isDirectMessage && isGroupDm) {
-      const groupSize = Math.max(2, message.channel?.memberCount ?? 2);
-      const baseOutburst = Brain.settings.outburstThreshold;
-      const groupOutburst = Math.min(1, baseOutburst * groupSize);
-      shouldRespond = Math.random() < groupOutburst || mentionsBot || ambientBotNameMatch;
-   } else {
-      shouldRespond = mentionsBot || shouldRespondDecision(
-         ambientBotNameTrigger ? Brain.botName : "",
-         rawText,
-         Brain.settings
-      );
-   }
-   if (repliedToBot) shouldRespond = true;
+   const shouldRespond = shouldRespondDecision({
+      botName: Brain.botName,
+      text: rawText,
+      settings: Brain.settings,
+      isDirectMessage,
+      isGroupDm,
+      memberCount: message.channel?.memberCount,
+      mentionsBot,
+      repliedToBot,
+      referencedText: message.referencedContent,
+      referencedMentionsBot: message.referencedMentionsBot,
+      ambientBotNameTrigger
+   });
 
-   /* If the message is a reference (reply) then check if the referenced message should be responded to */
-   if (message.referencedContent) {
-      if (message.referencedMentionsBot || (ambientBotNameTrigger && matchesBotName(message.referencedContent))) shouldRespond = true;
-   }
-
-   trace("shouldRespond", { mentionsBot, ambientBotNameTrigger, ambientBotNameMatch, repliedToBot, shouldRespond, isDirectMessage, isGroupDm });
+   trace("shouldRespond", { mentionsBot, ambientBotNameTrigger, repliedToBot, shouldRespond, isDirectMessage, isGroupDm });
 
    const hasCorpusData = Brain.hasCorpusData();
    const responseInput = (await composeResponseInput()).trim() || preBrainText.trim();
@@ -238,6 +225,14 @@ const processPersonalityResponse = async (
          userId: message.authorId,
          channelId: message.channelId
       }, Brain.settings);
+      const topicMemoryTokens = Array.from(topicMemoryFocus.entries()).map(([token, weight]) => ({
+         token,
+         weight
+      }));
+      trace("topicMemoryFocus", {
+         size: topicMemoryFocus.size,
+         tokens: topicMemoryTokens
+      });
       const responseOptions = {
          focusText: responseInput,
          overlays: topicMemoryFocus.size > 0 ? { tokens: topicMemoryFocus } : undefined
@@ -250,6 +245,10 @@ const processPersonalityResponse = async (
       }
       if (response.toLowerCase() === responseInput.toLowerCase()) response = await Brain.getResponse(await Brain.getRandomSeed(), responseOptions);
       if (response.toLowerCase() === responseInput.toLowerCase()) response = "😖";
+      trace("generatedResponse", {
+         response,
+         responseLength: response.length
+      });
 
       const mods: ModificationType = { ...processed.modifications };
 
@@ -332,6 +331,11 @@ const sendMessage = async (context: StandardMessage, message: StandardOutgoingMe
    text = await cleanMessage(text, workingMods, memberContext);
    const skipFilters = workingMods?.ProcessSwaps === false ? ["swaps"] : undefined;
    text = Filters.apply("postBrain", text, context, "respond", { skipIds: skipFilters });
+   trace("sendMessage prepared", {
+      beforeProcessing: message.contents,
+      afterProcessing: text,
+      skippedFilters: skipFilters ?? []
+   });
    const embeds = message.embeds ?? [];
    const files = message.attachments ?? [];
    if (text === "" && embeds.length === 0 && files.length === 0) return true;

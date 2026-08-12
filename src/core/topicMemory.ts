@@ -37,7 +37,15 @@ const USER_PROFILE_MAX_KEYWORDS = 24;
 const USER_PROFILE_MIN_SCORE = 0.05;
 const USER_PROFILE_DECAY = 0.92;
 const USER_PROFILE_TTL_MS = 1000 * 60 * 60 * 24 * 30;
+const USER_PROFILE_BIAS_SCALE = 0.35;
 const MAX_COMBINED_KEYWORDS = 32;
+const TOPIC_STOPWORDS = new Set<string>([
+   "about", "after", "again", "also", "because", "been", "before", "being", "between", "but", "can", "could",
+   "did", "does", "doing", "done", "for", "from", "had", "has", "have", "her", "here", "him", "his",
+   "how", "into", "just", "like", "more", "much", "not", "now", "our", "out", "over", "really", "should",
+   "some", "than", "that", "the", "their", "them", "then", "there", "these", "they", "this", "those", "through",
+   "too", "was", "were", "what", "when", "where", "which", "while", "who", "why", "with", "would", "you", "your"
+]);
 
 const toInteger = (value: number, fallback: number, min: number, max: number): number => {
    if (!Number.isFinite(value)) return fallback;
@@ -104,6 +112,16 @@ const scaleKeywordWeights = (weights: Map<string, number>, scale: number): Map<s
       mergeKeywordWeight(scaled, keyword, clampWeight(weight) * normalizedScale);
    }
    return scaled;
+};
+
+const filterTopicKeywordWeights = (weights: Map<string, number>): Map<string, number> => {
+   if (weights.size === 0) return weights;
+   const filtered = new Map<string, number>();
+   for (const [keyword, weight] of weights.entries()) {
+      if (TOPIC_STOPWORDS.has(keyword)) continue;
+      mergeKeywordWeight(filtered, keyword, weight);
+   }
+   return filtered;
 };
 
 const getUserProfileKeywordWeights = (userId: string): Map<string, number> => {
@@ -192,6 +210,7 @@ const extractTopicKeywords = (text: string, keywordCount: number): string[] => {
    tokens.forEach((token, index) => {
       const normalized = token.toLowerCase();
       if (normalized.length < 3) return;
+      if (TOPIC_STOPWORDS.has(normalized)) return;
       if (/^\d+$/u.test(normalized)) return;
       const current = ranked.get(normalized);
       if (current) {
@@ -223,24 +242,26 @@ const consumeTopicMemoryFocus = (
    settings: BrainSettings
 ): Map<string, number> => {
    const config = getConfig(settings);
-   const combinedWeights = scaleKeywordWeights(getUserProfileKeywordWeights(scope.userId), config.biasStrength);
    const entry = getKnownUserTopicMemory(scope.userId, scope.channelId);
-   if (!entry) {
-      return rankKeywordWeights(combinedWeights, MAX_COMBINED_KEYWORDS);
-   }
+   if (!entry) return new Map<string, number>();
 
    const now = Date.now();
    if (now > entry.expiresAt || entry.remainingInteractions <= 0) {
       deleteKnownUserTopicMemory(scope.userId, scope.channelId);
-      return rankKeywordWeights(combinedWeights, MAX_COMBINED_KEYWORDS);
+      return new Map<string, number>();
    }
 
-   const keywords = normalizeKeywords(entry.keywords);
+   const keywords = normalizeKeywords(entry.keywords).filter((keyword) => !TOPIC_STOPWORDS.has(keyword));
    if (keywords.length === 0) {
       deleteKnownUserTopicMemory(scope.userId, scope.channelId);
-      return rankKeywordWeights(combinedWeights, MAX_COMBINED_KEYWORDS);
+      return new Map<string, number>();
    }
 
+   const profileWeights = scaleKeywordWeights(
+      getUserProfileKeywordWeights(scope.userId),
+      config.biasStrength * USER_PROFILE_BIAS_SCALE
+   );
+   const combinedWeights = filterTopicKeywordWeights(profileWeights);
    const entryFocusWeight = clampWeight(getEntryFocusWeight(entry, config, now) * config.biasStrength);
    for (const keyword of keywords) {
       mergeKeywordWeight(combinedWeights, keyword, entryFocusWeight);

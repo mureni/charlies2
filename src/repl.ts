@@ -99,7 +99,7 @@ const buildPrompt = (state: ReplState): string => {
 
 const createDefaultState = (): ReplState => ({
    userId: "repl-user",
-   authorName: "You",
+   authorName: "REPL User",
    channelId: "repl-dm",
    channelName: "direct",
    scope: "dm",
